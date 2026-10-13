@@ -57,7 +57,7 @@ def test_mileage_revisit_waits_for_fresh_detail_and_surfaces_deleted_record(comm
                                     json={'baseline': saved.value.json()['baseline']})
             assert deleted.status_code == 200
             page.go_back()
-            expect(page.get_by_role('alert')).to_contain_text('record')
+            expect(page.get_by_role('alert')).to_contain_text('The requested data could not be loaded.')
             expect(page.get_by_label('Notes', exact=True)).to_have_count(0)
             expect(page.get_by_role('button', name='Save changes', exact=True)).to_have_count(0)
         finally:

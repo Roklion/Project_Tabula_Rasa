@@ -166,3 +166,95 @@ failures retain their existing draft-preservation guidance. The existing foundat
 continues to cover every route family. Inspect the PNGs as well as the assertions;
 local managed-browser evidence does not certify real devices, hosted acceptance,
 CI/reviewer completion or the entire design initiative.
+
+## Wave 2: forms and secondary routes (#329/#330)
+
+This independently runnable presentation slice completes the remaining existing
+route families under #323 within #124. It preserves bookkeeping services,
+selected-entity/session boundaries, loaded baselines and recovery ownership.
+The generic Streamlit tab/row-selection/receipt-provider requirements do not
+replace the documented commercial route links, explicit record actions and
+portable document inspection. No Proposed behavior or absent workflow is added.
+
+| Design requirement | Reused owner / extension |
+| --- | --- |
+| Visible labels, related desktop fields, narrow stacking | Existing `Fields`/`States.Field`; shared `FormSection` adds headings and at most two related desktop columns, stacking at 760px |
+| Long notes and validation; deliberate native multiple selection | Shared textarea/input-mode adapters, combined hint/error association and full selected-label summaries; existing error mapping and inactive-reference choices |
+| Action hierarchy, confirmation and dirty drafts | `CreateEditor`/`ProtectedEditor` and `ConfirmationDialog`; primary Save, neutral Back/commands, destructive permanent Delete; existing token and draft lifecycle |
+| Readable journals with stable rows and visible totals | Existing `JournalFields`, posting IDs and journal-draft totals/validation; grouped target/side/amount/details and shared totals surface |
+| Reference tables and merge lists | Existing `RecordList`, `TableRegion`, field/checkbox owners; wrapping/numeric column hooks and explicit merge guidance without a new selection model |
+| Secondary source ownership and immutable history | Existing secondary field/command owners; shared detail summaries and scrollable depreciation/occurrence history; service allocation and command confirmations preserved |
+| Mileage details, totals, filters and export | Existing mileage fields/form/CSV owners; grouped fields, wrapped table text, aligned distance heading, selected-tag guidance |
+| Receipt progress, partial results and retained files | Existing receipt sequencing/recovery, native metadata disclosure and confirmation; section/action treatment plus visible read-only/unavailable/unlink guidance |
+| Truthful availability | Existing Data & backup route shows unavailable browser controls, without inventing import/backup or promising completion |
+
+The base control rule uses low specificity so multiline sizing, error borders
+and disabled states can take effect. Native single selects use control-level
+paint containment for WebKit's long-option overflow; the selected option,
+keyboard behavior and dropdown retain their native owner. Page containers do
+not hide overflow, and table regions retain intentional horizontal scrolling.
+
+Reuse map: inspected the router, current core/secondary/mileage/document forms,
+shared fields/visual primitives, draft/baseline/confirmation owners and canonical
+guides. Extended these presentation seams and shared stylesheet. New logic is
+limited to presentation adapters and synthetic browser fixtures; no parallel
+accounting, reference validation, persistence, retry or mutation state owner.
+
+### Complete current-route inventory
+
+Original visual baseline: `6f0977579c23fcb8a60a9be2a680a27c9d30660f`.
+Integration re-audit: `origin/main` at `2d4aea2`, including #311/#312 named-user
+sessions, their receipt-abort guards and context-boundary availability screens.
+The router and shell were checked together; list-mounted protected editors are
+included even when they have no independent URL.
+
+| Existing route or surface | Completed slice / explicit boundary |
+| --- | --- |
+| `/`, `/reports` | #327 summary/report body; #326 navigation/actions |
+| `/transactions` including inline edit and source links | #328 ledger/filter/table; #329 shared protected transaction fields |
+| `/transactions/new`, `/journals/new`, `/journals` including protected journal edit | #329 grouped shared fields, postings/totals and actions; #326 route navigation |
+| `/accounts`, `/categories`, `/payees`, `/tags` and their `/new` routes, list-mounted editors | #325 Accounts foundation; #329 consistent reference fields/tables/edits and inactive states |
+| `/payees/merge`, `/tags/merge` | #329 merge labels, sources, guidance and action hierarchy |
+| `/assets`, `/assets/new`, `/assets/:recordId` | #330 register/create/detail, depreciation history, protected posting/override/retirement controls |
+| `/mixed-use`, `/mixed-use/new`, `/mixed-use/:recordId` | #330 source/projection ownership, allocation and protected source fields |
+| `/recurring`, `/recurring/new`, `/recurring/:recordId` | #330 future-only edits, occurrence history and confirmed generation/transitions |
+| `/mileage`, `/mileage/new`, `/mileage/:recordId` | #330 manual log/create/protected or read-only detail, filters/totals/CSV; #326 workflow navigation |
+| `/transactions/:recordId/receipts` | #330 linked/attach/recovery, read-only, unavailable and partial-failure surfaces; source-owned receipts remain with their functional owners |
+| `/data` | #357/#364 provide three authorized import workflows; browser backups remain outside this slice |
+| Unknown route / route-error fallback | #329 shared headers and recovery/navigation treatment |
+| Shell/menu/entity selector/Terms/Privacy links | #326 shell; static legal documents keep their existing server owner and content; no legal or authorization change |
+| Signed-out (`/signed-out` or unauthorized route), session-unavailable and setup-required states | #312 `ContextBoundary` retains identity/session ownership; #330 applies shared headers, surfaces and native Sign in/Sign out controls, preserving private-view unmount and receipt-abort guards |
+| Complete authorized workspace/entity switching and first-use onboarding screens | #314/#317 remain open at the integration baseline; unfinished journeys are excluded, and their functional owners must consume the shared primitives when delivered. External OIDC-provider pages retain their provider owner |
+| Maps, internal administration/provider secrets, remaining internal-only report catalogs and source receipt workflows | Unsupported commercial workflows retain their initiative owners; #357/#358/#362/#364 now provide the documented import/copy/bulk/conversion ports, and this visual slice does not retire the internal edition |
+
+### Evidence and affected checks
+
+`web/e2e/forms-secondary.spec.ts` intercepts synthetic transport for long-label
+core forms, journal posting/error layouts, populated secondary detail/history,
+mileage, receipt recovery/availability, read-only controls and integrated identity
+availability screens. Screenshots cover
+1440x1000, 390x844 and 320x844 with revision, worktree-change and viewport
+metadata. The same fixtures capture the untouched baseline and changed revision
+in separate ignored output directories. Inspect the PNGs alongside axe, keyboard
+and overflow assertions; automated pass status alone is not visual sign-off.
+
+From the worktree root:
+
+```powershell
+npm --prefix web run build
+npm --prefix web run lint
+npm --prefix web test
+$env:TABULA_RASA_SMOKE_PORT = '5189'
+npm --prefix web run test:e2e -- e2e/forms-secondary.spec.ts --project=desktop --workers=2 --output=test-results/329-330-after
+git diff --check
+git diff origin/main --stat
+```
+
+Retain baseline evidence in `web/test-results/329-330-before` and final evidence
+in `web/test-results/329-330-after`; the output runner clears only its chosen
+directory. Native compiled-browser tests additionally exercise actual HTTP and
+disposable PostgreSQL success/failure, stale-baseline confirmations, partial
+receipt recovery and two-entity isolation. Use the affected commands in the
+commercial guides; current-head hosted CI/reviews remain required on publication.
+This local work does not certify #331 integrated acceptance, #288 hosted/provider/
+rollback/manual devices, #222 identity or #224 external-beta readiness.

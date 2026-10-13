@@ -1,4 +1,4 @@
-import { PageHeader } from '../../components/VisualPrimitives';
+import { ActionButton, FormSection, PageHeader, SectionHeader, TableRegion } from '../../components/VisualPrimitives';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { Path, UseFormReturn } from 'react-hook-form';
@@ -28,15 +28,20 @@ const loaded = (row: Schemas['Recurring']) => ({ metadata: { id: row.id, baselin
 
 function RecurringFields<T extends Changes>({ form, creating = false, mixed = false }: { form: UseFormReturn<T>; creating?: boolean; mixed?: boolean }) {
   const path = (name: string) => name as Path<T>;
-  return <><TextField form={form} name={path('name')} label="Schedule name" />
-    {creating && <><TextField form={form} name={path('start_date')} label="Start date" type="date" />
-      <SelectField form={form} name={path('source_kind')} label="Expense source" options={[{ id: 'transaction', name: 'Ordinary expense' }, { id: 'mixed_use', name: 'Mixed-use expense' }]} /></>}
-    <RecurrenceFields form={form} />
-    {(creating ? form.watch(path('source_kind')) === 'mixed_use' : mixed) ? <>
-      <TextField form={form} name={path('total_expense')} label="Total expense" />
-      <TextField form={form} name={path('business_use_percentage')} label="Business use %" />
-      <TextField form={form} name={path('allocation_rationale')} label="Allocation rationale" />
-    </> : <TextField form={form} name={path('amount')} label="Amount" />}
+  return <>
+    <FormSection title="Schedule" description="Templates affect future occurrences; existing expenses retain their saved values and provenance.">
+      <TextField form={form} name={path('name')} label="Schedule name" />
+      {creating && <><TextField form={form} name={path('start_date')} label="Start date" type="date" />
+        <SelectField form={form} name={path('source_kind')} label="Expense source" options={[{ id: 'transaction', name: 'Ordinary expense' }, { id: 'mixed_use', name: 'Mixed-use expense' }]} /></>}
+      <RecurrenceFields form={form} />
+    </FormSection>
+    <FormSection title="Expense template">
+      {(creating ? form.watch(path('source_kind')) === 'mixed_use' : mixed) ? <>
+        <TextField form={form} name={path('total_expense')} label="Total expense" inputMode="decimal" />
+        <TextField form={form} name={path('business_use_percentage')} label="Business use %" inputMode="decimal" />
+        <TextField form={form} name={path('allocation_rationale')} label="Allocation rationale" multiline />
+      </> : <TextField form={form} name={path('amount')} label="Amount" inputMode="decimal" />}
+    </FormSection>
     <ExpenseReferences form={form} creating={creating} />
   </>;
 }
@@ -44,7 +49,7 @@ function RecurringFields<T extends Changes>({ form, creating = false, mixed = fa
 export function RecurrenceFields<T extends { recurrence_unit: string; recurrence_interval: string; end_date: string }>({ form }: { form: UseFormReturn<T> }) {
   const path = (name: string) => name as Path<T>;
   return <><SelectField form={form} name={path('recurrence_unit')} label="Repeat unit" options={['day', 'week', 'month', 'year'].map(id => ({ id, name: id }))} />
-    <TextField form={form} name={path('recurrence_interval')} label="Repeat every" />
+    <TextField form={form} name={path('recurrence_interval')} label="Repeat every" inputMode="numeric" />
     <TextField form={form} name={path('end_date')} label="End date (optional)" type="date" /></>;
 }
 
@@ -57,11 +62,11 @@ function GenerateOccurrences() {
     try { setResult(await mutation.mutateAsync()); } catch (error) { setFailure(error); }
     finally { setConfirm(false); }
   }
-  return <section className="surface"><h2>Generate due occurrences</h2>
-    <p>Generation runs only after this explicit action. Page visits never run a scheduler.</p>
-    <Field id="recurring-through" label="Generate through"><input id="recurring-through" type="date" value={through} disabled={mutation.isPending}
-      onChange={event => setThrough(event.target.value)} /></Field>
-    <button disabled={mutation.isPending || !through} onClick={event => { event.currentTarget.focus(); setConfirm(true); }}>Generate due occurrences</button>
+  return <section className="surface commandSection">
+    <SectionHeader title="Generate due occurrences" description="Generation runs only after this explicit action. Page visits never run a scheduler." />
+    <div className="formGrid"><Field id="recurring-through" label="Generate through"><input id="recurring-through" type="date" value={through} disabled={mutation.isPending}
+      onChange={event => setThrough(event.target.value)} /></Field></div>
+    <div className="actions"><ActionButton pending={mutation.isPending} disabled={!through} onClick={event => { event.currentTarget.focus(); setConfirm(true); }}>Generate due occurrences</ActionButton></div>
     {result && <SuccessNotice>Generated {result.generated_count} occurrence(s). {result.attention_count} schedule(s) require attention.</SuccessNotice>}
     {failure !== undefined && <ErrorNotice error={failure} />}
     {confirm && <ConfirmationDialog title="Generate due occurrences" keepLabel="Keep records" confirmLabel="Confirm generation" pending={mutation.isPending}
@@ -77,14 +82,14 @@ export function RecurringPage() {
       detailsTarget={row => '/recurring/' + encodeURIComponent(row.id)} columns={[
         { title: 'Cadence', render: row => row.recurrence_interval + ' ' + row.recurrence_unit }, { title: 'Next due', render: row => row.next_due_date || 'None' },
         { title: 'Latest occurrence', render: row => row.latest_current_occurrence_date || 'None' }, { title: 'Status', render: row => row.status },
-        { title: 'Attention', render: row => row.attention_message || 'None' }, { title: 'ID', render: row => row.id }]} />
+        { title: 'Attention', className: 'tableText', render: row => row.attention_message || 'None' }, { title: 'ID', className: 'tableText', render: row => row.id }]} />
     {session.capabilities.includes('bookkeeping:write') && <GenerateOccurrences />}
   </>;
 }
 
 export function NewRecurring() {
   const session = useEntity(); const navigate = useNavigate();
-  return <><h1>Add recurring expense</h1><p>Save creates the schedule and its initial occurrence together.</p>
+  return <><PageHeader title="Add recurring expense" description="Save creates the schedule and its initial occurrence together." />
     {session.capabilities.includes('bookkeeping:write') ? <CreateEditor title="Save recurring expense" initial={initial}
       fields={form => <RecurringFields form={form} creating />} create={(values, id) => api.createRecurring(session, { ...values, schedule_id: id })}
       onClose={() => navigate('/recurring')} /> : <p>Read-only access.</p>}</>;
@@ -98,17 +103,30 @@ export function RecurringDetail() {
 function RecurringDetailQuery({ recordId }: { recordId: string }) {
   const session = useEntity(); const navigate = useNavigate();
   const query = useLoadedRecord(session, 'recurring', recordId, api.recurringSchedule);
-  if (query.initializing) return <><h1>Recurring schedule</h1><LoadingState /></>;
-  if (!query.initialized || !query.data) return <><h1>Recurring schedule</h1><ErrorNotice error={query.error} onReview={() => void query.refetch()} /></>;
+  if (query.initializing) return <><PageHeader title="Recurring schedule" /><LoadingState /></>;
+  if (!query.initialized || !query.data) return <><PageHeader title="Recurring schedule" /><ErrorNotice error={query.error} operation="read" onReview={() => void query.refetch()} /></>;
   const data = query.data;
-  return <><h1>Recurring schedule</h1>{<>
-    <p>{data.schedule.name} · {data.schedule.status} · {data.schedule.id}</p>
-    <p>Starts {data.schedule.start_date} · {data.schedule.source_kind === 'mixed_use' ? 'Mixed-use expense' : 'Ordinary expense'}</p>
-    {data.schedule.attention_message && <p role="alert">{data.schedule.attention_message}</p>}
-    <div className="tableScroll" role="region" aria-label="Generated occurrences" tabIndex={0}><table><caption>Current occurrences and provenance</caption>
-      <thead><tr>{['Date', 'Amount', 'Role', 'Schedule date', 'Source', 'Entry ID'].map(name => <th key={name} scope="col">{name}</th>)}</tr></thead>
-      <tbody>{data.occurrences.map(row => <tr key={row.id}><th scope="row">{row.txn_date}</th><td>{row.amount}</td><td>{row.recurring_occurrence_type}</td>
-        <td>{row.recurring_scheduled_date}</td><td>{row.source_id || 'Ordinary expense'}</td><td>{row.id}</td></tr>)}</tbody></table></div>
+  return <><PageHeader title="Recurring schedule" description="Manage future generation while retaining each occurrence's saved provenance." />
+    <section className="surface">
+      <SectionHeader title={data.schedule.name} />
+      <dl className="detailSummary">
+        <div><dt>Status</dt><dd>{data.schedule.status}</dd></div>
+        <div><dt>Schedule ID</dt><dd>{data.schedule.id}</dd></div>
+        <div><dt>Start date</dt><dd>{data.schedule.start_date}</dd></div>
+        <div><dt>Expense source</dt><dd>{data.schedule.source_kind === 'mixed_use' ? 'Mixed-use expense' : 'Ordinary expense'}</dd></div>
+      </dl>
+      {data.schedule.attention_message && <p role="alert" className="notice warning">{data.schedule.attention_message}</p>}
+    </section>
+    <section className="reportSection">
+      <SectionHeader title="Generated occurrences" description="Existing expenses retain their dates, amounts and initial/generated roles when the template changes." />
+      <TableRegion label="Generated occurrences"><table><caption>Current occurrences and provenance</caption>
+        <thead><tr><th scope="col">Date</th><th scope="col" className="amount">Amount</th><th scope="col">Role</th>
+          <th scope="col">Schedule date</th><th scope="col">Source</th><th scope="col">Entry ID</th></tr></thead>
+        <tbody>{data.occurrences.length === 0 ? <tr><td className="tableEmpty" colSpan={6}>No current occurrences to show.</td></tr> : data.occurrences.map(row => <tr key={row.id}>
+          <th scope="row">{row.txn_date}</th><td className="amount">{row.amount}</td><td>{row.recurring_occurrence_type}</td>
+          <td>{row.recurring_scheduled_date}</td><td className="tableText">{row.source_id || 'Ordinary expense'}</td><td className="tableText">{row.id}</td>
+        </tr>)}</tbody></table></TableRegion>
+    </section>
     {session.capabilities.includes('bookkeeping:write') ? <ProtectedEditor key={recordId} session={session} loaded={loaded(data.schedule)} title="Edit recurring schedule"
       fields={form => <RecurringFields form={form} mixed={data.schedule.source_kind === 'mixed_use'} />} onClose={() => navigate('/recurring')}
       save={async (id, baseline, changes) => loaded(await api.updateRecurring(session, id, { baseline, changes }))}
@@ -118,5 +136,5 @@ function RecurringDetailQuery({ recordId }: { recordId: string }) {
         run: async (id, baseline) => { await api.transitionRecurring(session, id, baseline, transition); return 'Schedule ' + transition + ' completed.'; },
       }))} /> : <SavedFields title="Saved recurring schedule" values={loaded(data.schedule).values}
         fields={form => <RecurringFields form={form} mixed={data.schedule.source_kind === 'mixed_use'} />} />}
-  </>}</>;
+  </>;
 }

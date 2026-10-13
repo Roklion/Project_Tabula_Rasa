@@ -68,6 +68,14 @@ category service has no independent inactive flag. Payees/tags support rename,
 active status, multi-source merge and the service's guarded remove/deactivate
 result. Inactive historical references remain resolvable.
 
+Create and protected-edit forms use the same labeled field groups and control
+geometry. Related fields align on desktop and stack at narrow widths; memo and
+notes fields are multiline. Native multiple selects retain their keyboard
+semantics and display complete selected labels. Save is primary, Back and
+explicit commands are neutral, and permanent Delete is red. Reference tables
+wrap long names and merge source lists wrap labels while retaining their
+existing selection rules and baseline checks.
+
 ## Workflow navigation and actions
 
 The sidebar indicates the current destination with a leading rule and weight,
@@ -106,6 +114,11 @@ cents; save requires complete positive balanced rows. Application services remai
 authoritative for balancing, reference validity and atomic parent/posting writes.
 The commercial editor currently uses Side/Amount controls, consistent with its
 #280 editor, rather than the internal edition's separate Debit/Credit inputs.
+
+Each posting groups its target, side/amount and optional details. The
+debit/credit/difference summary wraps at narrow widths; explicit Add/Remove
+controls preserve stable line identity and the minimum two rows. Presentation
+continues to use the existing shared journal validation and payload owners.
 
 Create forms preserve drafts and stable transaction/journal identities through
 errors, perform no automatic mutation retry and reset only after confirmed

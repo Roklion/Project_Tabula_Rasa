@@ -24,7 +24,7 @@ export function Accounts() {
   return <><PageHeader title="Accounts" description={<>Accounts for {session.entity.name}.</>}
     actions={!selected && session.capabilities.includes('bookkeeping:write') && <Link to="/accounts/new" className="button">Add account</Link>} />
     {selected ? <AccountEditor row={selected} onClose={() => setSelected(undefined)} /> : query.isPending ? <LoadingState label="Loading accounts…" />
-      : query.isError ? <ErrorNotice error={query.error} onReview={() => void query.refetch()} />
+      : query.isError ? <ErrorNotice error={query.error} operation="read" onReview={() => void query.refetch()} />
       : query.data.items.length === 0 ? <EmptyState title="No accounts yet">Add an account to start bookkeeping.</EmptyState>
       : <TableRegion label="Accounts"><table>
         <caption>Business accounts</caption><thead><tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Classification</th><th scope="col">Parent account</th><th scope="col" className="amount">Opening balance</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
@@ -36,15 +36,15 @@ export function Accounts() {
 }
 
 export function PlannedPage({ title }: { title: string }) {
-  return <><h1>{title}</h1><EmptyState title="This workspace is taking shape">
-    This workflow will be available in a later technical alpha release.
+  return <><PageHeader title={title} /><EmptyState title="Not available in this technical alpha">
+    {title === 'Data & backup' ? 'Import and backup controls are not available on this commercial page. Mileage CSV is available from Mileage.' : 'This workflow is not available in this commercial workspace.'}
   </EmptyState></>;
 }
 
 export function MissingPage() {
-  return <><h1>Page not found</h1><p>Choose a page from the navigation.</p><Link to="/">Return to dashboard</Link></>;
+  return <><PageHeader title="Page not found" description="Choose a page from the navigation." /><Link className="button action-secondary" to="/">Return to dashboard</Link></>;
 }
 
 export function RouteError() {
-  return <main className="standalone"><h1>Page unavailable</h1><ErrorNotice error={undefined} /><a href="/">Return to dashboard</a></main>;
+  return <main className="standalone"><PageHeader title="Page unavailable" /><ErrorNotice error={undefined} operation="read" /><a className="button action-secondary" href="/">Return to dashboard</a></main>;
 }

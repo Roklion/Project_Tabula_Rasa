@@ -7,6 +7,7 @@ import { useProtectedMutation } from './mutations';
 import { useLoadedForm, type LoadedForm } from '../../components/useLoadedForm';
 import { ErrorNotice, SuccessNotice } from '../../components/States';
 import { UnsavedChanges } from '../../components/UnsavedChanges';
+import { ActionButton, SectionHeader } from '../../components/VisualPrimitives';
 
 export type LoadMetadata = { id: string; baseline: string };
 export type EditorCommand = { label: string; description: string; run: (id: string, baseline: string) => Promise<string> };
@@ -77,9 +78,8 @@ export function ProtectedEditor<T extends FieldValues>({ session, loaded, title,
   const pending = mutation.isPending || reloading;
   useServerFieldErrors(form, failure, pending);
   return <section className="surface editor" aria-label={title}>
-    <h2>{title}</h2><UnsavedChanges dirty={form.formState.isDirty} />
+    <SectionHeader title={title} /><UnsavedChanges dirty={form.formState.isDirty} />
     {success && <SuccessNotice>{success}</SuccessNotice>}
-    {onClose && <button type="button" disabled={pending} onClick={event => { event.currentTarget.focus(); if (form.formState.isDirty) setClosing(true); else onClose(); }}>Back to records</button>}
     {closing && <ConfirmationDialog title="Discard draft" keepLabel="Keep editing" confirmLabel="Discard draft and close"
       onKeep={() => setClosing(false)} onConfirm={() => { form.reset(form.getValues()); onClose?.(); }}>
       Discard your unsaved changes?
@@ -92,13 +92,14 @@ export function ProtectedEditor<T extends FieldValues>({ session, loaded, title,
       else void submit('save', values);
     })}>
       <fieldset disabled={pending || review}>{fields(form)}</fieldset>
-      <div className="actions"><button type="submit" disabled={pending || review} onClick={event => event.currentTarget.focus()}>Save changes</button>
-        {remove && <button type="button" disabled={pending || review} onClick={event => { event.currentTarget.focus(); setConfirmRemove(true); }}>{removeLabel}</button>}</div>
-      {commands.length > 0 && <fieldset disabled={pending || review}>
+      <div className="actions formActions"><ActionButton tone="primary" type="submit" pending={mutation.isPending} disabled={pending || review} onClick={event => event.currentTarget.focus()}>Save changes</ActionButton>
+        {onClose && <ActionButton disabled={pending || review} onClick={event => { event.currentTarget.focus(); if (form.formState.isDirty) setClosing(true); else onClose(); }}>Back to records</ActionButton>}
+        {remove && <ActionButton tone={removeLabel === 'Delete' ? 'destructive' : 'secondary'} disabled={pending || review} onClick={event => { event.currentTarget.focus(); setConfirmRemove(true); }}>{removeLabel}</ActionButton>}</div>
+      {commands.length > 0 && <fieldset className="explicitActions" disabled={pending || review}>
         <legend>Explicit actions</legend>{commandFields}
         <p className="muted">Save any draft changes before an action. After completion, return to the records to load the updated state.</p>
-        <div className="actions">{commands.map(command => <button key={command.label} type="button" disabled={form.formState.isDirty}
-          onClick={event => { event.currentTarget.focus(); setPendingCommand(command); }}>{command.label}</button>)}</div>
+        <div className="actions">{commands.map(command => <ActionButton key={command.label} disabled={form.formState.isDirty}
+          onClick={event => { event.currentTarget.focus(); setPendingCommand(command); }}>{command.label}</ActionButton>)}</div>
       </fieldset>}
       {pendingCommand && <ConfirmationDialog title={pendingCommand.label} keepLabel="Keep record"
         confirmLabel={'Confirm ' + pendingCommand.label.toLowerCase()} pending={pending || review}
@@ -117,5 +118,6 @@ export function ProtectedEditor<T extends FieldValues>({ session, loaded, title,
         {removeLabel === 'Delete' ? 'Permanently delete this record?' : 'Deactivate this account?'} The saved record must still match the one you loaded.
       </ConfirmationDialog>}
     </form>}
+    {removed && onClose && <div className="actions"><ActionButton onClick={onClose}>Back to records</ActionButton></div>}
   </section>;
 }

@@ -25,6 +25,13 @@ tags and stable identity. Read-only users can inspect a trip; writers can edit i
 CSV export prefixes formula-leading text with an apostrophe so spreadsheet
 applications treat it as literal text; the stored trip remains unchanged.
 
+Related create/edit fields share Trip details, Route and purpose, and Tags
+groups. They stack on narrow screens; purpose and notes are multiline controls.
+Save mileage trip is the primary action and Back to records retains the draft
+navigation guard. The log wraps long locations, purpose, notes and tags, aligns
+distance headings/values, and scrolls within its named keyboard-focusable region.
+Tag listboxes expose keyboard guidance and the full selected labels.
+
 **Add trip** captures the existing application-service fields. **Round trip**
 initializes an independently editable return distance and creates two independent
 records with reversed locations in one database transaction. Selected and inline
@@ -60,6 +67,13 @@ Choose **Receipts** on a saved ordinary transaction; its accessible name include
 the full record description. The page shows linked files, filename/size/type/integrity inspection and same-origin downloads. Receipt
 actions for source-owned mixed-use/depreciation rows remain with their respective
 source workflows; this slice does not provide a generic bypass for those rows.
+
+Linked receipts, attachment and unreferenced recovery share section headers and
+consistent action controls. Full filenames wrap, metadata disclosure is keyboard
+accessible, and unlink guidance states that stored bytes remain. Read-only access
+is labeled and retains downloads; unavailable storage has a reload/availability
+surface without an attachment control. Selected-file states and partial-failure
+guidance remain visible alongside the existing upload/link progress.
 
 Select supported PDF, PNG, JPG, JPEG, WEBP or HEIC files, then **Attach selected
 receipts**. The complete selected batch is checked before any upload: nonempty

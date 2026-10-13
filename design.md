@@ -428,8 +428,43 @@ with subordinate Debit/Credit postings and no posting mutation actions.
 Ordinary Edit/Receipts controls use short visible labels and complete record
 labels for assistive technology; source-owned rows retain their owner links.
 [UI foundations](docs/COMMERCIAL_UI_FOUNDATIONS.md) records the reuse map and
-synthetic before/after evidence. #329/#330 remaining surface work, #331 integrated
-acceptance, #222 identity/onboarding and #288 hosted/device gates remain separate.
+synthetic before/after evidence. #331 integrated acceptance, #222 identity/onboarding
+and #288 hosted/device gates remain separate.
+
+**Current behavior — commercial forms and secondary presentation (#329/#330):**
+Create and protected-edit routes share labeled field groups, two related desktop
+columns that stack at 760px, multiline memo/notes controls, decimal keyboard
+hints and native listboxes with selection guidance and full selected labels.
+Save is primary, Back and explicit commands are neutral, and permanent deletion
+is red. Existing confirmation, dirty-navigation, historical inactive choices,
+loaded baselines and explicit stale-conflict review retain their owners.
+Journals group each stable posting's target, side/amount and optional details;
+Add/Remove remain explicit, and debit/credit/difference feedback stays visible
+without duplicating balancing or payload logic. Reference lists wrap long names
+and retain stable per-record Edit actions; merge choices and confirmations keep
+their original semantics.
+
+Assets, Mixed-use and Recurring reuse these fields, detail groups, action and
+table patterns. Source ownership, service-calculated allocation, posted-history
+locks and future-only schedule edits are explained alongside the applicable
+controls. Depreciation and occurrence history remain locally scrollable tables;
+generation, posting and retirement retain explicit protected confirmations.
+Mileage uses the same create/edit fields, a named scrollable log, wrapped text
+and aligned distance columns; manual entry, round trips and scoped CSV remain.
+Receipts group linked files, attachment and unreferenced recovery separately,
+with full filenames, keyboard-accessible metadata, upload/link status and clear
+unlink-retains-file guidance. Read-only users retain inspection/downloads;
+unconfigured storage offers availability/reload without attachment controls.
+Data & backup provides the three import workflows described below for authorized
+users. Browser backup remains outside this slice; absent workflows are not shown
+as disabled controls or promised as a release.
+The integrated named-user signed-out, session-unavailable and setup-required
+surfaces also share headers, surfaces and Sign in/Sign out actions, while their
+identity, private-view unmount and receipt-abort behavior retains the #312 owner.
+The [route inventory and evidence](docs/COMMERCIAL_UI_FOUNDATIONS.md#wave-2-forms-and-secondary-routes-329330)
+records all current commercial routes and accepted exclusions. #314/#317 own
+future identity/onboarding integration, #331 integrated visual acceptance and
+#288 hosted/provider/device acceptance.
 
 [Foundation conventions](docs/COMMERCIAL_FOUNDATION.md) owns technical contracts.
 [Commercial concurrency](docs/COMMERCIAL_CONCURRENCY.md) owns the #280 contract.

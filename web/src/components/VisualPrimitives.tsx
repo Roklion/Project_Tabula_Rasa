@@ -22,3 +22,9 @@ export function SectionHeader({ title, description }: { title: string; descripti
 export function TableRegion({ label, children }: { label: string; children: ReactNode }) {
   return <div className="tableScroll" role="region" aria-label={label} tabIndex={0}>{children}</div>;
 }
+
+/** A labeled field group; form state and validation stay with the existing field owners. */
+export function FormSection({ title, description, children }: { title: string; description?: ReactNode; children: ReactNode }) {
+  return <section className="formSection"><header className="formSectionHeader"><h3>{title}</h3>
+    {description && <p>{description}</p>}</header><div className="formGrid">{children}</div></section>;
+}

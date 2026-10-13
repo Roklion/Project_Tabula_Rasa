@@ -68,10 +68,12 @@ button:disabled, button:disabled:hover, .button[aria-disabled="true"], .button[a
 .neutral { color: var(--neutral); background: var(--neutral-surface); }
 .field { display: grid; gap: var(--space-2); min-width: 0; }
 .field label { overflow-wrap: anywhere; }
-.field :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { min-height: var(--control-height); min-width: 0; max-width: 100%; width: 100%; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-control); color: var(--text-primary); background: var(--surface-primary); }
+.field :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { min-height: var(--control-height); min-width: 0; max-width: 100%; width: 100%; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-control); color: var(--text-primary); background: var(--surface-primary); }
 /* Native listboxes and textareas are intentionally multi-line controls. */
 .field select[multiple] { min-height: 128px; padding: var(--space-2); }
 .field textarea { min-height: 112px; resize: vertical; }
+/* WebKit can paint a long native option beyond its bounded control. */
+.field select:not([multiple]) { contain: paint; }
 .field [aria-invalid="true"] { border-color: var(--error); }
 .field :is(input, select, textarea):disabled, fieldset:disabled .field :is(input, select, textarea) { color: var(--neutral); background: var(--neutral-surface); border-color: var(--border-default); }
 .fieldError { color: var(--error); font-size: var(--type-secondary); margin: 0; }
@@ -156,3 +158,40 @@ dd { margin: 0 0 var(--space-3); }
 
 .ledgerFilterGrid select[multiple] { height: calc(4 * var(--space-8)); }
 .ledgerFilterGrid select[multiple] option { white-space: normal; overflow-wrap: anywhere; }
+
+/* Shared form and detail layouts; workflow owners retain all state and commands. */
+.formSection { min-width: 0; border-top: 1px solid var(--border-subtle); padding-top: var(--space-4); }
+.formSectionHeader { margin-bottom: var(--space-4); }
+.formSectionHeader p { color: var(--text-secondary); margin: 0; }
+.formSection .formGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 0; align-items: start; }
+.formSpan { grid-column: 1 / -1; min-width: 0; }
+.formGrid > .field:has(textarea) { grid-column: 1 / -1; }
+.formLock { min-width: 0; }
+.formActions { border-top: 1px solid var(--border-subtle); padding-top: var(--space-4); }
+.explicitActions, .commandSection { border-top: 1px solid var(--border-default); padding-top: var(--space-4); margin-top: var(--space-4); min-width: 0; }
+.detailSummary { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: var(--space-4); margin: var(--space-4) 0; }
+.detailSummary > div { min-width: 0; }
+.detailSummary dt { color: var(--text-secondary); font-weight: var(--weight-normal); }
+.detailSummary dd { margin: var(--space-1) 0 0; }
+.journalTotals { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-6); padding: var(--space-4); margin: 0; background: var(--surface-secondary); border-top: 1px solid var(--border-default); }
+.journalTotals > div { flex: 1 1 120px; min-width: 0; }
+.journalTotals dt { font-weight: var(--weight-normal); color: var(--text-secondary); }
+.journalTotals dd { margin: var(--space-1) 0 0; font-variant-numeric: tabular-nums; }
+.posting { min-width: 0; border-radius: var(--radius-control); background: var(--surface-secondary); }
+.posting .formGrid { margin: 0; }
+.mergeSources { display: grid; gap: var(--space-2); }
+.mergeSources .checkbox { align-items: flex-start; }
+.mergeSources input { margin-top: var(--space-3); }
+.allocationResult { padding: var(--space-3) var(--space-4); background: var(--surface-secondary); font-variant-numeric: tabular-nums; }
+.receiptMetadata { margin: var(--space-2) 0; }
+.receiptMetadata summary { cursor: pointer; min-height: var(--control-height); padding-block: var(--space-2); overflow-wrap: anywhere; }
+.receiptMetadata dl { margin: var(--space-2) 0; }
+.receiptQueue { list-style: none; padding: 0; margin: var(--space-4) 0; }
+.receiptQueue li { border-top: 1px solid var(--border-subtle); padding-block: var(--space-3); }
+.receiptQueue p { margin-bottom: var(--space-2); }
+.field input[type="file"] { white-space: normal; overflow: hidden; }
+progress { max-width: 100%; accent-color: var(--primary); }
+@media (max-width: 760px) {
+  .formGrid, .formSection .formGrid, .detailSummary { grid-template-columns: minmax(0, 1fr); }
+  .recordList li button { max-width: 100%; }
+}

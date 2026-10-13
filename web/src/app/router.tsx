@@ -15,6 +15,7 @@ import { ReportsPage } from '../features/workflows/ReportsPage';
 import { AssetsPage, AssetDetail, NewAsset } from '../features/secondary/AssetsPage';
 import { MixedUsePage, MixedUseDetail, NewMixedUse, CopyMixedUse } from '../features/secondary/MixedUsePage';
 import { RecurringPage, RecurringDetail, NewRecurring } from '../features/secondary/RecurringPage';
+import { PageHeader } from '../components/VisualPrimitives';
 import { ExpenseToRecurring } from '../features/secondary/ExpenseToRecurring';
 import { DataBackupPage } from '../features/imports/DataBackupPage';
 
@@ -46,7 +47,7 @@ const routes = [{
     { path: 'mileage/:recordId', element: <MileageDetail /> },
     { path: 'transactions/:recordId/receipts', element: <ReceiptsPage /> },
     { path: 'transactions/:recordId/recurring', element: <ExpenseToRecurring /> },
-    ...(['payees', 'tags'] as const).map(resource => ({ path: resource + '/merge', element: <><h1>Merge {resource}</h1><ManagedMergeForm key={resource} resource={resource} /></> })),
+    ...(['payees', 'tags'] as const).map(resource => ({ path: resource + '/merge', element: <><PageHeader title={'Merge ' + resource} description="Move references into one retained active record for this business." /><ManagedMergeForm key={resource} resource={resource} /></> })),
     ...navigation.filter(([path]) => !['/', '/accounts', '/categories', '/transactions', '/mileage', '/reports', '/assets', '/data'].includes(path)).map(([path, name]) => ({
       path: path.slice(1), element: <PlannedPage title={name} />,
     })),
