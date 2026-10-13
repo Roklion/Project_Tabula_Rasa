@@ -61,7 +61,9 @@ def test_login_callback_cookie_contract_and_no_entity_setup(database):
     auth.provider.authorization_url.return_value = 'https://id.example.test/authorize'
     auth.provider.verify.return_value = verified()
     with client:
-        assert client.get('/api/v1/session').status_code == 401
+        client.cookies.set(auth.session_cookie, 'x' * 43, domain='127.0.0.1', path='/')
+        delayed_denial = client.get('/api/v1/session')
+        assert delayed_denial.status_code == 401
         assert client.get('/api/v1/auth/login?return_path=https://foreign.test').status_code == 403
         start = client.get('/api/v1/auth/login', follow_redirects=False)
         assert start.status_code == 303
@@ -72,6 +74,14 @@ def test_login_callback_cookie_contract_and_no_entity_setup(database):
         assert result.status_code == 303 and result.headers['location'] == '/'
         cookies = result.headers.get_list('set-cookie')
         assert all('HttpOnly' in cookie and 'Path=/' in cookie and 'SameSite=lax' in cookie and 'Domain=' not in cookie for cookie in cookies)
+        fresh_cookie = client.cookies.get(auth.session_cookie)
+        fresh_csrf = client.cookies.get(auth.csrf_cookie)
+        # Deliver an old private 401 after the callback, as a browser would.
+        # Cookie application is by name, regardless of the request's credential.
+        client.cookies.extract_cookies(delayed_denial)
+        assert client.cookies.get(auth.session_cookie) == fresh_cookie
+        assert client.cookies.get(auth.csrf_cookie) == fresh_csrf
+        assert not delayed_denial.headers.get_list('set-cookie')
         session = client.get('/api/v1/session').json()
         assert session['state'] == 'needs_setup' and session['entity'] is None and not session['capabilities']
         assert client.get('/api/v1/entities/alpha/accounts').status_code == 403
@@ -156,8 +166,9 @@ def test_middleware_identity_denial_uses_cookie_and_event_handler(code, status, 
         with caplog.at_level(logging.INFO, logger='tabula_rasa.http'):
             response = client.get('/api/docs')
         assert response.status_code == status
-        assert (auth.session_cookie in client.cookies) == (code == 'unavailable')
-        assert (auth.csrf_cookie in client.cookies) == (code == 'unavailable')
+        assert auth.session_cookie in client.cookies
+        assert auth.csrf_cookie in client.cookies
+        assert not response.headers.get_list('set-cookie')
         assert auth.login_cookie in client.cookies
         event = next(json.loads(record.message) for record in caplog.records
                      if record.name == 'tabula_rasa.http')

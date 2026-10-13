@@ -60,11 +60,9 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
     async def identity_error(request, error):
         response = error_response(request, error.code)
         request.state.security_event = "identity_denied"
-        identity = getattr(request.app.state.runtime, "identity", None)
-        if identity is not None and error.code == "unauthorized":
-            # An old parallel private request must not erase a newly started
-            # browser-bound login transaction.
-            identity.clear(response, preserve_login=True)
+        # Passive denials must not delete cookies by name: a delayed response
+        # could erase credentials issued by a newer successful callback.
+        # Server validation denies stale credentials; explicit logout clears.
         return response
     app.add_exception_handler(IdentityError, identity_error)
     app.add_exception_handler(RequestValidationError, handle_validation)

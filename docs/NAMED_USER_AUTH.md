@@ -82,6 +82,9 @@ HTTP uses distinct `tabula_dev_*` names. A matching HttpOnly host-only CSRF copy
 (`__Host-tabula_csrf`) permits Origin/CSRF-valid logout to clear cookies even
 when PostgreSQL is unavailable. That copy grants no bookkeeping authority.
 Other unsafe routes use the freshly validated session's synchronizer token.
+Passive identity denials return no cookie deletion: a delayed 401 must not erase
+a newer session installed by a successful callback. Stale cookies still fail
+fresh server validation; explicit logout/revoke-all clear the browser cookies.
 The failure screen retains only logout CSRF, not private session/entity data,
 and offers Sign out. After an initial reload during an outage, the browser reads
 `GET /api/v1/auth/logout-context` with `X-Tabula-Logout: 1` to obtain only this
