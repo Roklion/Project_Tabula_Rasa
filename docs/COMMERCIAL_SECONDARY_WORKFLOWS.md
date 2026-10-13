@@ -15,6 +15,16 @@ platform, retire Streamlit, execute #303 live migration or satisfy #298/#224's
 commercial activation/recovery sign-off. Applicable owner workflow requirements
 may consume them independently of the default alpha matrix.
 
+The #329/#330 visual slice under #323 reuses shared fields, section headers,
+detail summaries, action tones and named keyboard-scrollable tables. Related
+fields align on desktop and stack on narrow screens; long labels and notes wrap,
+and comparable amounts align with their headings. Source ownership, immutable
+posted history and command consequences are explained beside their existing
+controls. These presentation changes preserve the state and command contracts
+below; [UI foundations](COMMERCIAL_UI_FOUNDATIONS.md#wave-2-forms-and-secondary-routes-329330)
+records route coverage and synthetic evidence. Integrated acceptance remains
+#331, independent of hosted #288 and identity/onboarding #314/#317.
+
 ## Recurring expenses
 
 Transactions links to **Recurring expenses**. The schedule list shows cadence,

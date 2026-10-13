@@ -1,6 +1,7 @@
 import type { FieldValues, Path, UseFormReturn } from 'react-hook-form';
 import { useEntity } from '../../app/context';
 import { ErrorNotice, LoadingState } from '../../components/States';
+import { FormSection } from '../../components/VisualPrimitives';
 import { SelectField, TextField } from '../concurrency/Fields';
 import { activeChoices, useReferenceChoices } from '../concurrency/useReferenceChoices';
 
@@ -16,13 +17,17 @@ export function ExpenseReferences<T extends ExpenseReferences>({ form, creating 
   if (choices.pending) return <LoadingState label="Loading choices…" />;
   if (choices.error) return <ErrorNotice error={choices.error} />;
   return <>
-    <SelectField form={form} name={path('account_id')} label="From account" options={[none, ...activeChoices(choices.accounts, [original?.account_id])]} />
-    <SelectField form={form} name={path('category_id')} label="Expense category" options={[none, ...choices.categories.filter(row => row.kind === 'Expense')]} />
-    <SelectField form={form} name={path('payee_id')} label="Payee" options={[none, ...activeChoices(choices.payees, [original?.payee_id])]} />
-    <SelectField form={form} name={path('tag_ids')} label="Tags" multiple options={activeChoices(choices.tags, original?.tag_ids ?? [])} />
-    {inline && <><TextField form={form} name={path('new_payee_name')} label="New payee name (optional)" />
-      <TextField form={form} name={path('new_tag_name')} label="New tag name (optional)" /></>}
-    <TextField form={form} name={path('description')} label="Description / memo" />
-    <TextField form={form} name={path('reference')} label="Reference" />
+    <FormSection title="Expense references">
+      <SelectField form={form} name={path('account_id')} label="From account" options={[none, ...activeChoices(choices.accounts, [original?.account_id])]} />
+      <SelectField form={form} name={path('category_id')} label="Expense category" options={[none, ...choices.categories.filter(row => row.kind === 'Expense')]} />
+      <SelectField form={form} name={path('payee_id')} label="Payee" options={[none, ...activeChoices(choices.payees, [original?.payee_id])]} />
+      <SelectField form={form} name={path('tag_ids')} label="Tags" multiple options={activeChoices(choices.tags, original?.tag_ids ?? [])} />
+      {inline && <><TextField form={form} name={path('new_payee_name')} label="New payee name (optional)" />
+        <TextField form={form} name={path('new_tag_name')} label="New tag name (optional)" /></>}
+    </FormSection>
+    <FormSection title="Memo and reference">
+      <TextField form={form} name={path('description')} label="Description / memo" multiline />
+      <TextField form={form} name={path('reference')} label="Reference" />
+    </FormSection>
   </>;
 }

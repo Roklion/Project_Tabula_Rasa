@@ -42,6 +42,11 @@ remain operator checkpoints. No provider resource is provisioned by this code.
 
 ## Login and browser lifecycle
 
+Signed-out, session-unavailable and workspace-setup-required views consume the
+shared commercial headers, surfaces and native action controls. They retain
+the context boundary's private-view removal, reload and sign-out behavior;
+visual consistency does not complete #314 workspace selection or #317 onboarding.
+
 The infrastructure adapter uses pinned Authlib 1.7.2 (BSD-3-Clause, Python 3.10+)
 and its joserfc 1.7.5 JOSE implementation. Authlib owns authorization-code/PKCE
 request preparation, client authentication, bearer UserInfo requests and OIDC
