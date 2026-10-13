@@ -1,10 +1,11 @@
 """Persistent non-commercial authority in the shared production HTTP application.
 
-The injected resolver is a synthetic authorization fixture, not a shipped login.
+Named sessions/memberships use synthetic users and the real durable validator.
 All databases are independently created/dropped by the native pytest fixture.
 """
 
 from copy import deepcopy
+from unittest.mock import Mock
 
 from fastapi.testclient import TestClient
 import pytest
@@ -15,14 +16,17 @@ from tabula_rasa.http.app import create_app
 from tabula_rasa.http.composition import open_migrated_runtime
 from tabula_rasa.http.config import HttpSettings
 from tabula_rasa.http.context import RequestContext
-from tabula_rasa.http.errors import TransportError
+from tabula_rasa.http.identity import NamedIdentity
 from tabula_rasa.infrastructure.postgres.composition import create_postgres_export_service
 from tabula_rasa.infrastructure.postgres.config import DatabaseSettings
 from tabula_rasa.infrastructure.postgres.cutover import CutoverError, PostgresCutoverController
+from tabula_rasa.infrastructure.postgres.control_plane import PostgresIdentityRepository
+from tabula_rasa.infrastructure.postgres.sessions import PostgresSessionRepository
 from tests.postgres.test_cutover import loaded, settings_for, REHEARSAL_EVIDENCE
+from tests.postgres.test_identity import verified
 
 
-SETTINGS = HttpSettings("production", "https://owner.example.test", "owner-verification")
+SETTINGS = HttpSettings("production", "https://owner.example.test", "owner-verification", access_mode='named_user')
 
 
 def context(profile, *, write=True):
@@ -31,16 +35,36 @@ def context(profile, *, write=True):
         "synthetic-session-" + profile, "synthetic-csrf-" + profile)
 
 
-def resolver(request):
-    # Test-only session stand-in. The deployed application supplies its normal
-    # authenticated resolver; no environment variable grants request authority.
-    profile = request.cookies.get("test_session")
-    if profile not in {"alpha", "beta", "alpha-read-only"}:
-        raise TransportError("unauthorized")
-    return context("alpha", write=False) if profile == "alpha-read-only" else context(profile)
+def named_sessions(database):
+    sessions = PostgresSessionRepository(database, SETTINGS.environment, 'a' * 64)
+    sessions.configure()
+    return sessions
+
+
+def owned_profiles(database):
+    repo = PostgresIdentityRepository(database)
+    sessions = named_sessions(database)
+    credentials = {}
+    for profile in ('alpha', 'beta'):
+        identity = verified('owner-' + profile)
+        user = repo.resolve_user(identity)
+        organization = repo.create_organization(user.id, profile)
+        repo.bind_entity(organization, profile)
+        credentials[profile] = sessions.issue(identity)
+        if profile == 'alpha':
+            reader = verified('reader-alpha')
+            repo.set_membership(organization, repo.resolve_user(reader).id, 'read_only')
+            credentials['alpha-read-only'] = sessions.issue(reader)
+    return credentials
+
+
+def login(client, credentials, profile='alpha'):
+    raw, _ = credentials[profile]
+    client.cookies.set('__Host-tabula_session', raw)
 
 
 def runtime_factory(database, config):
+    resolver = NamedIdentity(SETTINGS, named_sessions(database), Mock())
     return lambda settings: open_migrated_runtime(settings,
         resolve_context=resolver, entity_profiles={"alpha": "alpha", "beta": "beta"},
         profile_secrets=config, database_settings=DatabaseSettings(database.engine.url))
@@ -61,10 +85,11 @@ def test_owner_authority_survives_production_restart_writes_reports_and_complete
                         lambda _: pytest.fail("Migrated production must not initialize Sheets."))
     assert smoke_application("alpha", config, database, plans["alpha"])["passed"]
     before = create_postgres_export_service(database, "alpha").export()
+    credentials = owned_profiles(database)
     for restart in range(2):
         app = create_app(settings=SETTINGS, runtime_factory=runtime_factory(database, config))
         with TestClient(app, base_url=SETTINGS.public_origin) as client:
-            client.cookies.set("test_session", "alpha")
+            login(client, credentials)
             assert client.get("/health/ready").status_code == 200
             session = client.get("/api/v1/session").json()
             assert session["entity"]["id"] == "alpha" and not session["trusted_development"]
@@ -89,7 +114,7 @@ def test_owner_authority_survives_production_restart_writes_reports_and_complete
             assert exported["manifest"]["status"] == "complete"
             assert exported["manifest"]["content_sha256"] != before["manifest"]["content_sha256"]
             assert client.get("/api/v1/entities/beta/accounts").status_code == 403
-            client.cookies.set("test_session", "beta")
+            login(client, credentials, 'beta')
             assert client.get("/api/v1/session").json()["entity"]["id"] == "beta"
             beta = app.state.runtime.services(context("beta"))
             assert not any(row["id"] == "owner-expense" for row in beta.transactions.list(fresh=True))
@@ -107,16 +132,17 @@ def test_owner_authority_survives_production_restart_writes_reports_and_complete
 
 def test_owner_runtime_preserves_identity_capability_origin_and_csrf_guards(database):
     plans, controller, config = activated_profiles(database)
+    credentials = owned_profiles(database)
     app = create_app(settings=SETTINGS, runtime_factory=runtime_factory(database, config))
     with TestClient(app, base_url=SETTINGS.public_origin) as client:
         assert client.get("/api/v1/session").status_code == 401
-        client.cookies.set("test_session", "alpha")
+        login(client, credentials)
         assert client.get("/api/v1/entities/beta/accounts").status_code == 403
         body = {"name": "Synthetic forbidden", "type": "Bank"}
         for headers in ({}, {"Origin": "https://foreign.test", "X-CSRF-Token": "synthetic-csrf-alpha"},
                         {"Origin": SETTINGS.public_origin, "X-CSRF-Token": "invalid"}):
             assert client.post("/api/v1/entities/alpha/accounts", json=body, headers=headers).status_code == 403
-        client.cookies.set("test_session", "alpha-read-only")
+        login(client, credentials, 'alpha-read-only')
         assert client.post("/api/v1/entities/alpha/accounts", json=body,
             headers={"Origin": SETTINGS.public_origin, "X-CSRF-Token": "synthetic-csrf-alpha"}).status_code == 403
     for plan in plans.values():

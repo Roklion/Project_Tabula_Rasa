@@ -16,8 +16,9 @@ HANDOFF = WRITE | {'bookkeeping:import', 'bookkeeping:export'}
 ADMIN = HANDOFF | {'members:manage'}
 ROLE_CAPABILITIES = {
     'owner': ADMIN | {'entity:manage', 'organization:manage', 'connections:manage',
-                      'ownership:manage', 'backup:create', 'backup:download',
-                      'restore:execute', 'migration:execute', 'recovery:authorize', 'business:admin'},
+                      'ownership:manage', 'backup:create', 'backup:list', 'backup:download',
+                      'archive:recover', 'restore:execute', 'migration:execute', 'cutover:execute',
+                      'ledger:reset', 'recovery:authorize', 'business:admin'},
     'admin': ADMIN, 'editor': WRITE, 'accountant': HANDOFF, 'read_only': READ,
 }
 

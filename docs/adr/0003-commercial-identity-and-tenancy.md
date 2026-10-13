@@ -121,13 +121,17 @@ entitlements are introduced.
 | `members:manage`: list/invite/change/remove non-owners | Yes | Yes, restricted below | No | No | No |
 | `connections:manage`: connect/reconnect/disconnect external grants; inspect safe status | Yes | No | No | No | No |
 | `ownership:manage`: grant/revoke Owner, transfer ownership | Yes | No | No | No | No |
-| `backup:create` / `backup:download`: business recovery artifacts, separate from bookkeeping exports | Yes | No | No | No | No |
+| `backup:create` / `backup:list` / `backup:download`: business recovery artifacts, separate from bookkeeping exports | Yes | No | No | No | No |
 | `recovery:authorize`: destructive restore, ledger migration and privileged business recovery | Yes | No | No | No | No |
 
 The Business Owner role is distinct from an ordinary user permitted to view or
 update entries. Owner-only administration and recovery authority cannot be
 inferred from Admin/Editor/Accountant status or a selected business. Existing
 bookkeeping import/export permissions remain distinct from backup and restore.
+The [implemented action registry and route inventory](../API_AUTHORIZATION.md)
+also distinguish archive recovery, restore, migration/cutover, ledger reset,
+privileged audit inspection and legacy local administration. Operator execution
+and one-execution recovery approval requirements are absent from tenant roles.
 The recovery capabilities above define authorization requirements, not new
 endpoints or permission to execute a migration. Preserve fresh authentication,
 profile/entity isolation, current backup validation, restoration to a new blank

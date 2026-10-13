@@ -59,12 +59,17 @@ remains the internal/reference edition.
   API and schema exporter do not import Streamlit, Sheets or Google clients.
 - `open_migrated_runtime` supplies the shared lifecycle for accepted migrated
   profiles. It validates all server-configured authority/document bindings and
-  schema readiness at startup, requires an explicit authorization resolver,
+  schema readiness at startup, requires the named membership resolver in
+  production/named-user mode and matching identity/ledger database/environment,
   refuses synthetic contexts and disposes failed pools. Lasting owner use keeps
   the existing non-commercial cutover policy in a normal production app; see the
   [owner-operated procedure](BOOKKEEPING_CUTOVER.md#owner-operated-production-procedure-299).
   This factory does not deliver #222's login/session system or remaining browser
   workflow slices, and its synthetic tests do not authorize live use.
+
+The [central API authorization inventory](API_AUTHORIZATION.md) owns #313's
+registered action requirements, route audit, privileged-operation boundaries
+and before-binding denial tests. Future private operations consume that guard.
 
 ## Identity and request protection seam (#222)
 
