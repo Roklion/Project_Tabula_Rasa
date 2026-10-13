@@ -28,7 +28,7 @@ from .errors import (
     TransportError, error_response, handle_error, handle_http_error, handle_validation,
 )
 from .models.common import Health, Version
-from .routes import accounting, accounts, auth, documents, mileage, references, reporting, secondary, session
+from .routes import accounting, accounts, auth, documents, imports, mileage, mileage_imports, references, reporting, secondary, session
 
 logger = logging.getLogger("tabula_rasa.http")
 
@@ -147,6 +147,8 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
     app.include_router(accounting.transactions)
     app.include_router(accounting.journals)
     app.include_router(mileage.router)
+    app.include_router(imports.router)
+    app.include_router(mileage_imports.router)
     app.include_router(documents.router)
     app.include_router(reporting.router)
     app.include_router(secondary.router)

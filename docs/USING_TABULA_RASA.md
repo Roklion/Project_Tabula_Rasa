@@ -34,6 +34,15 @@ for the supported scope, creation/error behavior and remaining initiative work.
 These forms do not change the Streamlit workflows described below or establish
 commercial production readiness.
 
+The commercial browser also provides the existing transaction CSV/QuickBooks
+and QuickBooks mileage imports in **Data & backup**, ordinary transaction copy
+and confirmed selected Category/Payee/Tag updates/deletion in **Transactions**,
+independent mixed-use source copy and **Make recurring** for an ordinary Expense.
+Import preparation is read-only, copies start without receipts, and protected
+bulk/conversion commands submit their loaded baselines. See
+[Commercial import, copy and bulk workflows](COMMERCIAL_WORKFLOW_PORTS.md) for
+supported formats, batch behavior, failure guidance and remaining owner readiness.
+
 The browser also provides the complete manual mileage list/create/detail/edit/
 delete journey, date/tag filters, totals, CSV download and round-trip capture.
 Saved ordinary transactions offer receipt attachment, inspection/download,

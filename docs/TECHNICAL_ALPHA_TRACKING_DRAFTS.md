@@ -8,6 +8,14 @@ with actual narrow issue links, or record the owner's explicit retirement/exclus
 decision. #288's remaining-workflows-ticketed criterion stays open until then.
 None of these long-tail flows is added to the default technical-alpha matrix.
 
+Published owners and implementation routing: TA-1 → #357, TA-2 → #358,
+TA-6 → #362 and TA-8 → #364 now have browser/API/service/PostgreSQL ports,
+documented with validation in [Commercial workflow ports](COMMERCIAL_WORKFLOW_PORTS.md).
+TA-3 is narrowed to #359's existing financial CSV; TA-5 → #361 and TA-7 → #363
+remain separate ports. TA-4/#360 and standalone report downloads are excluded by
+#124/#221's October 11 existing-functionality correction. Historical drafts below
+do not override those decisions or authorize #303 live execution.
+
 ## TA-1 — Commercial web: Transaction CSV and QuickBooks import
 
 Parent #221; consumes existing import parsing/preparation/application services and

@@ -14,7 +14,7 @@ from tabula_rasa.application.identity import AuthenticatedSession, EntityAccess,
 from tabula_rasa.http.app import create_app
 from tabula_rasa.http.authorization import ROUTE_POLICIES, RoutePolicy, validate_routes
 from tabula_rasa.http.config import HttpSettings
-from tabula_rasa.http.context import DenyContext
+from tabula_rasa.http.context import DenyContext, TrustedDevelopmentContext
 from tabula_rasa.http.identity import NamedIdentity
 from tests.http.test_transport import FakeRuntime, SETTINGS
 
@@ -25,6 +25,19 @@ def entity_routes():
 
 
 ROUTES = entity_routes()
+
+
+def test_synthetic_development_import_grant_remains_inside_the_existing_boundary():
+    resolver = TrustedDevelopmentContext('alpha', 'test-csrf')
+    authorize_action(resolver.context.capabilities, 'import')
+    runtime = FakeRuntime()
+    runtime.resolve_context = resolver
+    with TestClient(create_app(settings=SETTINGS, runtime_factory=lambda _: runtime)) as client:
+        result = client.post('/api/v1/entities/alpha/imports/csv/prepare',
+            headers={'Origin': SETTINGS.public_origin, 'X-CSRF-Token': 'test-csrf',
+                     'Content-Type': 'application/octet-stream'}, content=b'Date,Type')
+    assert result.status_code == 403  # TestClient is not a permitted loopback caller.
+    runtime.services.assert_not_called()
 
 
 def test_inventory_covers_included_routes_and_matches_openapi():
@@ -59,7 +72,7 @@ def test_every_entity_route_denies_before_binding(route, denial):
     runtime.services.assert_not_called()
 
 
-@pytest.mark.parametrize('route', [r for r in ROUTES if ROUTE_POLICIES[r.operation_id].action == 'write'],
+@pytest.mark.parametrize('route', [r for r in ROUTES if ROUTE_POLICIES[r.operation_id].action in {'write', 'import'}],
                          ids=lambda r: r.operation_id)
 def test_every_mutation_denies_read_only_before_binding(route):
     runtime = FakeRuntime()
@@ -69,6 +82,19 @@ def test_every_mutation_denies_read_only_before_binding(route):
         result = client.request(next(iter(route.methods)), path_for(route),
             headers={'Origin': SETTINGS.public_origin, 'X-CSRF-Token': 'test-csrf'}, json={})
     assert result.status_code == 403, result.text
+    runtime.services.assert_not_called()
+
+
+@pytest.mark.parametrize('route', [r for r in ROUTES if '/imports/' in r.path], ids=lambda r: r.operation_id)
+def test_import_preparation_and_commit_deny_editor_before_upload_or_binding(route):
+    runtime = FakeRuntime()
+    original = runtime.resolve_context
+    runtime.resolve_context = lambda request: replace(original(request), capabilities=capabilities('editor'))
+    with TestClient(create_app(settings=SETTINGS, runtime_factory=lambda _: runtime)) as client:
+        result = client.request('POST', path_for(route),
+            headers={'Origin': SETTINGS.public_origin, 'X-CSRF-Token': 'test-csrf',
+                     'Content-Type': 'application/octet-stream'}, content=b'not a valid import')
+    assert result.status_code == 403
     runtime.services.assert_not_called()
 
 

@@ -226,9 +226,20 @@ class PostgresRecurringRepository(EntityRepository):
             ('new_payee_name', refs.payees, normalize_payee_name, [schedule['payee_id']]),
             ('new_tag_name', refs.tags, normalize_tag_name, normalize_tag_ids(schedule['tag_ids'])),
         ):
-            if data.get(name_field) and not any(
-                    item in lookup and normalize(lookup[item]['name']) == normalize(data[name_field]) for item in selected):
-                raise StorageConflictError('The recurring conversion differs from the requested data.')
+            if data.get(name_field):
+                resolved = [item for item in selected if item in lookup
+                            and normalize(lookup[item]['name']) == normalize(data[name_field])]
+                if not resolved:
+                    raise StorageConflictError('The recurring conversion differs from the requested data.')
+                # A full HTTP draft still contains the pre-create association
+                # fields. Reuse the already confirmed inline references while
+                # comparing the replay; do not create or reactivate references.
+                if name_field == 'new_payee_name':
+                    if data.get('payee_id') and data['payee_id'] != resolved[0]:
+                        raise StorageConflictError('The recurring conversion differs from the requested data.')
+                    data['payee_id'] = resolved[0]
+                else:
+                    data['tag_ids'] = sorted(set(normalize_tag_ids(data.get('tag_ids', []))) | set(resolved))
             data[name_field] = ''
         requested = self.template({**data, 'source_kind': 'mixed_use' if mixed else 'transaction',
                                   'receipt_references': []}, refs, schedule_id=identity)

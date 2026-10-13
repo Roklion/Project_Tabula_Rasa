@@ -131,21 +131,22 @@ for inspection under existing #279 rules.
 | --- | --- | --- |
 | Accounts/categories/payees/tags, ordinary transactions/journals, ledger/core reports | Implemented new-stack routes; no redirect to legacy UI | Streamlit remains a behavioral reference for unmigrated Sheets profiles. #281/#282 are complete. |
 | Ordinary transaction receipts | Implemented; default hosted runtime accepts the explicit Drive binding above | Operator grant/folder installation and real-provider verification remain required; mixed-use source receipts are draft TA-5 below. Asset acquisition receipts stay on the ordinary acquisition transaction. |
-| Recurring schedules and mixed-use sources/projections | Implemented under #284: create/edit, schedule state changes, explicit reconciliation and source/projection management | Outside the default alpha. Internal copy/conversion: draft TA-6; mixed-use source receipts: draft TA-5. Templates do not own receipts. Durable generation independent of page loads remains #223. See [secondary workflows](COMMERCIAL_SECONDARY_WORKFLOWS.md). |
+| Recurring schedules and mixed-use sources/projections | Implemented under #284: create/edit, schedule state changes, explicit reconciliation and source/projection management; #362 adds independent source copy and ordinary Expense conversion | Outside the default alpha. Mixed-use source receipts remain #361. Templates do not own receipts. Durable generation independent of page loads remains #223. See [secondary workflows](COMMERCIAL_SECONDARY_WORKFLOWS.md) and [workflow ports](COMMERCIAL_WORKFLOW_PORTS.md). |
 | Fixed assets and depreciation | Implemented under #285: register/detail/edit, schedules, explicit due posting, overrides and retirement | Outside the default alpha. Acquisition transaction owns receipts; generated depreciation has no independent receipt/copy/import action. Additional mixed-use asset behavior remains #121. See [secondary workflows](COMMERCIAL_SECONDARY_WORKFLOWS.md). |
-| Manual mileage log/filter/CSV/detail | Implemented under #286 | Maps/routing: draft TA-7; QuickBooks import: draft TA-8. Existing #158 owns proposed mileage bulk workflows; its commercial adapter scope must be recorded before enabling them. |
-| Transaction CSV/QuickBooks imports; financial bulk actions/copy; financial CSV/report download; category template import | Not exposed by current browser routes | Draft TA-1, TA-2, TA-3 and TA-4 respectively; #282's core CRUD/read completion does not establish these paths. |
-| Sheets workbook/backup administration and restore | `/data` is an availability page; no live-ledger fallback | #220/#261 preserve frozen format-13 internal recovery; #223 owns operational backup/recovery; #260 supplies complete PostgreSQL operator export and #224 owns customer delivery. |
+| Manual mileage log/filter/CSV/detail and QuickBooks mileage import | Implemented under #286/#364; mileage import is in `/data` with read-only preview and explicit confirmation | Maps lookup/routing remains #363. Existing #158 owns proposed mileage bulk workflows, outside this migration port. See [workflow ports](COMMERCIAL_WORKFLOW_PORTS.md). |
+| Transaction CSV/QuickBooks imports; ordinary copy and financial bulk mutations | Implemented under #357/#358 through services/PostgreSQL; imports in `/data`, selected actions in Transactions | Outside the default alpha; preserve source ownership, loaded baselines and explicit batch commands. See [workflow ports](COMMERCIAL_WORKFLOW_PORTS.md) for affected validation and #303 readiness. |
+| Existing selected-ledger, transactions and journal-postings CSV downloads | Remaining commercial port #359 | Standalone report downloads/category-template import (#360) are excluded by #124/#221's October 11 scope correction; on-screen reports/category management remain supported. |
+| Sheets workbook/backup administration and restore | Commercial `/data` now exposes supported imports; no Sheets administration or live-ledger fallback | #220/#261 preserve frozen format-13 internal recovery; #223 owns operational backup/recovery; #260 supplies complete PostgreSQL operator export and #224 owns customer delivery. |
 | Google/profile/local credential administration | Not a commercial browser workflow | #222 owns native onboarding/authorization; #303 consumes authorized owner bindings. Do not port deployment-password/all-profile access as commercial identity. |
 
-Unticketed narrow gaps above are an explicit remaining tracker task, not a claim
-that broad parent issues have already implemented them. Creating GitHub issues
-requires GitHub-write authorization. #288 must link the resulting narrow tickets
-or an explicit owner-approved retirement decision before acceptance.
-The [ready-to-post transition tracker drafts](TECHNICAL_ALPHA_TRACKING_DRAFTS.md)
-enumerate each uncovered workflow, existing owners and bounded acceptance scope.
-Draft IDs are local references, **not GitHub issue numbers**. Publication/linking
-or owner-approved exclusions remain operator work; none is silently retired.
+The published transition owners are #357–#359 and #361–#364. #288's completed
+October 11 acceptance covers its defined core matrix; these ports remain outside
+that matrix and retain #303's owner-required readiness. #357/#358/#362/#364 supply
+local synthetic implementation/validation coverage here; #359/#361/#363 retain
+their separate missing ports. The [historical tracker drafts](TECHNICAL_ALPHA_TRACKING_DRAFTS.md)
+record the original TA labels; the initiative's scope correction supersedes TA-4
+and the standalone-report portion of TA-3. No workflow is silently retired and no
+live migration or hosted verification is claimed by these local ports.
 
 Choose one authoritative backend per entity through the existing cutover contract.
 An unmigrated Sheets entity keeps its authorized internal runtime. A PostgreSQL

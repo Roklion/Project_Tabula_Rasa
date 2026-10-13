@@ -4,6 +4,7 @@ from ..baselines import required_baseline
 from ..errors import ERROR_RESPONSES
 from ..models.accounting import (
     Journal, JournalCreate, JournalList, JournalUpdate, Transaction, TransactionCreate, TransactionList, TransactionUpdate,
+    TransactionBulkSelection, TransactionBulkUpdate, TransactionChanges,
     journal_response, transaction_response,
 )
 from ..models.mutations import MutationResult, ProtectedMutation
@@ -29,6 +30,32 @@ def create_journal(entity_id: str, body: JournalCreate, request: Request, contex
 def list_transactions(entity_id: str, request: Request, context: Context):
     with service_operation(request, context, 'transactions') as service:
         return TransactionList(items=[transaction_response(row) for row in service.list(fresh=True)])
+
+
+def transaction_selection(body):
+    return [{'id': row.id, **required_baseline(row.baseline)} for row in body.expected]
+
+
+@transactions.post('/bulk/update', response_model=MutationResult, operation_id='bulk_update_transactions')
+def bulk_update_transactions(entity_id: str, body: TransactionBulkUpdate, request: Request, context: Context):
+    expected = transaction_selection(body)
+    with service_operation(request, context, 'transactions') as service:
+        return MutationResult(**service.bulk_update(body.transaction_ids, expected=expected,
+                                                   changes=body.changes.model_dump(exclude_unset=True)))
+
+
+@transactions.post('/bulk/delete', response_model=MutationResult, operation_id='bulk_delete_transactions')
+def bulk_delete_transactions(entity_id: str, body: TransactionBulkSelection, request: Request, context: Context):
+    expected = transaction_selection(body)
+    with service_operation(request, context, 'transactions') as service:
+        return MutationResult(**service.bulk_delete(body.transaction_ids, expected=expected))
+
+
+@transactions.post('/{record_id}/copy-draft', response_model=TransactionChanges, operation_id='prepare_transaction_copy')
+def prepare_transaction_copy(entity_id: str, record_id: str, body: ProtectedMutation, request: Request, context: Context):
+    expected = required_baseline(body.baseline)
+    with service_operation(request, context, 'transactions') as service:
+        return TransactionChanges(**service.copy_draft(record_id, expected=expected))
 
 
 @transactions.patch('/{record_id}', response_model=Transaction, operation_id='update_transaction')

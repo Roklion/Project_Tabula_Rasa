@@ -52,7 +52,7 @@ def commercial(database):
     ids = dict(accounts='cash', categories='office', payees=payee['id'], tags=tag['id'],
                transactions=transaction['id'], journals=journal['id'], mileage=trip.id)
     other = Database(DatabaseSettings(database.engine.url))
-    context = RequestContext('actor', 'org', 'alpha', frozenset({'bookkeeping:read', 'bookkeeping:write'}), 'scope', 'csrf')
+    context = RequestContext('actor', 'org', 'alpha', frozenset({'bookkeeping:read', 'bookkeeping:write', 'bookkeeping:import'}), 'scope', 'csrf')
     with ExitStack() as stack:
         clients = []
         for db in (database, other):

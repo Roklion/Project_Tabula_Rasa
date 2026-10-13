@@ -1263,6 +1263,50 @@
         "title": "ErrorEnvelope",
         "type": "object"
       },
+      "ExpenseRecurringConversion": {
+        "additionalProperties": false,
+        "properties": {
+          "baseline": {
+            "maxLength": 4096,
+            "title": "Baseline",
+            "type": "string"
+          },
+          "changes": {
+            "$ref": "#/components/schemas/OrdinaryExpenseChanges"
+          },
+          "end_date": {
+            "default": "",
+            "title": "End Date",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "recurrence_interval": {
+            "default": "1",
+            "title": "Recurrence Interval",
+            "type": "string"
+          },
+          "recurrence_unit": {
+            "title": "Recurrence Unit",
+            "type": "string"
+          },
+          "schedule_id": {
+            "title": "Schedule Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "baseline",
+          "schedule_id",
+          "name",
+          "recurrence_unit",
+          "changes"
+        ],
+        "title": "ExpenseRecurringConversion",
+        "type": "object"
+      },
       "FieldError": {
         "additionalProperties": false,
         "properties": {
@@ -1299,6 +1343,98 @@
           "status"
         ],
         "title": "Health",
+        "type": "object"
+      },
+      "ImportAccountProposal": {
+        "additionalProperties": false,
+        "properties": {
+          "classification": {
+            "title": "Classification",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "opening_balance": {
+            "default": "0.00",
+            "title": "Opening Balance",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "classification"
+        ],
+        "title": "ImportAccountProposal",
+        "type": "object"
+      },
+      "ImportCategoryProposal": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind"
+        ],
+        "title": "ImportCategoryProposal",
+        "type": "object"
+      },
+      "ImportSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "Expense": {
+            "title": "Expense",
+            "type": "integer"
+          },
+          "Income": {
+            "title": "Income",
+            "type": "integer"
+          },
+          "Transfer": {
+            "title": "Transfer",
+            "type": "integer"
+          },
+          "conversion_errors": {
+            "title": "Conversion Errors",
+            "type": "integer"
+          },
+          "duplicates": {
+            "title": "Duplicates",
+            "type": "integer"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "integer"
+          },
+          "validation_errors": {
+            "title": "Validation Errors",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ready",
+          "duplicates",
+          "Income",
+          "Expense",
+          "Transfer",
+          "validation_errors",
+          "conversion_errors"
+        ],
+        "title": "ImportSummary",
         "type": "object"
       },
       "Journal": {
@@ -1943,6 +2079,165 @@
         "title": "MileageCreate",
         "type": "object"
       },
+      "MileageImportPreview": {
+        "additionalProperties": false,
+        "properties": {
+          "duplicate_rows": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Duplicate Rows",
+            "type": "array"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "personal_rows": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Personal Rows",
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/MileageImportRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "source_rows": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Source Rows",
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/MileageImportSummary"
+          },
+          "unreviewed_rows": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Unreviewed Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "summary",
+          "rows",
+          "source_rows",
+          "errors",
+          "duplicate_rows",
+          "personal_rows",
+          "unreviewed_rows"
+        ],
+        "title": "MileageImportPreview",
+        "type": "object"
+      },
+      "MileageImportResult": {
+        "additionalProperties": false,
+        "properties": {
+          "ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ids",
+            "type": "array"
+          },
+          "imported": {
+            "title": "Imported",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "imported",
+          "ids"
+        ],
+        "title": "MileageImportResult",
+        "type": "object"
+      },
+      "MileageImportRow": {
+        "additionalProperties": false,
+        "properties": {
+          "business_purpose": {
+            "title": "Business Purpose",
+            "type": "string"
+          },
+          "destination": {
+            "title": "Destination",
+            "type": "string"
+          },
+          "miles": {
+            "title": "Miles",
+            "type": "string"
+          },
+          "notes": {
+            "title": "Notes",
+            "type": "string"
+          },
+          "start_location": {
+            "title": "Start Location",
+            "type": "string"
+          },
+          "trip_date": {
+            "title": "Trip Date",
+            "type": "string"
+          },
+          "vehicle": {
+            "title": "Vehicle",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trip_date",
+          "miles",
+          "vehicle",
+          "start_location",
+          "destination",
+          "business_purpose",
+          "notes"
+        ],
+        "title": "MileageImportRow",
+        "type": "object"
+      },
+      "MileageImportSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "duplicates": {
+            "title": "Duplicates",
+            "type": "integer"
+          },
+          "personal_skipped": {
+            "title": "Personal Skipped",
+            "type": "integer"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "integer"
+          },
+          "unreviewed_skipped": {
+            "title": "Unreviewed Skipped",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ready",
+          "duplicates",
+          "personal_skipped",
+          "unreviewed_skipped"
+        ],
+        "title": "MileageImportSummary",
+        "type": "object"
+      },
       "MileageList": {
         "additionalProperties": false,
         "properties": {
@@ -2192,6 +2487,11 @@
             "title": "Category Id",
             "type": "string"
           },
+          "copied_from_source_id": {
+            "default": "",
+            "title": "Copied From Source Id",
+            "type": "string"
+          },
           "description": {
             "default": "",
             "title": "Description",
@@ -2368,6 +2668,69 @@
         "title": "Occurrence",
         "type": "object"
       },
+      "OrdinaryExpenseChanges": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "amount": {
+            "maxLength": 100,
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Amount",
+            "type": "string"
+          },
+          "category_id": {
+            "title": "Category Id",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "new_payee_name": {
+            "default": "",
+            "title": "New Payee Name",
+            "type": "string"
+          },
+          "new_tag_name": {
+            "default": "",
+            "title": "New Tag Name",
+            "type": "string"
+          },
+          "payee_id": {
+            "default": "",
+            "title": "Payee Id",
+            "type": "string"
+          },
+          "reference": {
+            "default": "",
+            "title": "Reference",
+            "type": "string"
+          },
+          "tag_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tag Ids",
+            "type": "array"
+          },
+          "txn_date": {
+            "title": "Txn Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "txn_date",
+          "account_id",
+          "category_id",
+          "amount"
+        ],
+        "title": "OrdinaryExpenseChanges",
+        "type": "object"
+      },
       "Posting": {
         "additionalProperties": false,
         "properties": {
@@ -2457,6 +2820,83 @@
           "baseline"
         ],
         "title": "ProtectedMutation",
+        "type": "object"
+      },
+      "QuickBooksImportPreview": {
+        "additionalProperties": false,
+        "properties": {
+          "columns": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "conversion_errors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Conversion Errors",
+            "type": "array"
+          },
+          "duplicate_rows": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Duplicate Rows",
+            "type": "array"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "new_accounts": {
+            "items": {
+              "$ref": "#/components/schemas/ImportAccountProposal"
+            },
+            "title": "New Accounts",
+            "type": "array"
+          },
+          "new_categories": {
+            "items": {
+              "$ref": "#/components/schemas/ImportCategoryProposal"
+            },
+            "title": "New Categories",
+            "type": "array"
+          },
+          "source_rows": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Source Rows",
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ImportSummary"
+          },
+          "total_rows": {
+            "title": "Total Rows",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "columns",
+          "source_rows",
+          "total_rows",
+          "errors",
+          "summary",
+          "conversion_errors",
+          "duplicate_rows",
+          "new_accounts",
+          "new_categories"
+        ],
+        "title": "QuickBooksImportPreview",
         "type": "object"
       },
       "ReconcileRequest": {
@@ -3030,6 +3470,11 @@
             "title": "Payee Id",
             "type": "string"
           },
+          "recurring_schedule_id": {
+            "default": "",
+            "title": "Recurring Schedule Id",
+            "type": "string"
+          },
           "reference": {
             "title": "Reference",
             "type": "string"
@@ -3071,6 +3516,103 @@
           "baseline"
         ],
         "title": "Transaction",
+        "type": "object"
+      },
+      "TransactionBulkChanges": {
+        "additionalProperties": false,
+        "properties": {
+          "category_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          },
+          "payee_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payee Id"
+          },
+          "tag_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tag Ids"
+          }
+        },
+        "title": "TransactionBulkChanges",
+        "type": "object"
+      },
+      "TransactionBulkSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "expected": {
+            "items": {
+              "$ref": "#/components/schemas/TransactionSelection"
+            },
+            "title": "Expected",
+            "type": "array"
+          },
+          "transaction_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Transaction Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "transaction_ids",
+          "expected"
+        ],
+        "title": "TransactionBulkSelection",
+        "type": "object"
+      },
+      "TransactionBulkUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "changes": {
+            "$ref": "#/components/schemas/TransactionBulkChanges"
+          },
+          "expected": {
+            "items": {
+              "$ref": "#/components/schemas/TransactionSelection"
+            },
+            "title": "Expected",
+            "type": "array"
+          },
+          "transaction_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Transaction Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "transaction_ids",
+          "expected",
+          "changes"
+        ],
+        "title": "TransactionBulkUpdate",
         "type": "object"
       },
       "TransactionChanges": {
@@ -3164,6 +3706,11 @@
             "title": "Category Id",
             "type": "string"
           },
+          "copied_from_transaction_id": {
+            "default": "",
+            "title": "Copied From Transaction Id",
+            "type": "string"
+          },
           "description": {
             "default": "",
             "title": "Description",
@@ -3225,6 +3772,74 @@
         "title": "TransactionCreate",
         "type": "object"
       },
+      "TransactionCsvPreview": {
+        "additionalProperties": false,
+        "properties": {
+          "columns": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "source_rows": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Source Rows",
+            "type": "array"
+          },
+          "total_rows": {
+            "title": "Total Rows",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "columns",
+          "source_rows",
+          "total_rows"
+        ],
+        "title": "TransactionCsvPreview",
+        "type": "object"
+      },
+      "TransactionImportResult": {
+        "additionalProperties": false,
+        "properties": {
+          "imported_count": {
+            "title": "Imported Count",
+            "type": "integer"
+          },
+          "status": {
+            "const": "fully_applied",
+            "default": "fully_applied",
+            "title": "Status",
+            "type": "string"
+          },
+          "transaction_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Transaction Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "imported_count",
+          "transaction_ids"
+        ],
+        "title": "TransactionImportResult",
+        "type": "object"
+      },
       "TransactionList": {
         "additionalProperties": false,
         "properties": {
@@ -3240,6 +3855,26 @@
           "items"
         ],
         "title": "TransactionList",
+        "type": "object"
+      },
+      "TransactionSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "baseline": {
+            "maxLength": 4096,
+            "title": "Baseline",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "baseline"
+        ],
+        "title": "TransactionSelection",
         "type": "object"
       },
       "TransactionUpdate": {
@@ -6210,6 +6845,726 @@
         ]
       }
     },
+    "/api/v1/entities/{entity_id}/imports/csv": {
+      "post": {
+        "operationId": "import_transaction_csv",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionImportResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Import Transaction Csv",
+        "tags": [
+          "Imports"
+        ]
+      }
+    },
+    "/api/v1/entities/{entity_id}/imports/csv/prepare": {
+      "post": {
+        "operationId": "prepare_transaction_csv",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionCsvPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Prepare Transaction Csv",
+        "tags": [
+          "Imports"
+        ]
+      }
+    },
+    "/api/v1/entities/{entity_id}/imports/quickbooks": {
+      "post": {
+        "operationId": "import_quickbooks_transactions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "filename",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Filename",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "auto_create",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Auto Create",
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionImportResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Import Quickbooks Transactions",
+        "tags": [
+          "Imports"
+        ]
+      }
+    },
+    "/api/v1/entities/{entity_id}/imports/quickbooks-mileage": {
+      "post": {
+        "operationId": "import_quickbooks_mileage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MileageImportResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Import Mileage",
+        "tags": [
+          "Imports"
+        ]
+      }
+    },
+    "/api/v1/entities/{entity_id}/imports/quickbooks-mileage/preview": {
+      "post": {
+        "operationId": "preview_quickbooks_mileage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MileageImportPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Preview Mileage",
+        "tags": [
+          "Imports"
+        ]
+      }
+    },
+    "/api/v1/entities/{entity_id}/imports/quickbooks/preview": {
+      "post": {
+        "operationId": "preview_quickbooks_transactions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "filename",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Filename",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "auto_create",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Auto Create",
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuickBooksImportPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Preview Quickbooks Transactions",
+        "tags": [
+          "Imports"
+        ]
+      }
+    },
     "/api/v1/entities/{entity_id}/journals": {
       "get": {
         "operationId": "list_journals",
@@ -8138,6 +9493,117 @@
         ]
       }
     },
+    "/api/v1/entities/{entity_id}/mixed-use/{record_id}/copy-draft": {
+      "post": {
+        "operationId": "copy_mixed_use_draft",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MixedUseCreate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Copy Mixed Use Draft",
+        "tags": [
+          "Secondary bookkeeping"
+        ]
+      }
+    },
     "/api/v1/entities/{entity_id}/payees": {
       "get": {
         "operationId": "list_payees",
@@ -8918,6 +10384,127 @@
           }
         },
         "summary": "Create Recurring",
+        "tags": [
+          "Secondary bookkeeping"
+        ]
+      }
+    },
+    "/api/v1/entities/{entity_id}/recurring/from-transaction/{record_id}": {
+      "post": {
+        "operationId": "convert_expense_to_recurring",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpenseRecurringConversion"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecurringDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Convert Expense To Recurring",
         "tags": [
           "Secondary bookkeeping"
         ]
@@ -10316,6 +11903,230 @@
         ]
       }
     },
+    "/api/v1/entities/{entity_id}/transactions/bulk/delete": {
+      "post": {
+        "operationId": "bulk_delete_transactions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransactionBulkSelection"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MutationResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Bulk Delete Transactions",
+        "tags": [
+          "Transactions"
+        ]
+      }
+    },
+    "/api/v1/entities/{entity_id}/transactions/bulk/update": {
+      "post": {
+        "operationId": "bulk_update_transactions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransactionBulkUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MutationResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Bulk Update Transactions",
+        "tags": [
+          "Transactions"
+        ]
+      }
+    },
     "/api/v1/entities/{entity_id}/transactions/{record_id}": {
       "delete": {
         "operationId": "delete_transaction",
@@ -10551,6 +12362,127 @@
           }
         },
         "summary": "Update Transaction",
+        "tags": [
+          "Transactions"
+        ]
+      }
+    },
+    "/api/v1/entities/{entity_id}/transactions/{record_id}/copy-draft": {
+      "post": {
+        "operationId": "prepare_transaction_copy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProtectedMutation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionChanges"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Prepare Transaction Copy",
         "tags": [
           "Transactions"
         ]

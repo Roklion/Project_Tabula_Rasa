@@ -22,6 +22,7 @@ class TransactionChanges(DTO):
 
 class TransactionCreate(TransactionChanges):
     transaction_id: str = Field(description='Stable client-generated identity; the journal: prefix is reserved.')
+    copied_from_transaction_id: str = ''
 
     @field_validator('transaction_id')
     @classmethod
@@ -45,6 +46,7 @@ class Transaction(DTO):
     reference: str
     created_at: str
     source_type: str
+    recurring_schedule_id: str = ''
     baseline: str
 
 
@@ -54,6 +56,26 @@ class TransactionList(DTO):
 
 class TransactionUpdate(ProtectedMutation):
     changes: TransactionChanges
+
+
+class TransactionSelection(DTO):
+    id: str
+    baseline: str = Field(max_length=4096)
+
+
+class TransactionBulkSelection(DTO):
+    transaction_ids: list[str]
+    expected: list[TransactionSelection]
+
+
+class TransactionBulkChanges(DTO):
+    category_id: str | None = None
+    payee_id: str | None = None
+    tag_ids: list[str] | None = None
+
+
+class TransactionBulkUpdate(TransactionBulkSelection):
+    changes: TransactionBulkChanges
 
 
 class Posting(DTO):
@@ -92,7 +114,7 @@ class JournalUpdate(ProtectedMutation):
 
 
 def transaction_response(row):
-    values = {name: row[name] for name in Transaction.model_fields if name != 'source_type'}
+    values = {name: row[name] for name in Transaction.model_fields if name != 'source_type' and name in row}
     return Transaction(**values, source_type=row.get('source_type', ''))
 
 

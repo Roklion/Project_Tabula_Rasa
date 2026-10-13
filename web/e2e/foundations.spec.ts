@@ -5,7 +5,7 @@ import { readdir, writeFile } from 'node:fs/promises';
 
 const session = {
   actor_id: 'synthetic', organization_id: 'synthetic', entity: { id: 'alpha', name: 'Alpha demonstration' },
-  capabilities: ['bookkeeping:read', 'bookkeeping:write'], cache_scope: 'foundation-alpha',
+  capabilities: ['bookkeeping:read', 'bookkeeping:write', 'bookkeeping:import'], cache_scope: 'foundation-alpha',
   csrf_token: 'synthetic', trusted_development: true,
 };
 const longName = 'Demonstration operating account with a deliberately long label for responsive bookkeeping';
