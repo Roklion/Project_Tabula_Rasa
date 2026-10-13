@@ -48,6 +48,12 @@ shared between users. The adapter retains bounded transport, issuer-host endpoin
 restrictions and the application's freshness, subject and verified-email policy.
 PyJWT is a development-only independent signer for synthetic provider tests.
 
+An unauthorized private response clears private browser views but does not delete
+shared authentication cookies: a delayed response may belong to a session older
+than a login completed in another tab. Explicit login/logout transitions own
+cookie replacement and deletion. Retaining a rejected cookie grants no authority;
+every later request still validates its durable session.
+
 `GET /api/v1/auth/login` starts a five-minute durable browser-bound one-time
 transaction. Return paths are only `/` and `/onboarding`. The code callback
 consumes it before exchange; failures require starting a new login. The server

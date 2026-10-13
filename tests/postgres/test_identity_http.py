@@ -154,11 +154,43 @@ def test_middleware_identity_denial_uses_cookie_and_event_handler(code, status, 
         with caplog.at_level(logging.INFO, logger='tabula_rasa.http'):
             response = client.get('/api/docs')
         assert response.status_code == status
-        assert (auth.session_cookie in client.cookies) == (code == 'unavailable')
-        assert (auth.csrf_cookie in client.cookies) == (code == 'unavailable')
+        assert auth.session_cookie in client.cookies
+        assert auth.csrf_cookie in client.cookies
+        assert 'set-cookie' not in response.headers  # Cannot erase a newer login.
         assert auth.login_cookie in client.cookies
         event = next(json.loads(record.message) for record in caplog.records
                      if record.name == 'tabula_rasa.http')
         assert event['security_event'] == 'identity_denied'
         assert 'synthetic-session' not in caplog.text
+        runtime.services.assert_not_called()
+
+
+def test_late_denial_cannot_erase_newer_browser_login():
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    settings = HttpSettings('test', 'http://127.0.0.1', access_mode='named_user')
+    auth = NamedIdentity(settings, Mock(), Mock())
+    started, finish = Event(), Event()
+    def old_request(request):
+        assert request.cookies[auth.session_cookie] == 'old-session'
+        started.set()
+        assert finish.wait(5)
+        raise IdentityError('unauthorized')
+    runtime = Mock(identity=auth, resolve_context=old_request)
+    with TestClient(create_app(settings=settings, runtime_factory=lambda _: runtime), base_url=settings.public_origin) as client:
+        client.cookies.set(auth.session_cookie, 'old-session', domain='127.0.0.1', path='/')
+        with ThreadPoolExecutor(max_workers=1) as worker:
+            pending = worker.submit(client.get, '/api/docs')
+            try:
+                assert started.wait(5)
+                # Model shared cookies just issued by another tab's successful callback.
+                client.cookies.set(auth.session_cookie, 'new-session', domain='127.0.0.1', path='/')
+                client.cookies.set(auth.csrf_cookie, 'new-csrf', domain='127.0.0.1', path='/')
+            finally:
+                finish.set()
+            response = pending.result(timeout=5)
+        assert response.status_code == 401 and 'set-cookie' not in response.headers
+        assert client.cookies.get(auth.session_cookie) == 'new-session'
+        assert client.cookies.get(auth.csrf_cookie) == 'new-csrf'
         runtime.services.assert_not_called()

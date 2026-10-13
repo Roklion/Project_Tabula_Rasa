@@ -58,11 +58,9 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
     async def identity_error(request, error):
         response = error_response(request, error.code)
         request.state.security_event = "identity_denied"
-        identity = getattr(request.app.state.runtime, "identity", None)
-        if identity is not None and error.code == "unauthorized":
-            # An old parallel private request must not erase a newly started
-            # browser-bound login transaction.
-            identity.clear(response, preserve_login=True)
+        # A denial may belong to an older credential than the browser now owns.
+        # Only explicit login/logout transitions mutate the shared cookie names.
+        # The browser still unmounts private state on an unauthorized response.
         return response
     app.add_exception_handler(IdentityError, identity_error)
     app.add_exception_handler(RequestValidationError, handle_validation)
