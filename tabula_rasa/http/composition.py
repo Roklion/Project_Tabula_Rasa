@@ -135,6 +135,9 @@ def open_migrated_runtime(settings, *, resolve_context, entity_profiles, profile
     """
     if settings.trusted_entity_id or not callable(resolve_context):
         raise RuntimeError("Migrated runtime requires an explicit authorization resolver without fixture context.")
+    from .identity import NamedIdentity
+    if isinstance(resolve_context, NamedIdentity) and settings.access_mode != "named_user":
+        raise RuntimeError("Named identity requires explicit named-user access mode.")
     from .migrated import MigratedProfileServices
 
     database = None
@@ -142,7 +145,6 @@ def open_migrated_runtime(settings, *, resolve_context, entity_profiles, profile
         database = Database(database_settings or DatabaseSettings.from_environment(required=True))
         services = MigratedProfileServices(database, entity_profiles=entity_profiles, secrets=profile_secrets)
         services.validate()
-        from .identity import NamedIdentity
         runtime = PostgresRuntime(database, resolve_context, service_factory=services,
                                   identity=resolve_context if isinstance(resolve_context, NamedIdentity) else None)
         if not runtime.ready():

@@ -30,6 +30,8 @@ Never set `TABULA_RASA_TRUSTED_ENTITY_ID` or alpha Basic credentials in named
 mode. Production and named mode reject injected trusted-development contexts
 at the HTTP guard as well as rejecting synthetic configuration. Restricted
 alpha remains a separate explicit fixture mode; it grants no named membership.
+The migrated-runtime factory rejects a named identity resolver unless named-user
+mode is explicit, before allocating a database.
 Use separate provider clients, secrets and databases for each environment.
 Register exactly `<public origin>/api/v1/auth/callback` without wildcard URLs.
 HTTP settings canonicalize scheme/hostname case and omit default ports before
