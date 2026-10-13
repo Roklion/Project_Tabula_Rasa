@@ -312,8 +312,8 @@ while the app and Windows computer are offline.
 3. Create one non-overlapping subfolder per profile, for example:
 
    ```text
-   /volume1/Tabula_Rasa_Backups/heathcote-advisory
-   /volume1/Tabula_Rasa_Backups/rok-collectibles
+   /volume1/Tabula_Rasa_Backups/business-name1
+   /volume1/Tabula_Rasa_Backups/business-name2
    ```
 
 4. Protect DSM administrator access with strong credentials and MFA. If
