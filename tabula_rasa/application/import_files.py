@@ -81,6 +81,7 @@ def prepare_quickbooks_import(filename: str, content: bytes) -> PreparedImport:
                 workbooks = [item for item in archive.infolist()
                              if item.filename.casefold().endswith(".xlsx")
                              and not any(part.casefold() == "__macosx" for part in item.filename.split("/"))
+                             and not item.filename.split("/")[-1].startswith("._")
                              and not item.is_dir()]
                 if len(workbooks) != 1:
                     raise StorageValidationError("The ZIP must contain exactly one QuickBooks .xlsx workbook.")
@@ -95,6 +96,8 @@ def prepare_quickbooks_import(filename: str, content: bytes) -> PreparedImport:
                 raise StorageValidationError("The QuickBooks workbook has too many columns.")
             matrix = []
             for row in sheet.iter_rows(values_only=True):
+                if len(row) > 100:
+                    raise StorageValidationError("The QuickBooks workbook has too many columns.")
                 if len(matrix) == 10000:
                     raise StorageValidationError("The QuickBooks worksheet exceeds the supported size of 10,000 rows; split larger sources before submitting.")
                 matrix.append(row)

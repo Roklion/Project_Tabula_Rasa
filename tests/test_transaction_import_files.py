@@ -2,6 +2,7 @@
 
 import csv
 import io
+import re
 import zipfile
 
 from openpyxl import Workbook
@@ -70,6 +71,7 @@ def test_supported_xlsx_and_zip_use_existing_general_ledger_conversion():
         archive.writestr("__MACOSX/General_ledger.xlsx", b"ignored")
         archive.writestr("export/__MACOSX/._General_ledger.xlsx", b"ignored")
         archive.writestr("export/__macosx/._General_ledger.xlsx", b"ignored")
+        archive.writestr("export/._General_ledger.xlsx", b"ignored")
     assert prepare_quickbooks_import("export.zip", output.getvalue()) == prepared
     broken = prepare_quickbooks_import("General_ledger.xlsx", general_ledger_bytes(broken=True))
     assert broken.rows == []
@@ -99,3 +101,33 @@ def test_oversized_worksheet_reports_the_raw_sheet_limit():
     workbook.close()
     with pytest.raises(StorageValidationError, match="10,000 rows"):
         prepare_quickbooks_import("export.xlsx", output.getvalue())
+
+
+def without_sheet_dimensions(content):
+    output = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(content)) as source, zipfile.ZipFile(output, "w") as target:
+        for item in source.infolist():
+            data = source.read(item)
+            if item.filename.startswith("xl/worksheets/"):
+                data = re.sub(rb'<dimension\b[^>]*/>', b'', data)
+            target.writestr(item, data)
+    return output.getvalue()
+
+
+def test_workbook_without_dimensions_preserves_supported_conversion():
+    content = general_ledger_bytes()
+    assert prepare_quickbooks_import("export.xlsx", without_sheet_dimensions(content)) == prepare_quickbooks_import("export.xlsx", content)
+
+
+@pytest.mark.parametrize("omit_dimensions", [False, True])
+def test_excessive_columns_reject_even_without_sheet_dimensions(omit_dimensions):
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "General Ledger"
+    sheet.append([*GENERAL_LEDGER_COLUMNS, *["extra"] * (101 - len(GENERAL_LEDGER_COLUMNS))])
+    output = io.BytesIO()
+    workbook.save(output)
+    workbook.close()
+    content = without_sheet_dimensions(output.getvalue()) if omit_dimensions else output.getvalue()
+    with pytest.raises(StorageValidationError, match="too many columns"):
+        prepare_quickbooks_import("export.xlsx", content)
