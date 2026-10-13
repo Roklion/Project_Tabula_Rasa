@@ -152,6 +152,8 @@ def test_maps_confirmed_round_trip_and_manual_return_persist_only_after_save(map
             for label, value in [('Starting location lookup', 'Office'), ('Destination lookup', 'Client')]:
                 page.get_by_role('textbox', name=label, exact=True).fill(value)
                 page.get_by_role('button', name='Choose ' + label, exact=True).click()
+            assert page.get_by_label('New tag name (optional)', exact=True).evaluate(
+                "tags => !!(tags.compareDocumentPosition(document.querySelector('[aria-label=\"Google Maps attribution\"]')) & Node.DOCUMENT_POSITION_FOLLOWING)")
             page.get_by_role('button', name='Calculate mileage', exact=True).click()
             expect(page.get_by_label('Business miles', exact=True)).to_have_value('12.4')
             expect(page.get_by_label('Return business miles', exact=True)).to_have_value('14.6')

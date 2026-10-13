@@ -5,6 +5,7 @@ import { api, type Schemas } from '../../api/client';
 import { resourceKey } from '../../api/query';
 import { useEntity } from '../../app/context';
 import { TextField } from '../concurrency/Fields';
+import { FormSection } from '../../components/VisualPrimitives';
 import { MapsAddress, type SelectedPlace } from './MapsAddress';
 import type { MileageDraft } from './mileageForm';
 
@@ -72,7 +73,7 @@ export function MapsMileageFields({ form, children }: { form: UseFormReturn<Mile
   }
   const error = form.getFieldState('maps_reviewed', form.formState).error?.message;
   const routeCurrent = !!route?.outbound_miles && (!roundTrip || !!route.return_miles);
-  return <>
+  return <><FormSection title="Route and mileage" description="Enter locations and mileage manually or review optional Maps suggestions.">
     {maps?.browser_api_key && <><MapsAddress browserKey={maps.browser_api_key} regionCode={maps.region_code ?? null} label="Starting location lookup" onSelect={selectOrigin} onClear={clearOrigin} />
       <MapsAddress browserKey={maps.browser_api_key} regionCode={maps.region_code ?? null} label="Destination lookup" onSelect={selectDestination} onClear={clearDestination} />
       <p className="muted">Google suggestions are used for route lookup. Review or edit the location text to record below.</p></>}
@@ -89,6 +90,7 @@ export function MapsMileageFields({ form, children }: { form: UseFormReturn<Mile
       Enter miles manually or try Calculate mileage again.</p>}
     <TextField form={form} name="miles" label="Business miles" inputMode="decimal" onChange={reviewAgain} />
     {roundTrip && <TextField form={form} name="return_miles" label="Return business miles" inputMode="decimal" onChange={reviewAgain} />}
+    </FormSection>
     {children}
     {googleContent && <p role="note" translate="no" aria-label="Google Maps attribution">Google Maps</p>}
     {googleContent && <label className="checkbox"><input type="checkbox" {...form.register('maps_reviewed', {

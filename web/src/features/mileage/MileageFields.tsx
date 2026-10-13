@@ -16,13 +16,16 @@ export function MileageFields({ form }: { form: UseFormReturn<MileageDraft> }) {
   return <><FormSection title="Trip details">
     <TextField form={form} name="trip_date" label="Trip date" type="date" />
     <TextField form={form} name="vehicle" label="Vehicle" />
-    </FormSection><FormSection title="Route and purpose" description="Enter locations and mileage manually or review optional Maps suggestions.">
-    <MapsMileageFields key={JSON.stringify(form.formState.defaultValues)} form={form} children={null} />
-    <TextField form={form} name="business_purpose" label="Business purpose" multiline />
-    <TextField form={form} name="notes" label="Notes" multiline />
-    </FormSection><FormSection title="Tags">
+    </FormSection>
+    <MapsMileageFields key={JSON.stringify(form.formState.defaultValues)} form={form}>
+    <FormSection title="Tags">
     {tags.isPending ? <LoadingState label="Loading tags…" /> : tags.isError ? <ErrorNotice error={tags.error} onReview={() => void tags.refetch()} />
       : <SelectField form={form} name="tag_ids" label="Tags" options={activeChoices(tags.data.items, form.formState.defaultValues?.tag_ids ?? [])} multiple />}
     <TextField form={form} name="new_tag_name" label="New tag name (optional)" />
+    </FormSection>
+    </MapsMileageFields>
+    <FormSection title="Purpose and notes">
+    <TextField form={form} name="business_purpose" label="Business purpose" multiline />
+    <TextField form={form} name="notes" label="Notes" multiline />
     </FormSection></>;
 }
