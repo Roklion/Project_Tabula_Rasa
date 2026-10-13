@@ -6,6 +6,8 @@ import { ErrorNotice, SuccessNotice } from '../../components/States';
 import { UnsavedChanges } from '../../components/UnsavedChanges';
 import { ReloadPrompt } from './ProtectedEditor';
 import { useProtectedMutation } from './mutations';
+import { ActionButton, FormSection, SectionHeader } from '../../components/VisualPrimitives';
+import { SelectField } from './Fields';
 
 export function ManagedMergeForm({ resource }: { resource: 'payees' | 'tags' }) {
   const session = useEntity();
@@ -18,10 +20,11 @@ export function ManagedMergeForm({ resource }: { resource: 'payees' | 'tags' }) 
     catch (failure) { setError(failure); }
     finally { setLoading(false); }
   }
-  if (!session.capabilities.includes('bookkeeping:write')) return null;
+  if (!session.capabilities.includes('bookkeeping:write')) return <p className="notice neutral">Read-only access. Merging records requires bookkeeping write access.</p>;
   return rows ? <MergeEditor resource={resource} rows={rows} onClose={() => setRows(undefined)} />
-    : <div className="actions"><button type="button" disabled={loading} onClick={() => void open()}>Merge {resource}</button>
-      {error !== undefined && <ErrorNotice error={error} onReview={() => void open()} />}</div>;
+    : <section className="surface"><SectionHeader title="Choose records to merge" description="Keep one active record and move the selected source references into it." />
+      <div className="actions"><ActionButton tone="primary" pending={loading} onClick={() => void open()}>Merge {resource}</ActionButton></div>
+      {error !== undefined && <ErrorNotice error={error} operation="read" onReview={() => void open()} />}</section>;
 }
 
 function loaded(rows: Schemas['ManagedReference'][]) {
@@ -54,20 +57,19 @@ function MergeEditor({ resource, rows, onClose }: { resource: 'payees' | 'tags';
   }
   const target = form.watch('target');
   const pending = mutation.isPending || reloading;
-  return <section className="surface editor"><h2>Merge {resource}</h2><UnsavedChanges dirty={form.formState.isDirty} />
-    {success ? <><SuccessNotice>Records merged.</SuccessNotice><button type="button" onClick={onClose}>Back to records</button></>
+  return <section className="surface editor" aria-label={'Merge ' + resource}><SectionHeader title={'Merge ' + resource} /><UnsavedChanges dirty={form.formState.isDirty} />
+    {success ? <><SuccessNotice>Records merged.</SuccessNotice><div className="actions"><ActionButton onClick={onClose}>Back to records</ActionButton></div></>
       : <form onSubmit={form.handleSubmit(async values => { setError(undefined); try { await mutation.mutateAsync(values); } catch (failure) { setError(failure); } })}>
         {error !== undefined && <ErrorNotice error={error} onReview={() => setReview(true)} />}
         {review && <ReloadPrompt pending={pending} onKeep={() => setReview(false)} onReload={() => void reloadLatest()} />}
-        <fieldset disabled={pending || review}><label htmlFor="merge-target">Keep this record</label>
-          <select id="merge-target" {...form.register('target', { onChange: () => {
-            form.setValue('sources', form.getValues('sources').filter(id => id !== form.getValues('target')), { shouldDirty: true });
-          } })}><option value="">Choose target</option>
-            {metadata.rows.filter(row => row.active).map(row => <option key={row.id} value={row.id}>{row.name}</option>)}
-          </select><p>Merge these records into the selected target:</p>
-          {metadata.rows.filter(row => row.id !== target).map(row => <label className="checkbox" key={row.id}><input type="checkbox" value={row.id} {...form.register('sources')} />{row.name}</label>)}
-        </fieldset><p>The selected source records will be removed and their references moved to the target.</p>
-        <button type="submit" disabled={pending || review}>Confirm merge</button>
+        <fieldset disabled={pending || review}><FormSection title="Keep one record">
+          <SelectField form={form} name="target" label="Keep this record" options={[{ id: '', name: 'Choose target' }, ...metadata.rows.filter(row => row.active)]}
+            onChange={() => form.setValue('sources', form.getValues('sources').filter(id => id !== form.getValues('target')), { shouldDirty: true })} />
+        </FormSection><FormSection title="Source records" description="Merge these records into the selected target:">
+          <div className="mergeSources formSpan">{metadata.rows.filter(row => row.id !== target).map(row => <label className="checkbox" key={row.id}><input type="checkbox" value={row.id} {...form.register('sources')} />
+            <span>{row.name}{!row.active && ' (inactive)'}</span></label>)}</div>
+        </FormSection></fieldset><p className="fieldHint">The selected source records will be removed and their references moved to the target.</p>
+        <div className="actions formActions"><ActionButton tone="primary" type="submit" pending={mutation.isPending} disabled={pending || review}>Confirm merge</ActionButton></div>
       </form>}
   </section>;
 }

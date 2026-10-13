@@ -38,7 +38,7 @@ export function CreateEditor<T extends FieldValues>({ title, initial, fields, cr
     {failure !== undefined && <ErrorNotice error={failure} />}
     <form onSubmit={form.handleSubmit(values => void submit(values))}>
       <fieldset disabled={mutation.isPending}>{fields(form)}</fieldset>
-      <div className="actions"><ActionButton tone="primary" type="submit" pending={mutation.isPending} disabled={!canSubmit(values)}>{title}</ActionButton>
+      <div className="actions formActions"><ActionButton tone="primary" type="submit" pending={mutation.isPending} disabled={!canSubmit(values)}>{title}</ActionButton>
         <ActionButton disabled={mutation.isPending} onClick={event => { event.currentTarget.focus(); if (form.formState.isDirty) setClosing(true); else onClose(); }}>Back to records</ActionButton></div>
     </form>
     {closing && <ConfirmationDialog title="Discard draft" keepLabel="Keep editing" confirmLabel="Discard draft and close"
