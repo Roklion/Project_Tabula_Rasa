@@ -8,6 +8,7 @@ import streamlit as st
 from tabula_rasa.errors import StorageError
 from tabula_rasa.ledger_validation import decode_receipt_references
 from tabula_rasa.mixed_use import MIXED_USE_SOURCE_TYPE
+from tabula_rasa.ledger_presentation import transaction_type_label as transaction_type_label
 from .transaction_copy import _copy_source_key
 
 def _bulk_selection_key(profile_key: str) -> str:
@@ -61,18 +62,6 @@ def transaction_is_mixed_use(transaction: Mapping[str, object]) -> bool:
         and str(transaction.get("source_id") or "").strip()
     )
 
-
-def transaction_type_label(value: object, transaction: Mapping[str, object]) -> str:
-    """Add durable mixed-use and recurring indicators to a ledger type."""
-    mixed_use = transaction_is_mixed_use(transaction)
-    recurring = bool(str(transaction.get("recurring_schedule_id") or "").strip())
-    suffix = " · ".join(
-        label
-        for label, enabled in (("Mixed-use", mixed_use), ("Recurring", recurring),
-                               ("Depreciation", str(transaction.get("source_type") or "").strip().lower() == "depreciation"))
-        if enabled
-    )
-    return f"{value} · {suffix}" if suffix else str(value)
 
 def _selection_ids(transaction_ids: Sequence[str], rows: Sequence[int]) -> tuple[str, ...]:
     return tuple(

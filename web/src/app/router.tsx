@@ -7,7 +7,7 @@ import { ReferencesPage } from '../features/concurrency/ReferenceEditors';
 import { BookkeepingPage } from '../features/concurrency/BookkeepingEditors';
 import { ManagedMergeForm } from '../features/concurrency/ManagedMergeForm';
 import { MileageDetail, MileagePage, NewMileage } from '../features/mileage/MileagePage';
-import { ReceiptsPage } from '../features/documents/ReceiptsPage';
+import { ReceiptsPage, MixedUseReceiptsPage } from '../features/documents/ReceiptsPage';
 import { ReferenceCreator } from '../features/workflows/ReferenceCreators';
 import { EntryCreator } from '../features/workflows/EntryCreators';
 import { LedgerPage } from '../features/workflows/LedgerPage';
@@ -15,6 +15,7 @@ import { ReportsPage } from '../features/workflows/ReportsPage';
 import { AssetsPage, AssetDetail, NewAsset } from '../features/secondary/AssetsPage';
 import { MixedUsePage, MixedUseDetail, NewMixedUse } from '../features/secondary/MixedUsePage';
 import { RecurringPage, RecurringDetail, NewRecurring } from '../features/secondary/RecurringPage';
+import { FinancialCsvExports } from '../features/exports/FinancialCsvExports';
 
 const routes = [{
   element: <ContextBoundary><Shell /></ContextBoundary>,
@@ -30,6 +31,7 @@ const routes = [{
     { path: 'mixed-use', element: <MixedUsePage /> },
     { path: 'mixed-use/new', element: <NewMixedUse /> },
     { path: 'mixed-use/:recordId', element: <MixedUseDetail /> },
+    { path: 'mixed-use/:recordId/receipts', element: <MixedUseReceiptsPage /> },
     { path: 'recurring', element: <RecurringPage /> },
     { path: 'recurring/new', element: <NewRecurring /> },
     { path: 'recurring/:recordId', element: <RecurringDetail /> },
@@ -41,8 +43,9 @@ const routes = [{
     { path: 'mileage/new', element: <NewMileage /> },
     { path: 'mileage/:recordId', element: <MileageDetail /> },
     { path: 'transactions/:recordId/receipts', element: <ReceiptsPage /> },
+    { path: 'data', element: <FinancialCsvExports /> },
     ...(['payees', 'tags'] as const).map(resource => ({ path: resource + '/merge', element: <><h1>Merge {resource}</h1><ManagedMergeForm key={resource} resource={resource} /></> })),
-    ...navigation.filter(([path]) => !['/', '/accounts', '/categories', '/transactions', '/mileage', '/reports', '/assets'].includes(path)).map(([path, name]) => ({
+    ...navigation.filter(([path]) => !['/', '/accounts', '/categories', '/transactions', '/mileage', '/reports', '/assets', '/data'].includes(path)).map(([path, name]) => ({
       path: path.slice(1), element: <PlannedPage title={name} />,
     })),
     { path: '*', element: <MissingPage /> },

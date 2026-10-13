@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tabula_rasa.application.financial_csv import frame_csv
+
 from collections.abc import Callable
 from collections.abc import Mapping
 from collections.abc import Sequence
@@ -488,7 +490,7 @@ def render_ledger(
             export_frame, _ = flatten_ledger_entries(
                 expected_selected, transaction_frame.to_dict(orient="records"), accounts, categories,
             )
-            st.download_button("Export selected", export_frame.to_csv(index=False).encode("utf-8"),
+            st.download_button("Export selected", frame_csv(export_frame),
                                file_name="selected-ledger.csv", mime="text/csv")
             return
         selected_snapshot_key = hashlib.sha256(

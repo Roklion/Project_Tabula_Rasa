@@ -1,5 +1,5 @@
 import { DateRangeFields } from '../../components/DateRangeFields';
-import { ActionButton, PageHeader, TableRegion } from '../../components/VisualPrimitives';
+import { ActionButton, PageHeader } from '../../components/VisualPrimitives';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -10,6 +10,7 @@ import { EmptyState, ErrorNotice, Field, LoadingState } from '../../components/S
 import { JournalEditor, TransactionEditor } from '../concurrency/BookkeepingEditors';
 import { latest } from '../concurrency/mutations';
 import { useReferenceChoices } from '../concurrency/useReferenceChoices';
+import { LedgerTable } from './LedgerTable';
 
 type Selection = { transaction: Schemas['Transaction'] } | { journal: Schemas['Journal'] };
 const sortFields = { Date: 'txn_date', Type: 'kind', Account: 'account', Payee: 'payee', Amount: 'amount', Description: 'description', ID: 'record_id' } as const;
@@ -74,12 +75,8 @@ export function LedgerPage() {
       {failure !== undefined && <ErrorNotice error={failure} />}
       {query.isPending ? <LoadingState label="Loading ledger…" /> : query.isError ? <ErrorNotice operation="read" error={query.error} onReview={() => void query.refetch()} />
         : rows.length === 0 ? <EmptyState title="No matching entries">Add an entry or adjust the filters.</EmptyState>
-        : <TableRegion label="Ledger"><table className="ledgerTable"><caption>Business ledger</caption>
-          <thead><tr>{['Date', 'Type', 'Account', 'To account', 'Category', 'Payee', 'Amount', 'Debit', 'Credit', 'Tags', 'Description', 'Receipt', 'Reference', 'ID', 'Actions'].map(name => <th scope="col" className={['Amount', 'Debit', 'Credit', 'Receipt'].includes(name) ? 'amount' : undefined} key={name}>{name}</th>)}</tr></thead>
-          {rows.map(row => <tbody key={row.id} className={row.entry_type === 'journal' ? 'journalGroup' : undefined}><tr><td>{row.txn_date}</td><th scope="row" className="tableText">{row.kind}{row.source_type === 'mixed_use_expense' ? ' · Mixed-use' : ''}</th><td className="tableText">{row.account}</td><td className="tableText">{row.to_account}</td><td className="tableText">{row.category}</td><td className="tableText">{row.payee}</td><td className="amount">{row.amount}</td><td /><td /><td className="tableText">{row.tags.join(', ')}</td><td className="tableText">{row.description}</td><td className="amount">{row.receipt_count ? `${row.receipt_count} receipt(s)` : ''}</td><td className="tableText">{row.reference}</td><td className="ledgerIdentity">{row.record_id}</td>
-            <td className="tableActions"><div className="rowActions">{row.entry_type === 'transaction' && !row.source_type && <Link className="button action-secondary" to={'/transactions/' + encodeURIComponent(row.record_id) + '/receipts'} aria-label={`Receipts for ${row.txn_date} · ${row.description || row.kind} · ${row.amount}`}>Receipts</Link>}{row.source_type === 'mixed_use_expense' ? <Link to="/mixed-use">Manage mixed-use expense</Link> : row.source_type === 'depreciation' ? <Link to="/assets">Manage in Assets</Link> : row.source_type ? 'Managed by ' + row.source_type : session.capabilities.includes('bookkeeping:write') && <ActionButton disabled={loadingRecord} aria-label={`Edit ${row.txn_date} · ${row.description || row.kind} · ${row.amount}`} onClick={() => void edit(row)}>Edit</ActionButton>}</div></td></tr>
-            {row.postings.map((line, index) => <tr key={index} className="postingRow"><td /><th scope="row">↳ Posting</th><td className="tableText">{line.target}</td><td /><td /><td className="tableText">{line.payee}</td><td /><td className="amount">{line.side === 'Debit' ? line.amount : ''}</td><td className="amount">{line.side === 'Credit' ? line.amount : ''}</td><td /><td className="tableText">{line.description}</td><td colSpan={4} /></tr>)}
-          </tbody>)}</table></TableRegion>}
+        : <LedgerTable key={JSON.stringify([filters, search, sortField, descending, rows.map(row => row.id)])}
+            rows={rows} filters={filters} edit={edit} loadingRecord={loadingRecord} />}
     </>}
   </>;
 }

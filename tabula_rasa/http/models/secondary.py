@@ -50,6 +50,10 @@ class MixedUseUpdate(ProtectedMutation):
     changes: MixedUseChanges
 
 
+class MixedUseDocumentLink(ProtectedMutation):
+    document_id: str
+
+
 class AllocationRequest(DTO):
     total_expense: DecimalString
     business_use_percentage: DecimalString

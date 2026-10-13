@@ -56,11 +56,14 @@ provenance. The generic ledger cannot mutate their projections independently.
 Its derived rows link to Mixed-use expenses or Assets for source-owned actions;
 mixed-use allocations are labeled **Mixed-use** in the ledger.
 
-The current commercial slice exposes source setup/edit/delete and recurring
-creation. Internal-edition copy, conversion of an existing Expense to recurring,
-and mixed-use receipt-management surfaces retain their existing implementation;
-this slice does not remove those workflows or expand ordinary transaction receipt
-endpoints to source-owned rows.
+The commercial slice exposes source setup/edit/delete and recurring creation.
+#361 adds **Receipts** on each source detail through the shared receipt workflow,
+with the original source baseline required for linking/removing references.
+Source and projection retain one receipt set; generic transaction receipt
+endpoints refuse derived rows. Recurring templates do not own receipts; generated
+sources own their own set. See [workflow ports](COMMERCIAL_WORKFLOW_PORTS.md) for
+recovery, conflicts and validation. Copy and Expense-to-recurring conversion
+remain separately tracked by #362.
 
 ## Assets and depreciation
 

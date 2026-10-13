@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, ApiError, type Schemas } from '../../api/client';
@@ -9,6 +9,7 @@ import { UnsavedChanges } from '../../components/UnsavedChanges';
 import { useProtectedMutation } from '../concurrency/mutations';
 import { downloadBlob } from '../../components/downloadBlob';
 import { ConfirmationDialog } from '../../components/ConfirmationDialog';
+import { useLoadedRecord } from '../concurrency/useLoadedRecord';
 
 type PendingReceipt = { id: string; file: File; document?: Schemas['Document']; linked: boolean; error?: unknown };
 
@@ -27,8 +28,30 @@ export function ReceiptsPage() {
   return <ReceiptWorkflow key={recordId} recordId={recordId} />;
 }
 
-function ReceiptWorkflow({ recordId }: { recordId: string }) {
+export function MixedUseReceiptsPage() {
+  const { recordId = '' } = useParams();
+  return <MixedUseReceiptOwner key={recordId} recordId={recordId} />;
+}
+
+function MixedUseReceiptOwner({ recordId }: { recordId: string }) {
   const session = useEntity();
+  const query = useLoadedRecord(session, 'mixed-use', recordId, api.mixedUseSource);
+  if (query.initializing) return <><h1>Mixed-use receipts</h1><LoadingState /></>;
+  if (!query.initialized || !query.data) return <><h1>Mixed-use receipts</h1><Link to="/mixed-use">Back to mixed-use expenses</Link>
+    <ErrorNotice error={query.error} onReview={() => void query.refetch()} /></>;
+  return <ReceiptWorkflow recordId={recordId} initialSource={query.data} />;
+}
+
+function ReceiptWorkflow({ recordId, initialSource }: { recordId: string; initialSource?: Schemas['MixedUse'] }) {
+  const session = useEntity();
+  const [source, setSource] = useState(initialSource);
+  const sourceMetadata = useRef(initialSource);
+  const [reviewRequired, setReviewRequired] = useState(false);
+  const [review, setReview] = useState(false);
+  const [reloading, setReloading] = useState(false);
+  const mixed = initialSource !== undefined;
+  const back = mixed ? '/mixed-use/' + encodeURIComponent(recordId) : '/transactions';
+  const backLabel = mixed ? 'Back to mixed-use expense' : 'Back to transactions';
   const operation = useProtectedMutation(session, (action: () => Promise<void>) => action());
   const [pending, setPending] = useState<PendingReceipt[]>([]);
   const [busy, setBusy] = useState(false);
@@ -36,14 +59,45 @@ function ReceiptWorkflow({ recordId }: { recordId: string }) {
   const [failure, setFailure] = useState<unknown>();
   const [message, setMessage] = useState('');
   const [remove, setRemove] = useState<Schemas['Document']>();
-  const linked = useQuery({ queryKey: [...resourceKey(session, 'documents'), 'transaction', recordId],
-    queryFn: ({ signal }) => api.transactionDocuments(session, recordId, signal) });
+  const linked = useQuery({ queryKey: [...resourceKey(session, 'documents'), mixed ? 'mixed-use' : 'transaction', recordId],
+    queryFn: ({ signal }) => mixed ? api.mixedUseDocuments(session, recordId, signal) : api.transactionDocuments(session, recordId, signal) });
   const inventory = useQuery({ queryKey: [...resourceKey(session, 'documents'), 'unreferenced'],
     queryFn: ({ signal }) => api.unreferencedDocuments(session, signal), enabled: linked.isSuccess });
-  const transaction = useQuery({ queryKey: resourceKey(session, 'transactions'), queryFn: ({ signal }) => api.transactions(session, signal) });
+  const transaction = useQuery({ queryKey: resourceKey(session, 'transactions'), queryFn: ({ signal }) => api.transactions(session, signal), enabled: !mixed });
   const row = transaction.data?.items.find(item => item.id === recordId);
   const writable = session.capabilities.includes('bookkeeping:write');
+  const blocked = busy || reloading || review || reviewRequired;
   const unresolved = pending.filter(item => !item.linked);
+  function rememberFailure(error: unknown) {
+    if (mixed && error instanceof ApiError && ['stale', 'baseline_invalid', 'baseline_required', 'not_found'].includes(error.code)) setReviewRequired(true);
+  }
+  function sourceChanged(next: Schemas['MixedUse']) {
+    sourceMetadata.current = next;
+    setSource(next);
+  }
+  async function link(documentId: string) {
+    if (mixed) {
+      const expected = sourceMetadata.current;
+      if (!expected?.baseline) throw new ApiError('baseline_required');
+      sourceChanged(await api.linkMixedUseDocument(session, recordId, { baseline: expected.baseline, document_id: documentId }));
+    } else await api.linkDocument(session, recordId, documentId);
+  }
+  async function unlink(documentId: string) {
+    if (mixed) {
+      const expected = sourceMetadata.current;
+      if (!expected?.baseline) throw new ApiError('baseline_required');
+      sourceChanged(await api.unlinkMixedUseDocument(session, recordId, documentId, expected.baseline));
+    } else await api.unlinkDocument(session, recordId, documentId);
+  }
+  async function reloadSource() {
+    setReloading(true);
+    try {
+      sourceChanged(await api.mixedUseSource(session, recordId));
+      await linked.refetch();
+      setReviewRequired(false); setFailure(undefined); setReview(false);
+    } catch (error) { setFailure(error); setReview(false); }
+    finally { setReloading(false); }
+  }
   async function transfer() {
     setBusy(true); setFailure(undefined); setMessage('');
     const next = [...pending];
@@ -58,10 +112,12 @@ function ReceiptWorkflow({ recordId }: { recordId: string }) {
             item.document = await api.uploadDocument(session, item.id, item.file);
           }
           setPhase('Linking ' + item.file.name + '…');
-          await api.linkDocument(session, recordId, item.document.id);
+          await link(item.document.id);
           item.linked = true;
-        } catch (error) { item.error = error; }
+        } catch (error) { item.error = error; rememberFailure(error); }
         next[index] = item; setPending([...next]);
+        // A changed source must be reviewed before more files are uploaded.
+        if (mixed && item.error instanceof ApiError && ['stale', 'baseline_invalid', 'baseline_required', 'not_found'].includes(item.error.code)) break;
       }
       const count = next.filter(item => item.linked).length;
       const remaining = next.length - count;
@@ -72,7 +128,7 @@ function ReceiptWorkflow({ recordId }: { recordId: string }) {
   async function mutate(action: () => Promise<unknown>, success: string) {
     setBusy(true); setFailure(undefined); setMessage('');
     try { await action(); setMessage(success); setRemove(undefined); }
-    catch (error) { setRemove(undefined); setFailure(error); }
+    catch (error) { setRemove(undefined); setFailure(error); rememberFailure(error); }
     finally { setBusy(false); }
   }
   function filesSelected(files: File[]) {
@@ -107,10 +163,18 @@ function ReceiptWorkflow({ recordId }: { recordId: string }) {
         onClick={event => { event.preventDefault(); void download(doc); }}>Download {doc.filename}</a></>;
   }
   if (linked.isPending) return <LoadingState label="Loading receipts…" />;
-  if (linked.isError) return <><h1>Receipts</h1><Link to="/transactions">Back to transactions</Link><ErrorNotice error={linked.error} onReview={() => void linked.refetch()} />
+  if (linked.isError) return <><h1>{mixed ? 'Mixed-use receipts' : 'Receipts'}</h1><Link to={back}>{backLabel}</Link><ErrorNotice error={linked.error} onReview={() => void linked.refetch()} />
     <p>Receipt storage must be configured for this business before receipts are available.</p></>;
-  return <><h1>Receipts</h1><p className="lead">{row ? `${row.txn_date} · ${row.description || row.kind} · ${row.amount}` : 'Saved transaction'}</p>
-    <Link to="/transactions">Back to transactions</Link><UnsavedChanges dirty={unresolved.length > 0 || busy} />
+  return <><h1>{mixed ? 'Mixed-use receipts' : 'Receipts'}</h1><p className="lead">{source ? `${source.txn_date} · ${source.description || 'Mixed-use expense'} · Total ${source.total_expense} · Allocated ${source.allocated_amount}` : row ? `${row.txn_date} · ${row.description || row.kind} · ${row.amount}` : 'Saved transaction'}</p>
+    {source && <p>Receipts belong to source {source.id}. The linked ledger projection uses the same references.
+      {source.recurring_schedule_id && ' This occurrence owns its receipts; the recurring template has none.'}</p>}
+    <Link to={back}>{backLabel}</Link><UnsavedChanges dirty={unresolved.length > 0 || busy} />
+    {mixed && writable && <><button type="button" disabled={busy || reloading} onClick={() => setReview(true)}>Review latest source</button>
+      {reviewRequired && <p role="alert">The source changed or is unavailable. Review the latest saved source before changing receipt references. Pending files are retained.</p>}
+      {review && <ConfirmationDialog title="Review source" keepLabel="Keep loaded source" confirmLabel="Reload source"
+        pending={reloading} onKeep={() => setReview(false)} onConfirm={() => void reloadSource()}>
+        Reload the latest saved source and review it before changing receipts. Pending files and confirmed uploads are retained.
+      </ConfirmationDialog>}</>}
     {failure !== undefined && <ErrorNotice error={failure} />}
     {message && (unresolved.length || message.startsWith('Recovery cancelled.') ? <p role="alert" className="notice warning">{message}</p> : <SuccessNotice>{message}</SuccessNotice>)}
     {busy && <><LoadingState label={phase || 'Updating receipts…'} />
@@ -118,25 +182,25 @@ function ReceiptWorkflow({ recordId }: { recordId: string }) {
     <section className="surface editor"><h2>Linked receipts</h2>
       {!linked.data.items.length ? <EmptyState title="No receipts attached">Attach files or link an unreferenced receipt below.</EmptyState>
         : <ul className="recordList">{linked.data.items.map(doc => <li key={doc.id}><div>{documentView(doc)}</div>
-          {writable && <button type="button" disabled={busy} onClick={event => { event.currentTarget.focus(); setRemove(doc); }}>Remove {doc.filename}</button>}</li>)}</ul>}
+          {writable && <button type="button" disabled={blocked} onClick={event => { event.currentTarget.focus(); setRemove(doc); }}>Remove {doc.filename}</button>}</li>)}</ul>}
       {remove && <ConfirmationDialog title="Remove receipt" keepLabel="Keep receipt" confirmLabel="Confirm remove"
         pending={busy || operation.isPending} onKeep={() => setRemove(undefined)}
-        onConfirm={() => void operation.mutateAsync(() => mutate(() => api.unlinkDocument(session, recordId, remove.id), 'Receipt reference removed. File retained.'))}>
+        onConfirm={() => void operation.mutateAsync(() => mutate(() => unlink(remove.id), 'Receipt reference removed. File retained.'))}>
         Remove the reference to {remove.filename}? The stored file remains available in Unreferenced receipts.
       </ConfirmationDialog>}
     </section>
-    {writable && <section className="surface editor"><h2>Attach receipts</h2><p>PDF, PNG, JPG, JPEG, WEBP or HEIC; up to 20 MB per file, 200 MB per batch and 100 receipts per transaction.</p>
-      <Field id="receipt-files" label="Receipt files"><input id="receipt-files" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.heic" disabled={busy || unresolved.length > 0}
+    {writable && <section className="surface editor"><h2>Attach receipts</h2><p>PDF, PNG, JPG, JPEG, WEBP or HEIC; up to 20 MB per file, 200 MB per batch and 100 receipts per {mixed ? 'source' : 'transaction'}.</p>
+      <Field id="receipt-files" label="Receipt files"><input id="receipt-files" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.heic" disabled={blocked || unresolved.length > 0}
         onChange={event => { filesSelected(Array.from(event.target.files ?? [])); event.target.value = ''; }} /></Field>
       {pending.map(item => <div key={item.id}><p>{item.file.name}: {item.linked ? 'Attached' : item.document ? 'Uploaded; link pending' : 'Upload pending'}</p>
         {item.error !== undefined && <ErrorNotice error={item.error} />}</div>)}
-      <div className="actions"><button type="button" disabled={busy || operation.isPending || !unresolved.length} onClick={() => void operation.mutateAsync(transfer)}>{pending.some(item => item.error !== undefined) ? 'Retry unresolved receipts' : 'Attach selected receipts'}</button>
+      <div className="actions"><button type="button" disabled={blocked || operation.isPending || !unresolved.length} onClick={() => void operation.mutateAsync(transfer)}>{pending.some(item => item.error !== undefined) ? 'Retry unresolved receipts' : 'Attach selected receipts'}</button>
         {!!unresolved.length && <button type="button" disabled={busy} onClick={cancelRecovery}>Cancel recovery</button>}</div>
     </section>}
     <section className="surface editor"><h2>Unreferenced receipts</h2>{inventory.isPending ? <LoadingState /> : inventory.isError ? <ErrorNotice error={inventory.error} onReview={() => void inventory.refetch()} /> : <>
       {!!inventory.data.needing_integrity && <p role="alert">{inventory.data.needing_integrity} files need integrity metadata before they can be linked.</p>}
       {!inventory.data.items.length ? <EmptyState title="No unreferenced receipts" /> : <ul className="recordList">{inventory.data.items.map(doc => <li key={doc.id}><div>{documentView(doc)}</div>
-        {writable && <button type="button" disabled={busy || operation.isPending || unresolved.length > 0} onClick={() => void operation.mutateAsync(() => mutate(() => api.linkDocument(session, recordId, doc.id), 'Receipt linked.'))}>Link {doc.filename}</button>}</li>)}</ul>}
+        {writable && <button type="button" disabled={blocked || operation.isPending || unresolved.length > 0} onClick={() => void operation.mutateAsync(() => mutate(() => link(doc.id), 'Receipt linked.'))}>Link {doc.filename}</button>}</li>)}</ul>}
     </>}</section>
   </>;
 }

@@ -75,6 +75,7 @@ function MixedUseDetailQuery({ recordId }: { recordId: string }) {
   const data = query.data;
   return <><h1>Mixed-use expense</h1>{<>
     <p>Source {data.id} · Projection {data.linked_transaction_id} · Allocated {data.allocated_amount}</p>
+    <Link to={'/mixed-use/' + encodeURIComponent(data.id) + '/receipts'}>Manage source receipts</Link>
     {data.recurring_schedule_id && <p>Schedule {data.recurring_schedule_id} · {data.recurring_scheduled_date} · {data.recurring_occurrence_type}</p>}
     {session.capabilities.includes('bookkeeping:write') ? <ProtectedEditor key={recordId} session={session} loaded={loaded(data)} title="Edit mixed-use expense"
       fields={form => <MixedFields form={form} />} onClose={() => navigate('/mixed-use')}

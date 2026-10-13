@@ -14,6 +14,18 @@ def money(value: float) -> str:
     return f"${value:,.2f}"
 
 
+def transaction_type_label(value: object, transaction: Mapping[str, object]) -> str:
+    """Add durable mixed-use and recurring indicators to a ledger type."""
+    mixed_use = bool(str(transaction.get("source_type") or "").strip() == "mixed_use_expense"
+                     and str(transaction.get("source_id") or "").strip())
+    suffix = " · ".join(label for label, enabled in (
+        ("Mixed-use", mixed_use),
+        ("Recurring", bool(str(transaction.get("recurring_schedule_id") or "").strip())),
+        ("Depreciation", str(transaction.get("source_type") or "").strip().lower() == "depreciation"),
+    ) if enabled)
+    return f"{value} · {suffix}" if suffix else str(value)
+
+
 def _tag_names(
     transaction: Mapping[str, object],
     tags: Sequence[Mapping[str, object]] | Mapping[str, object] | None,

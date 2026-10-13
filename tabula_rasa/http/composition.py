@@ -36,10 +36,11 @@ def translate_database_errors():
 class PostgresRuntime:
     """One pool; compose a fresh service graph after resolving each request."""
 
-    def __init__(self, database, resolver, *, service_factory):
+    def __init__(self, database, resolver, *, service_factory, maps=None):
         self.database = database
         self.resolve_context = resolver
         self.service_factory = service_factory
+        self.maps = maps
 
     def services(self, context) -> ApplicationServices:
         with translate_database_errors():
@@ -66,6 +67,8 @@ class PostgresRuntime:
         return health.get("connected") is True and health.get("revision") == head_revision()
 
     def close(self):
+        if self.maps is not None:
+            self.maps.close()
         self.database.dispose()
 
 
@@ -96,7 +99,9 @@ def open_runtime(settings):
             return create_postgres_services(database, context.entity_id,
                 document_store=document_store, document_store_kind="google_drive")
 
-        runtime = PostgresRuntime(database, resolver, service_factory=services)
+        from .maps import environment_maps
+        runtime = PostgresRuntime(database, resolver, service_factory=services,
+                                  maps=environment_maps(dict(os.environ)))
         if settings.trusted_entity_id:
             # Only explicit seed tooling creates synthetic entities.
             for context in resolver.contexts:
@@ -127,7 +132,9 @@ def open_migrated_runtime(settings, *, resolve_context, entity_profiles, profile
         database = Database(database_settings or DatabaseSettings.from_environment(required=True))
         services = MigratedProfileServices(database, entity_profiles=entity_profiles, secrets=profile_secrets)
         services.validate()
-        runtime = PostgresRuntime(database, resolve_context, service_factory=services)
+        from .maps import load_mileage_maps
+        runtime = PostgresRuntime(database, resolve_context, service_factory=services,
+                                  maps=load_mileage_maps(profile_secrets))
         if not runtime.ready():
             raise RuntimeError("The migrated database is not ready.")
         return runtime

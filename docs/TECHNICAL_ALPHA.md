@@ -130,22 +130,23 @@ for inspection under existing #279 rules.
 | Workflow | Browser/API availability | Remaining internal/reference path and tracker |
 | --- | --- | --- |
 | Accounts/categories/payees/tags, ordinary transactions/journals, ledger/core reports | Implemented new-stack routes; no redirect to legacy UI | Streamlit remains a behavioral reference for unmigrated Sheets profiles. #281/#282 are complete. |
-| Ordinary transaction receipts | Implemented; default hosted runtime accepts the explicit Drive binding above | Operator grant/folder installation and real-provider verification remain required; mixed-use source receipts are draft TA-5 below. Asset acquisition receipts stay on the ordinary acquisition transaction. |
-| Recurring schedules and mixed-use sources/projections | Implemented under #284: create/edit, schedule state changes, explicit reconciliation and source/projection management | Outside the default alpha. Internal copy/conversion: draft TA-6; mixed-use source receipts: draft TA-5. Templates do not own receipts. Durable generation independent of page loads remains #223. See [secondary workflows](COMMERCIAL_SECONDARY_WORKFLOWS.md). |
+| Ordinary transaction receipts | Implemented; default hosted runtime accepts the explicit Drive binding above | Operator grant/folder installation and real-provider verification remain required. Asset acquisition receipts stay on the ordinary acquisition transaction. |
+| Mixed-use source receipts | Browser/API implementation under #361; source-owned upload/link/download/unlink/recovery with protected source baselines | Outside the default alpha; selected grant/folder and hosted verification remain operator work. Generic projections stay read-only and recurring templates do not own receipts. See [workflow ports](COMMERCIAL_WORKFLOW_PORTS.md). |
+| Recurring schedules and mixed-use sources/projections | Implemented under #284: create/edit, schedule state changes, explicit reconciliation and source/projection management | Outside the default alpha. Remaining copy/conversion is #362. Durable generation independent of page loads remains #223. See [secondary workflows](COMMERCIAL_SECONDARY_WORKFLOWS.md). |
 | Fixed assets and depreciation | Implemented under #285: register/detail/edit, schedules, explicit due posting, overrides and retirement | Outside the default alpha. Acquisition transaction owns receipts; generated depreciation has no independent receipt/copy/import action. Additional mixed-use asset behavior remains #121. See [secondary workflows](COMMERCIAL_SECONDARY_WORKFLOWS.md). |
-| Manual mileage log/filter/CSV/detail | Implemented under #286 | Maps/routing: draft TA-7; QuickBooks import: draft TA-8. Existing #158 owns proposed mileage bulk workflows; its commercial adapter scope must be recorded before enabling them. |
-| Transaction CSV/QuickBooks imports; financial bulk actions/copy; financial CSV/report download; category template import | Not exposed by current browser routes | Draft TA-1, TA-2, TA-3 and TA-4 respectively; #282's core CRUD/read completion does not establish these paths. |
-| Sheets workbook/backup administration and restore | `/data` is an availability page; no live-ledger fallback | #220/#261 preserve frozen format-13 internal recovery; #223 owns operational backup/recovery; #260 supplies complete PostgreSQL operator export and #224 owns customer delivery. |
+| Mileage log/filter/CSV/detail and Maps lookup/routing | Manual workflow under #286; optional browser/API Maps integration under #363, with explicit review and manual fallback | #133 key restrictions and controlled provider validation remain operator prerequisites; QuickBooks import is #364. Existing #158 owns proposed mileage bulk workflows. See [workflow ports](COMMERCIAL_WORKFLOW_PORTS.md). |
+| Selected-ledger, transactions and journal-postings financial CSV downloads | Implemented under #359; selected complete entries on Transactions and two full financial downloads on `/data` | Outside the default alpha; these existing CSVs do not replace #260's complete recovery export or #345's customer portability. See [workflow ports](COMMERCIAL_WORKFLOW_PORTS.md). |
+| Transaction CSV/QuickBooks imports; ordinary copy/bulk | Remaining ports tracked by #357 and #358 | #282's core CRUD/read completion does not establish these paths; consume the delivering revision's evidence before #303 cutover. |
+| Category-template import and standalone report downloads | Excluded by the owner's October 11 scope correction | #360 is not planned; these are unimplemented feature ideas, not migration prerequisites. Existing category management and on-screen reports remain supported. |
+| Sheets workbook/backup administration and restore | `/data` exposes financial CSVs; no Sheets administration or live-ledger fallback | #220/#261 preserve frozen format-13 internal recovery; #223 owns operational backup/recovery; #260 supplies complete PostgreSQL operator export and #224 owns customer delivery. |
 | Google/profile/local credential administration | Not a commercial browser workflow | #222 owns native onboarding/authorization; #303 consumes authorized owner bindings. Do not port deployment-password/all-profile access as commercial identity. |
 
-Unticketed narrow gaps above are an explicit remaining tracker task, not a claim
-that broad parent issues have already implemented them. Creating GitHub issues
-requires GitHub-write authorization. #288 must link the resulting narrow tickets
-or an explicit owner-approved retirement decision before acceptance.
-The [ready-to-post transition tracker drafts](TECHNICAL_ALPHA_TRACKING_DRAFTS.md)
-enumerate each uncovered workflow, existing owners and bounded acceptance scope.
-Draft IDs are local references, **not GitHub issue numbers**. Publication/linking
-or owner-approved exclusions remain operator work; none is silently retired.
+The October 11 #288 acceptance handoff published the seven remaining ports as
+#357–#359 and #361–#364 under #221/#124. The owner's #303 scope requires the
+applicable existing workflows before live cutover. The
+[transition inventory](TECHNICAL_ALPHA_TRACKING_DRAFTS.md) preserves their owners
+and corrected scope. Local implementation and synthetic checks do not establish
+deployment, real-provider verification or live-cutover approval.
 
 Choose one authoritative backend per entity through the existing cutover contract.
 An unmigrated Sheets entity keeps its authorized internal runtime. A PostgreSQL

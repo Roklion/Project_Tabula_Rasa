@@ -417,8 +417,16 @@ unreferenced receipts before selecting unconfirmed files again.
 Confirmed unlink removes only the reference; unreferenced files can be relinked.
 Read-only users can inspect/download;
 unconfigured document storage shows availability text without upload controls.
-Source-owned receipt workflows stay with their owners. Maps/routing and import
-remain internal-edition workflows. [Commercial mileage and receipts](docs/COMMERCIAL_MILEAGE_RECEIPTS.md)
+Source-owned receipt workflows stay with their owners. The #359/#361/#363 ports
+add complete-entry **Export selected**, transactions/journal-postings CSVs on
+Data & backup, mixed-use source receipts and optional Maps lookup/routing.
+Mixed-use receipt changes carry the separately loaded source baseline and share
+ordinary upload/recovery controls. Generic projections remain read-only. Maps
+suggestions and place IDs remain transient, separate from recorded text; explicit
+distance confirmation updates the editable draft, and only Save persists it.
+Round-trip directions are calculated independently; failures preserve manual
+entry. [Workflow ports](docs/COMMERCIAL_WORKFLOW_PORTS.md) owns these contracts.
+Imports remain separately tracked. [Commercial mileage and receipts](docs/COMMERCIAL_MILEAGE_RECEIPTS.md)
 owns this slice's transport, recovery and validation contract.
 [Commercial core workflows](docs/COMMERCIAL_WORKFLOWS.md) owns #281/#282 scope.
 #222 adds authenticated identity/membership context selection,
