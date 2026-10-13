@@ -4,59 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import date
-import re
 import streamlit as st
 from .metadata_fields import (  # noqa: F401 - compatibility exports
     editable_account_ids as _editable_account_ids,
     copyable_tag_ids as _copyable_tag_ids,
 )
 from tabula_rasa.page_renderers.tag_selector import schedule_tag_selector_reset
-
-def copied_transaction_description(transaction: Mapping[str, object]) -> str:
-    """Build copy provenance while retaining the user's current memo."""
-    source_id = str(transaction.get("id") or "").strip()
-    description = str(transaction.get("description", "") or "").strip()
-
-    # Copies created by earlier versions put provenance before the memo, while
-    # the current format puts it after the memo. Remove either form repeatedly
-    # so copying an already-copied transaction does not accumulate stale notes.
-    provenance_prefix = re.compile(
-        r"^Copy From\s+(?:[^\s]+|"
-        rf"{re.escape(source_id)})"
-        r"(?:\s*:\s+|\.\s+)"
-        r"|^Copied from transaction\s+(?:[^\s]+|"
-        rf"{re.escape(source_id)})"
-        r"(?:\s*:\s+|\.\s+)"
-    )
-    provenance_prefix_only = re.compile(
-        r"^(?:Copy From|Copied from transaction)\s+(?:[^\s]+|"
-        rf"{re.escape(source_id)})$"
-    )
-    provenance_suffix = re.compile(
-        r"\.\s+(?:Copy From|Copied from transaction)\s+"
-        r"(?:[^\s]+|"
-        rf"{re.escape(source_id)})$"
-    )
-    while description:
-        stripped = provenance_prefix.sub("", description, count=1).strip()
-        if stripped != description:
-            description = stripped
-            continue
-        stripped = provenance_prefix_only.sub("", description, count=1).strip()
-        if stripped != description:
-            description = stripped
-            continue
-        match = provenance_suffix.search(description)
-        if match is None:
-            break
-        description = description[: match.start()].rstrip(" .:")
-
-    provenance = f"Copy From {source_id}" if source_id else "Copy From"
-    if not description:
-        return provenance
-    if not description.endswith("."):
-        description += "."
-    return f"{description} {provenance}"
+from tabula_rasa.copying import copied_transaction_description as copied_transaction_description
 
 def _finish_copy_save(profile_key: str, tag_selector_key: str) -> None:
     _clear_copy_state(profile_key)

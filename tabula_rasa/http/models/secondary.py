@@ -29,6 +29,7 @@ class MixedUseChanges(ExpenseFields):
 class MixedUseCreate(MixedUseChanges):
     source_id: str
     linked_transaction_id: str
+    copied_from_source_id: str = ''
 
 
 class MixedUse(MixedUseChanges):
@@ -102,6 +103,19 @@ class RecurringList(DTO):
 
 class RecurringUpdate(ProtectedMutation):
     changes: RecurringChanges
+
+
+class OrdinaryExpenseChanges(ExpenseFields):
+    amount: DecimalString
+
+
+class ExpenseRecurringConversion(ProtectedMutation):
+    schedule_id: str
+    name: str
+    recurrence_unit: str
+    recurrence_interval: str = '1'
+    end_date: str = ''
+    changes: OrdinaryExpenseChanges
 
 
 class Occurrence(DTO):

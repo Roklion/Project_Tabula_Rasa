@@ -40,9 +40,11 @@ cannot replace a loaded draft/token. A create with uncertain status keeps its
 draft, disables another submission and directs the user to inspect the log;
 neither creates nor edits retry automatically.
 
-The browser provides manual location and distance entry. Google Maps lookup,
-route calculation and QuickBooks import remain in the internal edition; no
-provider credentials or routing rules are added to the HTTP/persistence layer.
+The browser provides manual location and distance entry. #364 adds the existing
+QuickBooks Download Trips preview/import in **Data & backup**, documented in
+[Commercial import, copy and bulk workflows](COMMERCIAL_WORKFLOW_PORTS.md).
+Google Maps lookup/route calculation remain with #363; no provider credentials
+or routing rules are added to the HTTP/persistence layer by this import port.
 
 The entity-qualified transport provides:
 

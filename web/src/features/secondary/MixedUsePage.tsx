@@ -1,11 +1,12 @@
 import { PageHeader } from '../../components/VisualPrimitives';
+import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useWatch, type UseFormReturn } from 'react-hook-form';
 import { api, type Schemas } from '../../api/client';
 import { resourceKey } from '../../api/query';
 import { useEntity } from '../../app/context';
-import { ErrorNotice, LoadingState } from '../../components/States';
+import { ErrorNotice, LoadingState, SuccessNotice } from '../../components/States';
 import { localDate } from '../../components/localDate';
 import { TextField } from '../concurrency/Fields';
 import { ProtectedEditor } from '../concurrency/ProtectedEditor';
@@ -58,8 +59,45 @@ export function NewMixedUse() {
   const session = useEntity(); const navigate = useNavigate();
   return <><h1>Add mixed-use expense</h1>{session.capabilities.includes('bookkeeping:write') ?
     <CreateEditor initial={initial} title="Save mixed-use expense" fields={form => <MixedFields form={form} creating />}
-      create={(values, id) => api.createMixedUse(session, { ...values, source_id: id, linked_transaction_id: id + ':projection' })}
+      create={(values, id) => api.createMixedUse(session, { ...values, source_id: id, linked_transaction_id: id + ':projection', copied_from_source_id: '' })}
       onClose={() => navigate('/mixed-use')} /> : <p>Read-only access.</p>}</>;
+}
+
+export function CopyMixedUse() {
+  const { recordId = '' } = useParams();
+  return <MixedUseCopyQuery key={recordId} recordId={recordId} />;
+}
+
+function MixedUseCopyQuery({ recordId }: { recordId: string }) {
+  const session = useEntity(); const navigate = useNavigate();
+  const [snapshot, setSnapshot] = useState<Schemas['MixedUseCreate']>();
+  const writable = session.capabilities.includes('bookkeeping:write');
+  const query = useQuery({ queryKey: [...resourceKey(session, 'mixed-use-copy-draft'), recordId],
+    queryFn: ({ signal }) => api.mixedUseCopyDraft(session, recordId, signal), enabled: writable,
+    staleTime: 0, refetchOnMount: 'always', refetchOnWindowFocus: false, retry: false });
+  if (!snapshot && query.isFetchedAfterMount && query.isSuccess) setSnapshot(structuredClone(query.data));
+  if (!writable) return <><h1>Copy mixed-use expense</h1><p>Read-only access.</p></>;
+  if (snapshot) return <MixedUseCopyEditor snapshot={snapshot} originalId={recordId} onClose={() => navigate('/mixed-use')} />;
+  if (!query.isFetchedAfterMount || query.isFetching) return <><h1>Copy mixed-use expense</h1><LoadingState /></>;
+  if (!query.data || query.isError) return <><h1>Copy mixed-use expense</h1><ErrorNotice error={query.error} onReview={() => void query.refetch()} /></>;
+  return <LoadingState />;
+}
+
+function MixedUseCopyEditor({ snapshot, originalId, onClose }: { snapshot: Schemas['MixedUseCreate']; originalId: string; onClose: () => void }) {
+  const session = useEntity(); const [frozen] = useState(() => structuredClone(snapshot));
+  const [created, setCreated] = useState(false);
+  return <><h1>Copy mixed-use expense</h1><p>Create an independent source from {originalId}. Receipts and schedule links are excluded.</p>
+    {created ? <><SuccessNotice>Mixed-use expense copied.</SuccessNotice><button onClick={onClose}>Back to records</button></> :
+      <CreateEditor<Draft> prefilledDraft title="Save mixed-use copy" initial={() => loaded({ ...frozen, id: frozen.source_id, baseline: '',
+        allocated_amount: '', ledger_status: 'linked', recurring_schedule_id: '', recurring_scheduled_date: '', recurring_occurrence_type: '' }).values}
+        uncertainGuidance={<p>The copy may already exist. Inspect the <Link to="/mixed-use">Mixed-use Expense Log</Link> before trying again or starting another copy.</p>}
+        fields={form => <MixedFields form={form} creating />} onClose={onClose}
+        create={async values => {
+          await api.createMixedUse(session, { ...values, source_id: frozen.source_id, linked_transaction_id: frozen.linked_transaction_id,
+            copied_from_source_id: frozen.copied_from_source_id });
+          setCreated(true);
+        }} />}
+  </>;
 }
 
 export function MixedUseDetail() {
@@ -75,6 +113,7 @@ function MixedUseDetailQuery({ recordId }: { recordId: string }) {
   const data = query.data;
   return <><h1>Mixed-use expense</h1>{<>
     <p>Source {data.id} · Projection {data.linked_transaction_id} · Allocated {data.allocated_amount}</p>
+    {session.capabilities.includes('bookkeeping:write') && <Link to={'/mixed-use/' + encodeURIComponent(data.id) + '/copy'}>Copy mixed-use expense</Link>}
     {data.recurring_schedule_id && <p>Schedule {data.recurring_schedule_id} · {data.recurring_scheduled_date} · {data.recurring_occurrence_type}</p>}
     {session.capabilities.includes('bookkeeping:write') ? <ProtectedEditor key={recordId} session={session} loaded={loaded(data)} title="Edit mixed-use expense"
       fields={form => <MixedFields form={form} />} onClose={() => navigate('/mixed-use')}

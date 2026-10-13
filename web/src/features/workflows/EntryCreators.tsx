@@ -20,7 +20,7 @@ export function EntryCreator({ resource }: { resource: 'transactions' | 'journal
       choices.accounts.some(row => row.id === values.account_id && row.active) &&
       (values.kind === 'Transfer' ? choices.accounts.filter(row => row.active).length >= 2 && Boolean(values.to_account_id)
         : Boolean(values.category_id) && choices.categories.some(row => row.id === values.category_id && row.kind === values.kind))}
-    create={(values, transaction_id) => api.createTransaction(session, { ...values, transaction_id,
+    create={(values, transaction_id) => api.createTransaction(session, { ...values, transaction_id, copied_from_transaction_id: '',
       to_account_id: values.kind === 'Transfer' ? values.to_account_id : '', category_id: values.kind === 'Transfer' ? '' : values.category_id })}
     fields={form => <TransactionFields form={form} creating />} />;
   return <CreateEditor<Schemas['JournalChanges']> title="Save journal" onClose={close}

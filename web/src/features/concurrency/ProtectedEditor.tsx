@@ -18,7 +18,7 @@ export function ReloadPrompt({ pending, onKeep, onReload }: { pending: boolean; 
   </ConfirmationDialog>;
 }
 
-export function ProtectedEditor<T extends FieldValues>({ session, loaded, title, fields, save, remove, removeLabel = 'Delete', confirmSave, loadLatest, onClose, commands = [], commandFields, saveConfirmation }: {
+export function ProtectedEditor<T extends FieldValues>({ session, loaded, title, fields, save, remove, removeLabel = 'Delete', confirmSave, loadLatest, onClose, commands = [], commandFields, saveConfirmation, uncertainGuidance }: {
   session: Session; loaded: LoadedForm<T, LoadMetadata>; title: string;
   fields: (form: UseFormReturn<T>) => ReactNode;
   save: (id: string, baseline: string, changes: T) => Promise<LoadedForm<T, LoadMetadata>>;
@@ -28,6 +28,7 @@ export function ProtectedEditor<T extends FieldValues>({ session, loaded, title,
   saveConfirmation?: { title: string; confirmLabel: string; description: string };
   removeLabel?: string; loadLatest: (id: string) => Promise<LoadedForm<T, LoadMetadata>>;
   onClose?: () => void;
+  uncertainGuidance?: ReactNode;
 }) {
   const { form, metadata, reload } = useLoadedForm(loaded);
   const [review, setReview] = useState(false);
@@ -84,6 +85,7 @@ export function ProtectedEditor<T extends FieldValues>({ session, loaded, title,
       Discard your unsaved changes?
     </ConfirmationDialog>}
     {failure !== undefined && <ErrorNotice error={failure} onReview={() => setReview(true)} />}
+    {failure instanceof ApiError && ['unavailable', 'unexpected'].includes(failure.code) && uncertainGuidance}
     {review && <ReloadPrompt pending={pending} onKeep={() => setReview(false)} onReload={() => void reloadLatest()} />}
     {!removed && <form onSubmit={form.handleSubmit(values => {
       if (confirmSave?.(values, form.formState.defaultValues as Partial<T>)) setPendingSave(values);

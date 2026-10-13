@@ -417,8 +417,9 @@ unreferenced receipts before selecting unconfirmed files again.
 Confirmed unlink removes only the reference; unreferenced files can be relinked.
 Read-only users can inspect/download;
 unconfigured document storage shows availability text without upload controls.
-Source-owned receipt workflows stay with their owners. Maps/routing and import
-remain internal-edition workflows. [Commercial mileage and receipts](docs/COMMERCIAL_MILEAGE_RECEIPTS.md)
+Source-owned receipt workflows stay with their owners. Maps/routing remains with
+#363. The existing QuickBooks mileage import is available in Data & backup under
+#364. [Commercial mileage and receipts](docs/COMMERCIAL_MILEAGE_RECEIPTS.md)
 owns this slice's transport, recovery and validation contract.
 [Commercial core workflows](docs/COMMERCIAL_WORKFLOWS.md) owns #281/#282 scope.
 #222 adds authenticated identity/membership context selection,
@@ -436,6 +437,37 @@ The Streamlit-specific shell requirements above continue to govern the internal
 edition.
 
 ## Page headers, workflow groups, and messages
+
+**Current behavior — existing workflow ports (#357/#358/#362/#364):** Data &
+backup contains separate Tabula Rasa CSV, QuickBooks transaction and QuickBooks
+mileage uploaders, scoped to the selected business. File preparation/preview is
+read-only; explicit commands submit the selected source again for fresh validation.
+Tabula Rasa CSV preserves its first-20-source-row presentation and Income/Expense
+contract. QuickBooks transactions preserve CSV/General Ledger XLSX/ZIP conversion,
+counts, row diagnostics, optional reference proposals and Transfer support.
+QuickBooks mileage preserves Business/duplicate/Personal/Unreviewed diagnostics,
+one-decimal distance and a confirmed import. Failed/uncertain commands retain the
+file/draft and direct users to inspect the ledger/log before retrying. No automatic
+retry or partial-batch success is shown. The shared page owns one dirty-navigation
+guard across its three independent uploader states.
+
+The commercial ledger offers explicit visible-entry selection with loaded stable
+IDs/baselines, ordinary Copy transaction and confirmed Category/Payee/Tag changes
+or eligible permanent deletion. Copy starts with a new identity, active Tags,
+exactly one source memo suffix and no receipts or recurring ownership. Journal
+selections and mixed-use/depreciation projections disable generic mutations;
+selected CSV export remains #359. Filter/search/sort changes clear selection.
+Bulk mutation validates the entire selection before an atomic PostgreSQL write;
+untouched fields remain unchanged.
+
+Complete mixed-use sources offer independent Copy mixed-use expense with new
+source/projection identities and no copied receipts/recurrence. An eligible ordinary
+Expense offers Make recurring, loading a fresh baseline and the existing schedule
+fields; confirmation creates a schedule around the existing initial Expense rather
+than duplicating it. Prefilled copies require confirmed cancellation even without
+edits. Confirmed copy/conversion completion closes that mutation surface.
+[Commercial import, copy and bulk workflows](docs/COMMERCIAL_WORKFLOW_PORTS.md)
+owns formats, failure behavior, transport, validation and #288/#303 boundaries.
 
 **Current behavior — commercial secondary workflows (#284/#285):** Transactions
 links to Mixed-use expenses and Recurring expenses. Mixed-use source creation,

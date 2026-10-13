@@ -6,10 +6,12 @@ import { useQuery } from '@tanstack/react-query';
 import { api, type Schemas } from '../../api/client';
 import { resourceKey } from '../../api/query';
 import { useEntity } from '../../app/context';
-import { EmptyState, ErrorNotice, Field, LoadingState } from '../../components/States';
+import { EmptyState, ErrorNotice, Field, LoadingState, SuccessNotice } from '../../components/States';
 import { JournalEditor, TransactionEditor } from '../concurrency/BookkeepingEditors';
 import { latest } from '../concurrency/mutations';
 import { useReferenceChoices } from '../concurrency/useReferenceChoices';
+import { LedgerBulkActions } from './LedgerBulkActions';
+import { TransactionCopyEditor } from './TransactionCopyEditor';
 
 type Selection = { transaction: Schemas['Transaction'] } | { journal: Schemas['Journal'] };
 const sortFields = { Date: 'txn_date', Type: 'kind', Account: 'account', Payee: 'payee', Amount: 'amount', Description: 'description', ID: 'record_id' } as const;
@@ -25,7 +27,34 @@ export function LedgerPage() {
   const [selected, setSelected] = useState<Selection>();
   const [loadingRecord, setLoadingRecord] = useState(false);
   const [failure, setFailure] = useState<unknown>();
+  const [bulkRecords, setBulkRecords] = useState<Schemas['Transaction'][]>();
+  const [bulkSelection, setBulkSelection] = useState<{ scope: string; ids: string[] }>({ scope: '', ids: [] });
+  const [bulkReview, setBulkReview] = useState(false);
+  const [submittedSelection, setSubmittedSelection] = useState<Schemas['LedgerItem'][]>([]);
+  const [bulkResult, setBulkResult] = useState<string>();
+  const [ledgerRevision, setLedgerRevision] = useState(0);
+  const [copy, setCopy] = useState<{ draft: Schemas['TransactionChanges']; sourceId: string }>();
   const query = useQuery({ queryKey: [...resourceKey(session, 'ledger'), filters], queryFn: ({ signal }) => api.ledger(session, filters, signal) });
+  const selectionScope = JSON.stringify([filters, search, sortField, descending]);
+  // A changed view/revision discards the stored selection, so restoring a filter
+  // cannot resurrect it and a refreshed ledger cannot mutate a silent subset.
+  if (bulkSelection.ids.length && bulkSelection.scope !== selectionScope) {
+    setBulkSelection({ scope: selectionScope, ids: [] });
+    setBulkReview(false); setSubmittedSelection([]);
+  }
+  if (ledgerRevision !== query.dataUpdatedAt) {
+    setLedgerRevision(query.dataUpdatedAt);
+    // Keep a submitted selection and its draft/error for explicit review after
+    // invalidation. Ordinary background refreshes still invalidate selections.
+    if (!bulkReview && bulkSelection.ids.length) setBulkSelection({ scope: selectionScope, ids: [] });
+  }
+  const selectedIds = bulkSelection.scope === selectionScope ? bulkSelection.ids : [];
+  async function startBulk() {
+    setLoadingRecord(true); setFailure(undefined); setBulkReview(false); setBulkResult(undefined);
+    try { setBulkRecords((await api.transactions(session)).items); setBulkSelection({ scope: '', ids: [] }); }
+    catch (error) { setFailure(error); }
+    finally { setLoadingRecord(false); }
+  }
   async function edit(row: Schemas['LedgerItem']) {
     setLoadingRecord(true); setFailure(undefined);
     try {
@@ -49,9 +78,9 @@ export function LedgerPage() {
   const selectedTags = choices.tags.filter(row => filters.tag_ids.includes(row.id)).map(row => row.name);
   const multi = (element: HTMLSelectElement) => Array.from(element.selectedOptions, option => option.value);
   return <><PageHeader title="Transactions" description={<>Simple transactions and complete journals for {session.entity.name}.</>}
-    actions={!loadingRecord && !selected && session.capabilities.includes('bookkeeping:write') && <>
+    actions={!loadingRecord && !selected && !copy && session.capabilities.includes('bookkeeping:write') && <>
       <Link className="button" to="/transactions/new">Add transaction</Link><Link to="/journals/new" className="button action-secondary">Add journal</Link></>} />
-    {loadingRecord ? <LoadingState label="Loading record…" /> : selected ? 'transaction' in selected ? <TransactionEditor row={selected.transaction} onClose={() => setSelected(undefined)} />
+    {loadingRecord ? <LoadingState label="Loading record…" /> : copy ? <TransactionCopyEditor draft={copy.draft} sourceId={copy.sourceId} onClose={() => { setCopy(undefined); setBulkRecords(undefined); setBulkSelection({ scope: '', ids: [] }); }} /> : selected ? 'transaction' in selected ? <TransactionEditor row={selected.transaction} onClose={() => setSelected(undefined)} />
       : <JournalEditor row={selected.journal} onClose={() => setSelected(undefined)} /> : <>
       <section className="surface ledgerFilters" aria-label="Ledger filters"><h2>Filter ledger</h2>
       <div className="filterGrid ledgerFilterGrid">
@@ -72,13 +101,20 @@ export function LedgerPage() {
       {!query.isPending && !query.isError && <p role="status">{rows.length} matching entries</p>}
       {choices.error && <ErrorNotice error={choices.error} />}
       {failure !== undefined && <ErrorNotice error={failure} />}
+      {bulkResult && <SuccessNotice>{bulkResult}</SuccessNotice>}
+      {session.capabilities.includes('bookkeeping:write') && <div className="actions"><ActionButton onClick={() => { if (bulkRecords) { setBulkRecords(undefined); setBulkSelection({ scope: '', ids: [] }); } else void startBulk(); }}>{bulkRecords ? 'Leave Bulk mode' : 'Bulk actions'}</ActionButton></div>}
+      {bulkRecords && <LedgerBulkActions key={selectionScope + selectedIds.join(',')} loaded={bulkRecords}
+        selected={bulkReview ? submittedSelection : rows.filter(row => selectedIds.includes(row.id))}
+        onAction={() => { if (!bulkReview) setSubmittedSelection(rows.filter(row => selectedIds.includes(row.id))); setBulkReview(true); }}
+        onCopy={(draft, sourceId) => setCopy({ draft, sourceId })}
+        onApplied={message => { setBulkResult(message); setBulkRecords(undefined); setBulkSelection({ scope: '', ids: [] }); }} />}
       {query.isPending ? <LoadingState label="Loading ledger…" /> : query.isError ? <ErrorNotice operation="read" error={query.error} onReview={() => void query.refetch()} />
         : rows.length === 0 ? <EmptyState title="No matching entries">Add an entry or adjust the filters.</EmptyState>
         : <TableRegion label="Ledger"><table className="ledgerTable"><caption>Business ledger</caption>
-          <thead><tr>{['Date', 'Type', 'Account', 'To account', 'Category', 'Payee', 'Amount', 'Debit', 'Credit', 'Tags', 'Description', 'Receipt', 'Reference', 'ID', 'Actions'].map(name => <th scope="col" className={['Amount', 'Debit', 'Credit', 'Receipt'].includes(name) ? 'amount' : undefined} key={name}>{name}</th>)}</tr></thead>
-          {rows.map(row => <tbody key={row.id} className={row.entry_type === 'journal' ? 'journalGroup' : undefined}><tr><td>{row.txn_date}</td><th scope="row" className="tableText">{row.kind}{row.source_type === 'mixed_use_expense' ? ' · Mixed-use' : ''}</th><td className="tableText">{row.account}</td><td className="tableText">{row.to_account}</td><td className="tableText">{row.category}</td><td className="tableText">{row.payee}</td><td className="amount">{row.amount}</td><td /><td /><td className="tableText">{row.tags.join(', ')}</td><td className="tableText">{row.description}</td><td className="amount">{row.receipt_count ? `${row.receipt_count} receipt(s)` : ''}</td><td className="tableText">{row.reference}</td><td className="ledgerIdentity">{row.record_id}</td>
+          <thead><tr>{bulkRecords && <th scope="col">Select</th>}{['Date', 'Type', 'Account', 'To account', 'Category', 'Payee', 'Amount', 'Debit', 'Credit', 'Tags', 'Description', 'Receipt', 'Reference', 'ID', 'Actions'].map(name => <th scope="col" className={['Amount', 'Debit', 'Credit', 'Receipt'].includes(name) ? 'amount' : undefined} key={name}>{name}</th>)}</tr></thead>
+          {rows.map(row => <tbody key={row.id} className={row.entry_type === 'journal' ? 'journalGroup' : undefined}><tr>{bulkRecords && <td><input type="checkbox" disabled={bulkReview} aria-label={`Select ${row.txn_date} · ${row.description || row.kind} · ${row.amount}`} checked={selectedIds.includes(row.id)} onChange={event => setBulkSelection({ scope: selectionScope, ids: event.target.checked ? [...selectedIds, row.id] : selectedIds.filter(id => id !== row.id) })} /></td>}<td>{row.txn_date}</td><th scope="row" className="tableText">{row.kind}{row.source_type === 'mixed_use_expense' ? ' · Mixed-use' : ''}</th><td className="tableText">{row.account}</td><td className="tableText">{row.to_account}</td><td className="tableText">{row.category}</td><td className="tableText">{row.payee}</td><td className="amount">{row.amount}</td><td /><td /><td className="tableText">{row.tags.join(', ')}</td><td className="tableText">{row.description}</td><td className="amount">{row.receipt_count ? `${row.receipt_count} receipt(s)` : ''}</td><td className="tableText">{row.reference}</td><td className="ledgerIdentity">{row.record_id}</td>
             <td className="tableActions"><div className="rowActions">{row.entry_type === 'transaction' && !row.source_type && <Link className="button action-secondary" to={'/transactions/' + encodeURIComponent(row.record_id) + '/receipts'} aria-label={`Receipts for ${row.txn_date} · ${row.description || row.kind} · ${row.amount}`}>Receipts</Link>}{row.source_type === 'mixed_use_expense' ? <Link to="/mixed-use">Manage mixed-use expense</Link> : row.source_type === 'depreciation' ? <Link to="/assets">Manage in Assets</Link> : row.source_type ? 'Managed by ' + row.source_type : session.capabilities.includes('bookkeeping:write') && <ActionButton disabled={loadingRecord} aria-label={`Edit ${row.txn_date} · ${row.description || row.kind} · ${row.amount}`} onClick={() => void edit(row)}>Edit</ActionButton>}</div></td></tr>
-            {row.postings.map((line, index) => <tr key={index} className="postingRow"><td /><th scope="row">↳ Posting</th><td className="tableText">{line.target}</td><td /><td /><td className="tableText">{line.payee}</td><td /><td className="amount">{line.side === 'Debit' ? line.amount : ''}</td><td className="amount">{line.side === 'Credit' ? line.amount : ''}</td><td /><td className="tableText">{line.description}</td><td colSpan={4} /></tr>)}
+            {row.postings.map((line, index) => <tr key={index} className="postingRow">{bulkRecords && <td />}<td /><th scope="row">↳ Posting</th><td className="tableText">{line.target}</td><td /><td /><td className="tableText">{line.payee}</td><td /><td className="amount">{line.side === 'Debit' ? line.amount : ''}</td><td className="amount">{line.side === 'Credit' ? line.amount : ''}</td><td /><td className="tableText">{line.description}</td><td colSpan={4} /></tr>)}
           </tbody>)}</table></TableRegion>}
     </>}
   </>;
