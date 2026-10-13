@@ -106,8 +106,20 @@ def test_mixed_source_stale_link_reload_retry_download_and_reference_only_remove
             expect(page.get_by_role('alert').filter(has_text='The source changed or is unavailable')).to_be_visible()
             expect(page.get_by_role('button', name='Retry unresolved receipts')).to_be_disabled()
             assert document_store.upload_calls == 1
+            # Failed inventory refresh must not clear the stale-source guard.
+            page.route('**/api/v1/entities/alpha/documents', lambda route: route.fulfill(
+                status=503, json={'error': {'code': 'unavailable'}, 'request_id': 'inventory-refresh'}))
             page.get_by_role('button', name='Review latest source', exact=True).click()
             page.get_by_role('button', name='Reload source', exact=True).click()
+            expect(page.get_by_role('alert').filter(has_text='inventory-refresh').first).to_be_visible()
+            expect(page.get_by_role('button', name='Retry unresolved receipts')).to_be_disabled()
+            page.unroute('**/api/v1/entities/alpha/documents')
+            page.get_by_role('button', name='Review latest source', exact=True).click()
+            with page.expect_response(lambda response: response.request.method == 'GET'
+                                      and response.url.endswith('/entities/alpha/documents')) as refreshed:
+                page.get_by_role('button', name='Reload source', exact=True).click()
+            assert refreshed.value.status == 200
+            assert refreshed.value.json()['items'][0]['filename'] == 'source.pdf'
             page.get_by_role('button', name='Retry unresolved receipts').click()
             expect(page.get_by_role('status').filter(has_text='1 receipt attached.')).to_be_visible()
             assert document_store.upload_calls == 1

@@ -100,7 +100,10 @@ function ReceiptWorkflow({ recordId, initialSource }: { recordId: string; initia
     setReloading(true);
     try {
       sourceChanged(await api.mixedUseSource(session, recordId));
-      await linked.refetch();
+      await Promise.all([
+        linked.refetch({ throwOnError: true }),
+        inventory.refetch({ throwOnError: true }),
+      ]);
       setReviewRequired(false); setFailure(undefined); setReview(false);
     } catch (error) { setFailure(error); setReview(false); }
     finally { setReloading(false); }
