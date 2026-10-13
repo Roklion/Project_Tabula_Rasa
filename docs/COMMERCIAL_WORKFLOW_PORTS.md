@@ -79,7 +79,10 @@ only to the selected business. No file is stored as an alternate live ledger.
 
 ## Ordinary copy and bulk actions
 
-In **Transactions**, explicitly select visible complete logical entries. Selection
+In **Transactions**, entering Bulk mode reloads transaction baselines and then
+refreshes the visible ledger before enabling selection. A failed refresh leaves
+selection unavailable; subsequent concurrent edits still reject as stale.
+Explicitly select visible complete logical entries. Selection
 stores each stable ID and its original loaded baseline; filter/search/sort changes
 clear the selection. **Copy transaction** requires exactly one eligible ordinary
 transaction. The service validates its current baseline and prepares an independent

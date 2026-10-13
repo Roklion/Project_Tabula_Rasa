@@ -51,7 +51,14 @@ export function LedgerPage() {
   const selectedIds = bulkSelection.scope === selectionScope ? bulkSelection.ids : [];
   async function startBulk() {
     setLoadingRecord(true); setFailure(undefined); setBulkReview(false); setBulkResult(undefined);
-    try { setBulkRecords((await api.transactions(session)).items); setBulkSelection({ scope: '', ids: [] }); }
+    try {
+      const loaded = (await api.transactions(session)).items;
+      // Refresh the displayed rows after loading baselines, before selection is
+      // enabled. A later concurrent edit still fails the original baseline.
+      const refreshed = await query.refetch();
+      if (refreshed.isError) throw refreshed.error;
+      setBulkRecords(loaded); setBulkSelection({ scope: '', ids: [] });
+    }
     catch (error) { setFailure(error); }
     finally { setLoadingRecord(false); }
   }

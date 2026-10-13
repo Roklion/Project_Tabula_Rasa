@@ -485,7 +485,8 @@ exactly one source memo suffix and no receipts or recurring ownership. Journal
 selections and mixed-use/depreciation projections disable generic mutations;
 selected CSV export remains #359. Filter/search/sort changes clear selection.
 Bulk mutation validates the entire selection before an atomic PostgreSQL write;
-untouched fields remain unchanged.
+untouched fields remain unchanged. Entering Bulk mode loads baselines and refreshes
+the displayed ledger before enabling selection; a failed refresh prevents entry.
 
 Complete mixed-use sources offer independent Copy mixed-use expense with new
 source/projection identities and no copied receipts/recurrence. An eligible ordinary

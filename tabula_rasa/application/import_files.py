@@ -80,7 +80,8 @@ def prepare_quickbooks_import(filename: str, content: bytes) -> PreparedImport:
             with zipfile.ZipFile(io.BytesIO(content)) as archive:
                 workbooks = [item for item in archive.infolist()
                              if item.filename.casefold().endswith(".xlsx")
-                             and not item.filename.startswith("__MACOSX/") and not item.is_dir()]
+                             and not any(part.casefold() == "__macosx" for part in item.filename.split("/"))
+                             and not item.is_dir()]
                 if len(workbooks) != 1:
                     raise StorageValidationError("The ZIP must contain exactly one QuickBooks .xlsx workbook.")
                 if workbooks[0].file_size > MAX_IMPORT_BYTES:
@@ -95,7 +96,7 @@ def prepare_quickbooks_import(filename: str, content: bytes) -> PreparedImport:
             matrix = []
             for row in sheet.iter_rows(values_only=True):
                 if len(matrix) == 10000:
-                    raise StorageValidationError("Import at most 1,000 rows per batch; split larger sources before submitting.")
+                    raise StorageValidationError("The QuickBooks worksheet exceeds the supported size of 10,000 rows; split larger sources before submitting.")
                 matrix.append(row)
             rows, errors = general_ledger_rows(matrix)
             if len(rows) > MAX_IMPORT_ROWS:

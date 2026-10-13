@@ -27,7 +27,7 @@ function ledgerItem(row: Schemas['Transaction']): Schemas['LedgerItem'] {
 const records = [ledgerItem(first), ledgerItem(second)];
 const initialFilters = { kind: 'All', account_ids: [], category_ids: [], tag_ids: [] };
 
-async function setup() {
+async function setup(beforeBulk?: () => void, enterBulk = true) {
   vi.spyOn(api, 'ledger').mockResolvedValue({ items: records });
   vi.spyOn(api, 'transactions').mockResolvedValue({ items: [first, second] });
   const cache = createPrivateCache();
@@ -36,8 +36,11 @@ async function setup() {
   </QueryClientProvider> }]);
   render(<RouterProvider router={router} />);
   await screen.findByRole('region', { name: 'Ledger' });
-  await userEvent.click(screen.getByRole('button', { name: 'Bulk actions' }));
-  await screen.findByRole('button', { name: 'Leave Bulk mode' });
+  beforeBulk?.();
+  if (enterBulk) {
+    await userEvent.click(screen.getByRole('button', { name: 'Bulk actions' }));
+    await screen.findByRole('button', { name: 'Leave Bulk mode' });
+  }
   return cache;
 }
 const selectFirst = () => screen.getByRole('checkbox', { name: 'Select 2026-10-05 · First memo · 12.50' });
@@ -51,6 +54,33 @@ function expectNoSelection() {
 }
 
 beforeEach(() => vi.restoreAllMocks());
+
+it('refreshes visible values before allowing selection with newly loaded baselines', async () => {
+  const remove = vi.spyOn(api, 'bulkDeleteTransactions').mockResolvedValue({ status: 'fully_applied', count: '1' });
+  const changed = { ...first, description: 'Changed by another client', amount: '99.00', baseline: 'new-baseline' };
+  await setup(() => {
+    vi.mocked(api.transactions).mockResolvedValue({ items: [changed, second] });
+    vi.mocked(api.ledger).mockResolvedValue({ items: [ledgerItem(changed), records[1]] });
+  });
+  expect(screen.queryByRole('checkbox', { name: 'Select 2026-10-05 · First memo · 12.50' })).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Select 2026-10-05 · Changed by another client · 99.00' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Permanently delete selected' }));
+  expect(screen.getByRole('alertdialog')).toHaveTextContent('aggregate absolute amount 99.00');
+  await userEvent.click(screen.getByRole('checkbox', { name: 'I understand that this cannot be undone.' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Confirm permanent deletion' }));
+  await waitFor(() => expect(remove).toHaveBeenCalledOnce());
+  expect(remove.mock.calls[0][1].expected).toEqual([{ id: 'one', baseline: 'new-baseline' }]);
+});
+
+it('does not enable bulk selection when refreshing the visible ledger fails', async () => {
+  await setup(undefined, false);
+  vi.mocked(api.ledger).mockRejectedValue(new ApiError('unavailable'));
+  await userEvent.click(screen.getByRole('button', { name: 'Bulk actions' }));
+  await screen.findByRole('button', { name: 'Bulk actions' });
+  expect(screen.getAllByRole('alert').length).toBeGreaterThan(0);
+  expect(screen.queryByRole('button', { name: 'Leave Bulk mode' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('checkbox', { name: /^Select / })).not.toBeInTheDocument();
+});
 
 it('clears selected IDs permanently when a search changes and is restored', async () => {
   await setup();
@@ -100,7 +130,7 @@ it('preserves selected IDs, explicit changes and the error after a rejected bulk
   await userEvent.click(screen.getByRole('checkbox', { name: 'Apply Payee to all selected' }));
   await userEvent.click(screen.getByRole('button', { name: 'Review selected changes' }));
   await userEvent.click(screen.getByRole('button', { name: 'Confirm selected changes' }));
-  await waitFor(() => expect(api.ledger).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(api.ledger).toHaveBeenCalledTimes(3));
   expect(selectFirst()).toBeChecked();
   expect(screen.getByRole('checkbox', { name: 'Apply Payee to all selected' })).toBeChecked();
   expect(await screen.findByRole('alert')).toHaveTextContent('Your draft is preserved');
@@ -115,7 +145,7 @@ it('shows the confirmed bulk result after clearing the selection and refreshing 
   await userEvent.click(screen.getByRole('checkbox', { name: 'Apply Payee to all selected' }));
   await userEvent.click(screen.getByRole('button', { name: 'Review selected changes' }));
   await userEvent.click(screen.getByRole('button', { name: 'Confirm selected changes' }));
-  await waitFor(() => expect(api.ledger).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(api.ledger).toHaveBeenCalledTimes(3));
   expect(await screen.findByText('1 transaction(s) updated.')).toBeVisible();
   expect(screen.getByRole('button', { name: 'Bulk actions' })).toBeVisible();
   expect(screen.queryByRole('button', { name: 'Review selected changes' })).not.toBeInTheDocument();
@@ -131,7 +161,7 @@ it('retains the entire failed selection when refresh removes one selected record
   vi.mocked(api.ledger).mockResolvedValue({ items: [records[0]] });
   await userEvent.click(screen.getByRole('button', { name: 'Review selected changes' }));
   await userEvent.click(screen.getByRole('button', { name: 'Confirm selected changes' }));
-  await waitFor(() => expect(api.ledger).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(api.ledger).toHaveBeenCalledTimes(3));
   expect(await screen.findByRole('alert')).toHaveTextContent('Your draft is preserved');
   expect(screen.getByText('2 selected logical record(s)')).toBeVisible();
   expect(screen.getByRole('checkbox', { name: 'Apply Payee to all selected' })).toBeChecked();

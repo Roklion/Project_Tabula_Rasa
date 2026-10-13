@@ -68,6 +68,8 @@ def test_supported_xlsx_and_zip_use_existing_general_ledger_conversion():
     with zipfile.ZipFile(output, "w") as archive:
         archive.writestr("export/General_ledger.xlsx", workbook)
         archive.writestr("__MACOSX/General_ledger.xlsx", b"ignored")
+        archive.writestr("export/__MACOSX/._General_ledger.xlsx", b"ignored")
+        archive.writestr("export/__macosx/._General_ledger.xlsx", b"ignored")
     assert prepare_quickbooks_import("export.zip", output.getvalue()) == prepared
     broken = prepare_quickbooks_import("General_ledger.xlsx", general_ledger_bytes(broken=True))
     assert broken.rows == []
@@ -83,3 +85,17 @@ def test_unsupported_or_ambiguous_workbooks_fail_without_raw_provider_errors():
         archive.writestr("two.xlsx", b"private-two")
     with pytest.raises(StorageValidationError, match="exactly one"):
         prepare_quickbooks_import("export.zip", output.getvalue())
+
+
+def test_oversized_worksheet_reports_the_raw_sheet_limit():
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "General Ledger"
+    sheet.append(list(GENERAL_LEDGER_COLUMNS))
+    for _ in range(10000):
+        sheet.append(["heading"])
+    output = io.BytesIO()
+    workbook.save(output)
+    workbook.close()
+    with pytest.raises(StorageValidationError, match="10,000 rows"):
+        prepare_quickbooks_import("export.xlsx", output.getvalue())
