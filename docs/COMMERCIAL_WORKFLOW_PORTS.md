@@ -42,7 +42,10 @@ signs. Downloads neither mutate stored values nor require a DocumentStore.
 The three read-capability endpoints are `GET .../exports/transactions.csv`,
 `GET .../exports/journal-postings.csv` and `GET .../ledger/selected.csv` beneath
 `/api/v1/entities/{entity_id}`. The last accepts repeated `entry_ids` and the
-existing structured ledger filters. Responses are private, uncached attachments;
+existing structured ledger filters. The browser sends selected IDs and filters in
+a JSON body to `POST .../ledger/selected.csv`, preserving read capability and
+requiring Origin/CSRF, so large selections do not exceed request URL limits.
+Responses are private, uncached attachments;
 failed reads show safe errors and never manufacture a file. Scope/navigation
 changes abort delivery of a pending browser download.
 

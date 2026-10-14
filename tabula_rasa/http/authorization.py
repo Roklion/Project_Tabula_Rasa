@@ -51,6 +51,7 @@ ROUTE_POLICIES = MappingProxyType({
     )},
     'upload_document': RoutePolicy('PUT', 'write'),
     'override_depreciation': RoutePolicy('PUT', 'write'),
+    'prepare_selected_ledger_csv': RoutePolicy('POST', 'read'),
     'preview_allocation': RoutePolicy('POST', 'read'),
     'prepare_transaction_copy': RoutePolicy('POST', 'read'),
     'copy_mixed_use_draft': RoutePolicy('POST', 'read'),

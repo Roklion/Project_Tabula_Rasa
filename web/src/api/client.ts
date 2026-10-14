@@ -131,8 +131,12 @@ export function createApi(fetcher: typeof fetch = (...args) => fetch(...args)) {
       '/api/v1/entities/{entity_id}/exports/transactions.csv', { ...listParams(s, signal), parseAs: 'blob' }))),
     downloadJournalPostingsCsv: (s: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
       '/api/v1/entities/{entity_id}/exports/journal-postings.csv', { ...listParams(s, signal), parseAs: 'blob' }))),
-    downloadSelectedLedgerCsv: (s: Session, entry_ids: string[], filters: { start?: string; end?: string; kind?: 'All' | 'Income' | 'Expense' | 'Transfer' | 'Journal'; account_ids?: string[]; category_ids?: string[]; tag_ids?: string[] } = {}, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
-      '/api/v1/entities/{entity_id}/ledger/selected.csv', { ...listParams(s, signal), params: { path: { entity_id: s.entity.id }, query: { ...filters, entry_ids } }, parseAs: 'blob' }))),
+    downloadSelectedLedgerCsv: (s: Session, entry_ids: string[], filters: { start?: string; end?: string; kind?: 'All' | 'Income' | 'Expense' | 'Transfer' | 'Journal'; account_ids?: string[]; category_ids?: string[]; tag_ids?: string[] } = {}, signal?: AbortSignal) => safe(async () => {
+      const options = { params: { path: { entity_id: s.entity.id } }, headers: headers(s.csrf_token),
+        body: { kind: 'All' as const, account_ids: [], category_ids: [], tag_ids: [], ...filters, entry_ids },
+        signal, parseAs: 'blob' as const };
+      return unwrap(await client.POST('/api/v1/entities/{entity_id}/ledger/selected.csv', options));
+    }),
     updateJournal: (s: Session, id: string, body: Schemas['JournalUpdate']) => safe(async () => unwrap(await client.PATCH(
       '/api/v1/entities/{entity_id}/journals/{record_id}', { ...mutationParams(s, id), body }))),
     deleteJournal: (s: Session, id: string, baseline: string) => safe(async () => unwrap(await client.DELETE(

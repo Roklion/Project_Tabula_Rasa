@@ -1,6 +1,7 @@
 """Read capability, selected scope and bounded safe failures at CSV transport."""
 
 from contextlib import nullcontext
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -96,3 +97,28 @@ def test_empty_csv_downloads_and_provider_failures_do_not_fabricate_data_or_echo
         result = client.get(PREFIX + path)
         assert result.status_code == 503 and result.json()["error"]["code"] == "unavailable"
         assert "PRIVATE" not in result.text and "content-disposition" not in result.headers
+
+
+def test_large_selected_body_retains_read_scope_filters_and_csrf(csv_client):
+    client, runtime, repository = csv_client
+    snapshot = financial_snapshot()
+    rows = tuple(replace(snapshot.transactions[0], id=f"entry-{index:04d}-" + "x" * 32)
+                 for index in range(400))
+    repository.read_ledger.side_effect = None
+    repository.read_ledger.return_value = replace(snapshot, transactions=rows)
+    selection = {"entry_ids": [row.id for row in rows], "kind": "Expense"}
+    headers = {"Origin": "http://testserver", "X-CSRF-Token": "csrf"}
+    result = client.post(PREFIX + FILES[2], json=selection, headers=headers)
+    assert result.status_code == 200
+    assert len(csv_rows(result.content)[1]) == 400
+    assert "?" not in str(result.request.url)
+    assert client.post(PREFIX + FILES[2], json=selection).status_code == 403
+    assert client.post(PREFIX + FILES[2], json={**selection, "kind": "Transfer"},
+                       headers=headers).status_code == 404
+    assert client.post(PREFIX + FILES[2], json={**selection, "entry_ids": ["missing"]},
+                       headers=headers).status_code == 404
+    runtime.entity = "beta"
+    assert client.post(PREFIX + FILES[2], json=selection, headers=headers).status_code == 403
+    runtime.capabilities = frozenset()
+    assert client.post("/api/v1/entities/beta/" + FILES[2], json=selection,
+                       headers=headers).status_code == 403

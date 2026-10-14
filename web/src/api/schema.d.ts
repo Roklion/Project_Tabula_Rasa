@@ -534,7 +534,11 @@ export interface paths {
         /** Selected Csv */
         get: operations["download_selected_ledger_csv"];
         put?: never;
-        post?: never;
+        /**
+         * Selected Csv Body
+         * @description Keep large selections out of request URLs; reuse the same read boundary.
+         */
+        post: operations["prepare_selected_ledger_csv"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2606,6 +2610,36 @@ export interface components {
             account_balances: components["schemas"]["AccountBalance"][];
             balance_sheet: components["schemas"]["BalanceSheet"];
             profit_loss: components["schemas"]["ProfitLoss"];
+        };
+        /** SelectedLedgerCsvRequest */
+        SelectedLedgerCsvRequest: {
+            /**
+             * Account Ids
+             * @default []
+             */
+            account_ids: string[];
+            /**
+             * Category Ids
+             * @default []
+             */
+            category_ids: string[];
+            /** End */
+            end?: string | null;
+            /** Entry Ids */
+            entry_ids: string[];
+            /**
+             * Kind
+             * @default All
+             * @enum {string}
+             */
+            kind: "All" | "Income" | "Expense" | "Transfer" | "Journal";
+            /** Start */
+            start?: string | null;
+            /**
+             * Tag Ids
+             * @default []
+             */
+            tag_ids: string[];
         };
         /** SessionInfo */
         SessionInfo: {
@@ -6404,6 +6438,95 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            /** @description Identity required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Operation denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Duplicate or concurrent change */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Transport or domain validation */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unexpected failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    prepare_selected_ledger_csv: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SelectedLedgerCsvRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

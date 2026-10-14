@@ -10,6 +10,7 @@ from tabula_rasa.application.financial_csv import financial_csv_exports, selecte
 from tabula_rasa.application.reporting_contracts import LedgerFilter
 
 from ..errors import ERROR_RESPONSES
+from ..models.common import DTO
 from .reporting import date_range
 from .services import Context, service_operation
 
@@ -56,3 +57,21 @@ def selected_csv(entity_id: str, request: Request, context: Context,
             tag_ids=tuple(tag_ids or ())), force_refresh=True)
         return csv_response(selected_ledger_csv(query, entry_ids or ()),
                             f"tabula-rasa-selected-{date.today()}.csv")
+
+
+class SelectedLedgerCsvRequest(DTO):
+    entry_ids: list[str]
+    start: date | None = None
+    end: date | None = None
+    kind: Literal["All", "Income", "Expense", "Transfer", "Journal"] = "All"
+    account_ids: list[str] = []
+    category_ids: list[str] = []
+    tag_ids: list[str] = []
+
+
+@router.post("/ledger/selected.csv", operation_id="prepare_selected_ledger_csv",
+             response_class=Response, responses=CSV_RESPONSE)
+def selected_csv_body(entity_id: str, request: Request, context: Context,
+                      selection: SelectedLedgerCsvRequest):
+    """Keep large selections out of request URLs; reuse the same read boundary."""
+    return selected_csv(entity_id, request, context, **selection.model_dump())
