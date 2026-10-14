@@ -27,24 +27,23 @@ export function MapsAddress({ browserKey, regionCode, label, onSelect, onClear }
         ...(regionCode ? { includedRegionCodes: [regionCode] } : {}) });
       element.setAttribute('aria-label', label);
       let selectedText = '';
-      let selecting = false;
       function changed() {
-        if (selecting || (selectedText && selectedText === element.value)) return;
+        if (selectedText && selectedText === element.value) return;
         generation += 1; selectedText = ''; onClear();
         setStatus('Choose a Google suggestion to calculate mileage.');
       }
       async function selected(event: Event) {
         const current = ++generation;
-        selecting = true; onClear(); setStatus('Loading selected address…');
+        const selectionText = element.value;
+        selectedText = selectionText;
+        onClear(); setStatus('Loading selected address…');
         try {
           const place = (event as PlaceSelectEvent).placePrediction.toPlace();
           await place.fetchFields({ fields: ['id'] });
           if (!active || generation !== current) return;
           if (!place.id) { fail(); return; }
-          selectedText = element.value;
-          onSelect({ placeId: place.id, text: selectedText }); setStatus('Address selected. Review the recorded location below.');
+          onSelect({ placeId: place.id, text: selectionText }); setStatus('Address selected. Review the recorded location below.');
         } catch { if (active && generation === current) fail(); }
-        finally { if (generation === current) selecting = false; }
       }
       element.addEventListener('change', changed); element.addEventListener('input', changed);
       element.addEventListener('gmp-select', selected); element.addEventListener('gmp-error', fail);
