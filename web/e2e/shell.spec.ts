@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { captureEvidence, retainEvidence } from './visual-evidence';
 
 const session = {
   actor_id: 'synthetic', organization_id: 'synthetic', entity: { id: 'alpha', name: 'Alpha demonstration' },
@@ -17,6 +18,8 @@ test.beforeEach(async ({ page }) => {
   } }));
   await page.route('**/api/v1/entities/alpha/accounts?*', route => route.fulfill({ json: { items: [] } }));
 });
+
+test.afterEach(async () => { await retainEvidence(test.info()); });
 
 test('deep links, navigation, responsive layout and empty state', async ({ page }) => {
   for (const width of [1440, 1200, 900, 390, 320]) {
@@ -39,7 +42,7 @@ test('deep links, navigation, responsive layout and empty state', async ({ page 
     }
     const accessibility = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
     expect(accessibility.violations).toEqual([]);
-    await page.screenshot({ path: test.info().outputPath('shell-' + width + '.png'), fullPage: true });
+    await captureEvidence(page, test.info(), 'shell-' + width + '.png');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   }
 });

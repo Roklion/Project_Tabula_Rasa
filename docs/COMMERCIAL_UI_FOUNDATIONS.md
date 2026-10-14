@@ -258,3 +258,18 @@ receipt recovery and two-entity isolation. Use the affected commands in the
 commercial guides; current-head hosted CI/reviews remain required on publication.
 This local work does not certify #331 integrated acceptance, #288 hosted/provider/
 rollback/manual devices, #222 identity or #224 external-beta readiness.
+
+## Integrated acceptance and subsequent owner decisions (#331)
+
+[Integrated acceptance](COMMERCIAL_UI_ACCEPTANCE.md) assembles the workstream
+links, current evidence format, before/after review process and manual/release
+boundaries. During owner review, Categories, Payees and Tags were grouped under
+Categories & contacts; they no longer share Transactions’ Entries navigation.
+Reference lists now have one visible page title and named tables. Shared fields
+keep compact date controls at the top beside taller tag lists. These current
+decisions supersede the corresponding earlier wave descriptions above. The owner
+subsequently chose light Soft workspace for forms/tables: pale tinted surfaces,
+soft corners, 40px fine-pointer desktop controls, 44px touch/narrow controls and
+a 960px form/editor width limit. The current commercial palette in `design.md`
+supersedes the historical palette audit above. Final visual/device acceptance
+remains recorded separately in the integrated acceptance guide.

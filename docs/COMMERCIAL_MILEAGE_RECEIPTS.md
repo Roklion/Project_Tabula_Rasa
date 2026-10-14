@@ -18,7 +18,8 @@ wrap on narrow screens and retain the dirty-navigation confirmation. Add trip
 is visible only to writers; detail routes remain associated with the log.
 
 **From**, **To** and **Filter by tags**
-use one inclusive date/tag scope for the table, trip count, business-mile total
+align compact date controls with the top of the multiline tags list on desktop
+and stack on narrow screens. They use one inclusive date/tag scope for the table, trip count, business-mile total
 and **Download filtered mileage CSV**. Multiple selected tags match any selected
 tag. The log preserves date, distance, vehicle, both locations, purpose, notes,
 tags and stable identity. Read-only users can inspect a trip; writers can edit it.
@@ -31,6 +32,8 @@ Save mileage trip is the primary action and Back to records retains the draft
 navigation guard. The log wraps long locations, purpose, notes and tags, aligns
 distance headings/values, and scrolls within its named keyboard-focusable region.
 Tag listboxes expose keyboard guidance and the full selected labels.
+Download filtered mileage CSV has a 16px gap before the log table, keeping the
+action separate from the table header on desktop and narrow layouts.
 
 **Add trip** captures the existing application-service fields. **Round trip**
 initializes an independently editable return distance and creates two independent

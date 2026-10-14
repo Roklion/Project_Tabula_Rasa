@@ -4,7 +4,7 @@
 .context { display: grid; gap: 8px; overflow-wrap: anywhere; }
 .badge { font-size: var(--type-secondary); color: var(--secondary); }
 .navigation, .open { display: grid; gap: 4px; }
-.navigation a, .open a { display: flex; align-items: center; min-height: 44px; padding: 8px 12px; border-radius: 4px; color: var(--secondary); text-decoration: none; }
+.navigation a, .open a { display: flex; align-items: center; min-height: var(--control-height); padding: 8px 12px; border-radius: var(--radius-control); color: var(--secondary); text-decoration: none; }
 .navigation a:hover, .open a:hover { background: var(--hover); }
 .navigation a[aria-current], .open a[aria-current] { background: var(--selected); color: var(--primary); font-weight: var(--weight-heading); border-inline-start: 3px solid currentColor; padding-inline-start: 9px; }
 .menu { display: none; }

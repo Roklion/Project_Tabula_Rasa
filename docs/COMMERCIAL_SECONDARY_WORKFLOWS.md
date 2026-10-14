@@ -25,6 +25,12 @@ below; [UI foundations](COMMERCIAL_UI_FOUNDATIONS.md#wave-2-forms-and-secondary-
 records route coverage and synthetic evidence. Integrated acceptance remains
 #331, independent of hosted #288 and identity/onboarding #314/#317.
 
+List actions use **Manage** for writers opening Assets, Recurring or Mixed-use
+details, which include protected editing and supported commands. Read-only users
+see **View** and retain inspection without mutation controls. Row actions stay
+visible during wide-table scrolling on desktop; names, amounts, secondary details
+and compact text statuses have distinct visual roles without changing permissions.
+
 ## Recurring expenses
 
 Transactions links to **Recurring expenses**. The schedule list shows cadence,

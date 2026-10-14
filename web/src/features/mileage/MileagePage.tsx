@@ -49,7 +49,7 @@ export function MileagePage() {
     </div><ActionButton onClick={() => { setStart(''); setEnd(''); setTagIds([]); }}>Clear filters</ActionButton></section>
     {trips.isPending ? <LoadingState label="Loading mileage…" /> : trips.isError ? <ErrorNotice error={trips.error} operation="read" onReview={() => void trips.refetch()} /> : <>
       <p role="status">Trips: {rows.length} · Business miles: {(rows.reduce((sum, row) => sum + Math.round(Number(row.miles) * 10), 0) / 10).toFixed(1)}</p>
-      <div className="actions"><ActionButton disabled={!rows.length} onClick={download}>Download filtered mileage CSV</ActionButton></div>
+      <div className="actions tableToolbar"><ActionButton disabled={!rows.length} onClick={download}>Download filtered mileage CSV</ActionButton></div>
       {!rows.length ? <EmptyState title="No mileage trips">Add a trip or adjust the filters.</EmptyState> :
         <TableRegion label="Mileage log"><table><caption>Business mileage</caption>
           <thead><tr>{['Date', 'Miles', 'From', 'Destination', 'Business purpose', 'Vehicle', 'Tags', 'Notes', 'ID', 'Actions'].map(label => <th key={label} scope="col" className={label === 'Miles' ? 'amount' : undefined}>{label}</th>)}</tr></thead>

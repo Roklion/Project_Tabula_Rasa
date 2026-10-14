@@ -1,23 +1,26 @@
 :root {
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --canvas: #F5F4F0;
-  --surface-primary: #FFFFFF; --surface-secondary: #FAFAF8;
-  --surface-hover: #F2F3F4; --surface-selected: #EAF0FC;
-  --text-primary: #202124; --text-secondary: #62666B; --text-muted: #85898E;
-  --border-default: #DDDED9; --border-subtle: #E9E9E5; --border-strong: #B8BAB6;
-  --interactive-primary: #3267D6; --interactive-hover: #2858BC; --interactive-focus: #6B96ED;
+  color-scheme: light;
+  --canvas: #EEF2F7;
+  --surface-primary: #F8FAFD; --surface-secondary: #EAF0F8;
+  --surface-control: #EDF2F9; --text-on-primary: #FFFFFF;
+  --surface-hover: #E5EDF8; --surface-selected: #E3ECFD;
+  --text-primary: #223149; --text-secondary: #52627A; --text-muted: #6B7B92;
+  --border-default: #CFDAE9; --border-subtle: #DCE5F0; --border-strong: #7B8DA7;
+  --interactive-primary: #2E60CC; --interactive-hover: #2858BC; --interactive-focus: #6B96ED;
   --success: #287A4B; --success-surface: #EAF5EE;
   --error: #B33A3A; --error-surface: #FBECEC;
   --warning: #996600; --warning-surface: #FFF5D9;
-  --neutral: #62666B; --neutral-surface: #F1F2F1;
+  --neutral: #52627A; --neutral-surface: #E8EDF4;
   --type-app-title: 24px; --type-page-title: 22px; --type-section-title: 16px;
   --type-card-title: 14px; --type-body: 14px; --type-table: 13px;
   --type-secondary: 12px; --type-metric: 28px;
-  --weight-normal: 400; --weight-heading: 600;
+  --weight-normal: 400; --weight-label: 500; --weight-heading: 600;
   --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
   --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px;
-  --radius-control: 4px; --radius-surface: 6px;
-  --control-height: 44px; --table-row-height: 40px;
+  --radius-control: 8px; --radius-surface: 12px;
+  --control-height: 44px; --table-row-height: 44px;
+  --shadow-surface: 0 4px 16px rgb(34 49 73 / 4%);
   /* Compatibility aliases for existing route and shell consumers. */
   --surface: var(--surface-primary); --secondary: var(--text-secondary); --border: var(--border-default);
   --hover: var(--surface-hover); --selected: var(--surface-selected);
@@ -36,11 +39,11 @@ button, input, select, textarea { font: inherit; }
 input[type="file"] { min-width: 0; max-width: 100%; }
 button, .button { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-height: var(--control-height); max-width: 100%; padding: var(--space-2) var(--space-4); border: 1px solid var(--border-strong); border-radius: var(--radius-control); background: var(--surface); cursor: pointer; color: var(--text-primary); text-align: center; overflow-wrap: anywhere; text-decoration: none; }
 button:hover, .button:hover { background: var(--hover); }
-.button, .action-primary { background: var(--primary); color: var(--surface-primary); border-color: var(--primary); }
+.button, .action-primary { background: var(--primary); color: var(--text-on-primary); border-color: var(--primary); }
 .button:hover, .action-primary:hover { background: var(--interactive-hover); border-color: var(--interactive-hover); }
 .action-secondary { background: var(--surface); color: var(--text-primary); border-color: var(--border-strong); }
 .action-secondary:hover { background: var(--hover); border-color: var(--border-strong); }
-.action-destructive { background: var(--error); color: var(--surface-primary); border-color: var(--error); }
+.action-destructive { background: var(--error); color: var(--text-on-primary); border-color: var(--error); }
 .action-destructive:hover { background: var(--error-surface); color: var(--error); border-color: var(--error); }
 button:disabled, button:disabled:hover, .button[aria-disabled="true"], .button[aria-disabled="true"]:hover { cursor: default; opacity: 1; color: var(--neutral); background: var(--neutral-surface); border-color: var(--border-default); }
 /* Dark outline supplies contrast; the lighter design token supplies the halo. */
@@ -54,7 +57,7 @@ button:disabled, button:disabled:hover, .button[aria-disabled="true"], .button[a
 .pageHeader .actions { margin: 0; }
 .sectionHeader { margin-bottom: var(--space-4); }
 .sectionHeader p { color: var(--secondary); margin: 0; overflow-wrap: anywhere; }
-.surface { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-surface); padding: var(--space-4); overflow-wrap: anywhere; min-width: 0; }
+.surface { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-surface); padding: var(--space-4); overflow-wrap: anywhere; min-width: 0; box-shadow: var(--shadow-surface); }
 .surface-secondary { background: var(--surface-secondary); }
 .empty { padding: var(--space-8) 0; border-top: 1px solid var(--border); }
 .notice { padding: var(--space-4); margin: var(--space-4) 0; border-radius: var(--radius-control); overflow-wrap: anywhere; }
@@ -66,9 +69,9 @@ button:disabled, button:disabled:hover, .button[aria-disabled="true"], .button[a
 .error { color: var(--error); background: var(--error-surface); }
 .warning { color: var(--warning); background: var(--warning-surface); }
 .neutral { color: var(--neutral); background: var(--neutral-surface); }
-.field { display: grid; gap: var(--space-2); min-width: 0; }
-.field label { overflow-wrap: anywhere; }
-.field :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { min-height: var(--control-height); min-width: 0; max-width: 100%; width: 100%; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-control); color: var(--text-primary); background: var(--surface-primary); }
+.field { display: grid; align-content: start; gap: var(--space-2); min-width: 0; }
+.field label { overflow-wrap: anywhere; font-weight: var(--weight-label); }
+.field :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { min-height: var(--control-height); min-width: 0; max-width: 100%; width: 100%; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-control); color: var(--text-primary); background: var(--surface-control); }
 /* Native listboxes and textareas are intentionally multi-line controls. */
 .field select[multiple] { min-height: 128px; padding: var(--space-2); }
 .field textarea { min-height: 112px; resize: vertical; }
@@ -78,18 +81,25 @@ button:disabled, button:disabled:hover, .button[aria-disabled="true"], .button[a
 .field :is(input, select, textarea):disabled, fieldset:disabled .field :is(input, select, textarea) { color: var(--neutral); background: var(--neutral-surface); border-color: var(--border-default); }
 .fieldError { color: var(--error); font-size: var(--type-secondary); margin: 0; }
 .standalone { max-width: 640px; margin: var(--space-10) auto; padding: var(--space-6); }
-.tableScroll { overflow-x: auto; max-width: 100%; min-width: 0; }
-table { border-collapse: collapse; width: 100%; background: var(--surface); font-size: var(--type-table); }
-caption { text-align: left; padding: var(--space-4) 0; font-size: var(--type-card-title); font-weight: var(--weight-heading); }
-th, td { height: var(--table-row-height); text-align: left; padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--border-subtle); white-space: nowrap; }
+.tableScroll { overflow-x: auto; max-width: 100%; min-width: 0; background: var(--surface); border: 1px solid var(--border-default); border-radius: var(--radius-surface); }
+table { border-collapse: separate; border-spacing: 0; width: 100%; background: var(--surface); font-size: var(--type-table); }
+caption { text-align: left; padding: var(--space-3) var(--space-4); font-size: var(--type-card-title); font-weight: var(--weight-heading); }
+th, td { height: var(--table-row-height); text-align: left; padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border-subtle); white-space: nowrap; vertical-align: top; }
 thead { background: var(--surface-secondary); }
-thead th { font-weight: var(--weight-heading); }
+thead th { font-size: var(--type-secondary); font-weight: var(--weight-label); color: var(--text-secondary); padding-block: var(--space-3); }
 tbody th, tbody td { font-weight: var(--weight-normal); }
 tbody tr:hover { background: var(--surface-hover); }
 tbody tr[aria-selected="true"] { background: var(--surface-selected); }
+tbody:last-child tr:last-child > * { border-bottom: 0; }
+.recordTitle { display: block; font-size: var(--type-body); font-weight: var(--weight-label); color: var(--text-primary); }
+.recordBadge { display: inline-block; max-width: 100%; padding: var(--space-1) var(--space-2); border-radius: var(--radius-control); background: var(--surface-secondary); color: var(--text-secondary); font-size: var(--type-secondary); font-weight: var(--weight-normal); white-space: normal; overflow-wrap: anywhere; }
+.recordBadges { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-1); }
+.tableToolbar { margin-bottom: var(--space-4); }
 .tableText { min-width: 160px; max-width: 320px; white-space: normal; overflow-wrap: anywhere; }
 .amount, .numeric { text-align: right; font-variant-numeric: tabular-nums; }
+tbody td.amount { font-size: var(--type-body); font-weight: var(--weight-label); }
 .editor { margin: var(--space-4) 0; }
+form.surface, .editor.surface { max-width: 960px; }
 .editor fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: var(--space-4); min-width: 0; }
 .actions { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-6); }
 .recordList { list-style: none; padding: 0; }
@@ -116,6 +126,10 @@ dd { margin: 0 0 var(--space-3); }
 .metric-unavailable, .metric-loading { color: var(--neutral); }
 .postingRow { background: var(--surface-secondary); }
 #business-selector { max-width: 100%; min-height: var(--control-height); }
+@media (min-width: 761px) and (pointer: fine) {
+  :root { --control-height: 40px; }
+  .field :where(input:not([type="checkbox"]):not([type="radio"]), select) { padding-block: 6px; }
+}
 @media (forced-colors: active) {
   :focus-visible { outline-color: Highlight; }
   .field [aria-invalid="true"] { border: 2px solid CanvasText; }
@@ -139,15 +153,25 @@ dd { margin: 0 0 var(--space-3); }
 .tableEmpty { white-space: normal; color: var(--text-secondary); padding-block: var(--space-4); }
 .ledgerFilters { margin-bottom: var(--space-6); }
 .ledgerFilterGrid { grid-template-columns: repeat(6, minmax(0, 1fr)); margin: var(--space-4) 0; align-items: start; }
-.ledgerFilterGrid > .field { grid-column: span 2; align-content: start; }
+.ledgerFilterGrid > .field { grid-column: span 2; }
 .ledgerFilterGrid > .field:has(select[multiple]), .ledgerFilterGrid > .field:has(#sort-field), .ledgerFilterGrid > .field:has(#entry-order) { grid-column: span 3; }
 .ledgerSearch { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-2); }
 .ledgerSearch .field { flex: 1 1 220px; }
 .filterActions { margin-top: var(--space-4); }
 .ledgerTable .tableText { min-width: 140px; max-width: 280px; }
-.ledgerIdentity { white-space: normal; overflow-wrap: anywhere; min-width: 160px; max-width: 220px; }
-.tableActions { min-width: 180px; max-width: 240px; white-space: normal; }
+.ledgerIdentity { white-space: normal; overflow-wrap: anywhere; min-width: 160px; max-width: 220px; font-size: var(--type-secondary); color: var(--text-secondary); }
+.tableActions { min-width: 140px; max-width: 220px; width: 1%; white-space: normal; }
 .rowActions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.rowActions .action-secondary { min-height: 36px; padding: var(--space-1) var(--space-2); background: transparent; border-color: transparent; color: var(--primary); font-weight: var(--weight-label); }
+.rowActions .action-secondary:hover { background: var(--selected); border-color: transparent; }
+.rowActions .action-secondary:disabled { color: var(--neutral); background: var(--neutral-surface); }
+.rowActions a:not(.button) { display: inline-flex; align-items: center; min-height: 36px; padding: var(--space-1) var(--space-2); }
+@media (min-width: 1000px) {
+  .tableActions { position: sticky; right: 0; z-index: 1; background: var(--surface-primary); box-shadow: -1px 0 0 var(--border-subtle); }
+  thead .tableActions { background: var(--surface-secondary); }
+  tbody tr:hover > .tableActions { background: var(--surface-hover); }
+  tbody tr[aria-selected="true"] > .tableActions { background: var(--surface-selected); }
+}
 .journalGroup { border-top: 2px solid var(--border-strong); }
 .journalGroup > tr:first-child > th { font-weight: var(--weight-heading); }
 .postingRow th { color: var(--text-secondary); }
@@ -155,12 +179,16 @@ dd { margin: 0 0 var(--space-3); }
   .ledgerFilterGrid { grid-template-columns: minmax(0, 1fr); }
   .ledgerFilterGrid > .field, .ledgerFilterGrid > .field:has(select[multiple]), .ledgerFilterGrid > .field:has(#sort-field), .ledgerFilterGrid > .field:has(#entry-order) { grid-column: 1; }
 }
+@media (max-width: 760px), (pointer: coarse) {
+  .rowActions .action-secondary, .rowActions a:not(.button) { min-height: 44px; }
+}
 
 .ledgerFilterGrid select[multiple] { height: calc(4 * var(--space-8)); }
 .ledgerFilterGrid select[multiple] option { white-space: normal; overflow-wrap: anywhere; }
 
 /* Shared form and detail layouts; workflow owners retain all state and commands. */
 .formSection { min-width: 0; border-top: 1px solid var(--border-subtle); padding-top: var(--space-4); }
+.editor fieldset > .formSection:first-child { border-top: 0; padding-top: 0; }
 .formSectionHeader { margin-bottom: var(--space-4); }
 .formSectionHeader p { color: var(--text-secondary); margin: 0; }
 .formSection .formGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 0; align-items: start; }
