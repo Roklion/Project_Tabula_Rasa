@@ -13,6 +13,10 @@ from tabula_rasa.application.documents import DocumentError, DocumentNotFoundErr
 
 
 ERRORS = {
+    'reauthentication_required': (403, 'Sign in again to continue. Re-enter any invitation credential after login.'),
+    'invitation_invalid': (403, 'This invitation is unavailable for this signed-in user.'),
+    'invitation_used': (409, 'This invitation has already been redeemed, declined or revoked. Ask for a new invitation.'),
+    'invitation_expired': (410, 'This invitation has expired. Ask for a new invitation.'),
     "validation": (422, "Check the submitted fields."),
     "not_found": (404, "The requested resource was not found."),
     "conflict": (409, "The operation conflicts with the current record."),

@@ -283,6 +283,11 @@ authorize external beta under #124/#224.
 
 ## Evidence and outstanding decisions
 
+Wave 3's executable switching, operator-distributed invitations, membership and
+atomic bootstrap contract is documented in [Workspace lifecycle](WORKSPACE_LIFECYCLE.md).
+Its synthetic native/browser checks do not replace #317's full onboarding,
+#318/#319 connection/mapping work or #320/#321 hosted/initiative acceptance.
+
 #310 supplies the ADR, capability policy, executable-test requirements and
 operator/handoff contract. Local documentation/link validation and regression
 checks verify consistency with existing seams, not real authentication or

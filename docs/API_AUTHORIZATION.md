@@ -76,10 +76,10 @@ blank restore targets and live-target refusal. Never pass arbitrary client
 capability strings to `authorize_action`.
 
 Internal control-plane repository methods remain trusted building blocks.
-There is no HTTP membership/ownership administration in this slice. #315 must
-enforce target-role restrictions and fresh authentication at its mutation
-boundary; existing native constraints already serialize last-active-owner
-changes. Unclaimed entities have no membership-derived access, and canonical
+[Workspace lifecycle](WORKSPACE_LIFECYCLE.md) now supplies #315's HTTP
+membership/ownership administration with target-role restrictions, recent
+authentication for ownership changes and native last-active-owner constraints.
+Unclaimed entities have no membership-derived access, and canonical
 ownership constraints prevent ambiguous cross-organization associations.
 
 ## Exposed operation inventory
@@ -108,6 +108,16 @@ user-wide revocation receive central session/CSRF checks before their handlers,
 using the same validator and immutable request-local session snapshot. They do
 not require bookkeeping-write permission. Needs-setup
 sessions can inspect identity and sign out without composing an unscoped ledger.
+Workspace/bootstrap/invitation operations also receive central named-session
+and Origin/CSRF checks without requiring an active selected business. Their
+application/repository boundary checks the target organization's current
+membership and role before binding a ledger or changing control-plane records.
+Member/invitation listing requires Owner/Admin; membership edits use a loaded
+authorization version; ownership grants are separate Owner-only commands with
+fresh authentication. Bootstrap fixes new ownership to the acting user and
+requires `entity:manage` for an additional business in an existing organization.
+Authenticated invitation acceptance/decline uses the session's freshly verified
+recipient email plus current inviter grant authority, expiry and single use.
 The logout-context endpoint returns only the HttpOnly logout synchronizer copy,
 never identity, membership or bookkeeping authority. Logout retains its
 documented local-clearing behavior during a storage outage
@@ -115,9 +125,9 @@ without claiming confirmed server revocation. Framework API docs/OpenAPI keep
 their existing protected middleware; health/version and the public browser
 shell contain no private bookkeeping data.
 
-Complete bookkeeping export/import, entity setup, backup/list/download,
+Complete bookkeeping export/import, backup/list/download,
 archive recovery/restore, migration/cutover/reset, credentials/connections,
-organization/profile administration and audit/support are **not exposed HTTP
+legacy profile administration and audit/support are **not exposed HTTP
 operations in this revision**. Existing operator CLIs remain internal and keep
 their current independent target, maintenance, evidence and approval boundaries.
 No role check turns them into public endpoints. Later HTTP/worker/support slices

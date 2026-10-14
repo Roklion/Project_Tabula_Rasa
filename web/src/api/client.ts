@@ -30,6 +30,11 @@ export function unwrap<T>(result: { data?: T; error?: Envelope; response: Respon
   return result.data;
 }
 
+function confirmEmpty(result: { error?: Envelope; response: Response }) {
+  // Preserve the same identity-loss notification for successful-empty commands.
+  if (result.error || !result.response.ok) unwrap(result);
+}
+
 export function createApi(fetcher: typeof fetch = (...args) => fetch(...args)) {
   // Relative same-origin URLs only. Credentials/identity never enter localStorage.
   const client = createClient<paths>({ fetch: fetcher, credentials: 'same-origin' });
@@ -63,6 +68,25 @@ export function createApi(fetcher: typeof fetch = (...args) => fetch(...args)) {
       if (!result.response.ok) throw new ApiError(result.error?.error.code ?? 'unavailable');
     }),
     entities: (signal?: AbortSignal) => safe(async () => unwrap(await client.GET('/api/v1/entities', { signal, headers: headers() }))),
+    bootstrapWorkspace: (s: SessionState, body: Schemas['BootstrapRequest']) => safe(async () => unwrap(await client.POST('/api/v1/workspaces/bootstrap', { body, headers: headers(s.csrf_token) }))),
+    bootstrapBusiness: (s: Session, body: Schemas['BootstrapRequest']) => safe(async () => unwrap(await client.POST('/api/v1/workspaces/{organization_id}/businesses', { params: { path: { organization_id: s.organization_id } }, body, headers: headers(s.csrf_token) }))),
+    bootstrapStatus: (request_id: string, signal?: AbortSignal) => safe(async () => unwrap(await client.GET('/api/v1/workspaces/bootstrap/{request_id}', { params: { path: { request_id } }, signal, headers: headers() }))),
+    members: (s: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET('/api/v1/workspaces/{organization_id}/members', { params: { path: { organization_id: s.organization_id } }, signal, headers: headers() }))),
+    invitations: (s: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET('/api/v1/workspaces/{organization_id}/invitations', { params: { path: { organization_id: s.organization_id } }, signal, headers: headers() }))),
+    invite: (s: Session, body: Schemas['InviteRequest']) => safe(async () => unwrap(await client.POST('/api/v1/workspaces/{organization_id}/invitations', { params: { path: { organization_id: s.organization_id } }, body, headers: headers(s.csrf_token) }))),
+    changeMember: (s: Session, user_id: string, body: Schemas['MemberChange']) => safe(async () => {
+      const result = await client.PATCH('/api/v1/workspaces/{organization_id}/members/{user_id}', { params: { path: { organization_id: s.organization_id, user_id } }, body, headers: headers(s.csrf_token) });
+      confirmEmpty(result);
+    }),
+    grantOwnership: (s: Session, user_id: string, authorization_version: number) => safe(async () => {
+      const result = await client.POST('/api/v1/workspaces/{organization_id}/members/{user_id}/ownership', { params: { path: { organization_id: s.organization_id, user_id } }, body: { authorization_version }, headers: headers(s.csrf_token) });
+      confirmEmpty(result);
+    }),
+    revokeInvitation: (s: Session, invitation_id: string) => safe(async () => {
+      const result = await client.DELETE('/api/v1/workspaces/{organization_id}/invitations/{invitation_id}', { params: { path: { organization_id: s.organization_id, invitation_id } }, headers: headers(s.csrf_token) });
+      confirmEmpty(result);
+    }),
+    respondInvitation: (s: SessionState, credential: string, accept: boolean) => safe(async () => unwrap(await client.POST('/api/v1/invitations/respond', { body: { credential, accept }, headers: headers(s.csrf_token) }))),
     selectEntity: (s: Session, entity_id: string) => safe(async () => unwrap(await client.POST('/api/v1/session/entity',
       { body: { entity_id }, headers: headers(s.csrf_token) }))),
     accounts: (session: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(

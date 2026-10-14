@@ -5,14 +5,16 @@ import { ScopeBoundary } from './ScopeBoundary';
 import { EntitySelectionContext } from './entitySelectionContext';
 import { AuthContext } from './authContext';
 import { ActionButton, PageHeader } from '../components/VisualPrimitives';
+import { InvitationAcceptance } from '../features/identity/WorkspacePage';
 
 const authorityKey = (session: SessionState) => JSON.stringify([session.actor_id, session.cache_scope,
   session.organization_id, session.entity?.id, session.capabilities]);
 
-export function ContextBoundary({ children }: { children: ReactNode }) {
+export function ContextBoundary({ children, onScopeChange }: { children: ReactNode; onScopeChange?: () => void }) {
   const [state, setState] = useState<{ session?: SessionState; error?: unknown; signedOut?: boolean }>(
     () => window.location.pathname === '/signed-out' ? { signedOut: true } : {});
   const identityGeneration = useRef(0);
+  const resetRoute = useRef(false);
   const authChannel = useRef<BroadcastChannel | undefined>(undefined);
   // Retain no private identity/entity data after a failed authority check.
   const logoutContext = useRef<{ csrf_token: string } | undefined>(undefined);
@@ -22,11 +24,22 @@ export function ContextBoundary({ children }: { children: ReactNode }) {
   const [switching, setSwitching] = useState(false);
   const [selectionError, setSelectionError] = useState<unknown>();
   useEffect(() => {
+    if (resetRoute.current && state.session) {
+      resetRoute.current = false;
+      onScopeChange?.();
+    }
+  }, [state.session, onScopeChange]);
+  useEffect(() => {
     // Listen while initial/retry loading is pending, too: a late response must
     // not restore private authority after another tab has signed out.
     const channel = typeof BroadcastChannel === 'undefined' ? undefined : new BroadcastChannel('tabula-auth');
     authChannel.current = channel;
     if (channel) channel.onmessage = event => {
+      if (event.data === 'scope-changed') {
+        resetRoute.current = true;
+        identityGeneration.current++; setEntities([]); setState({}); setGeneration(value => value + 1);
+        return;
+      }
       if (event.data !== 'signed-out') return;
       logoutContext.current = undefined;
       identityGeneration.current++; setEntities([]); setEntityError(undefined); setSelectionError(undefined);
@@ -43,13 +56,16 @@ export function ContextBoundary({ children }: { children: ReactNode }) {
       if (checking || document.visibilityState === 'hidden') return;
       checking = true;
       try {
-        const session = await api.session(controller.signal);
+        const [session, choices] = await Promise.all([api.session(controller.signal), api.entities(controller.signal)]);
         if (!controller.signal.aborted && expected === identityGeneration.current) {
           if (authorityKey(session) !== authorityKey(state.session!)) {
+            resetRoute.current = true;
             identityGeneration.current++;
             setEntities([]); setEntityError(undefined); setSelectionError(undefined);
+            setGeneration(value => value + 1);
           }
           logoutContext.current = { csrf_token: session.csrf_token };
+          setEntities(choices.items); setEntityError(undefined);
           setState({ session });
         }
       } catch (error) {
@@ -125,20 +141,37 @@ export function ContextBoundary({ children }: { children: ReactNode }) {
   if (!state.session) return <main className="standalone"><LoadingState label="Loading business context…" /></main>;
   if (state.session.state === 'needs_setup') return <main className="standalone"><section className="surface"><PageHeader title="Workspace setup required"
     description="You are signed in, but no active business is selected. Ask your organization owner to arrange access." />
+    <InvitationAcceptance session={state.session} />
     <div className="actions"><ActionButton onClick={() => void logout()}>Sign out</ActionButton></div></section></main>;
   async function select(id: string) {
     if (!state.session || state.session.state === 'needs_setup') return;
     setSwitching(true);
+    if (!state.session.trusted_development) identityGeneration.current++;
     const expected = identityGeneration.current;
     setSelectionError(undefined);
+    setEntityError(undefined);
     try {
       const session = await api.selectEntity(state.session, id);
       if (expected === identityGeneration.current) {
+        resetRoute.current = true;
         logoutContext.current = { csrf_token: session.csrf_token };
         setState({ session });
+        if (!session.trusted_development) {
+          setEntities([]);
+          void api.entities().then(
+            result => { if (expected === identityGeneration.current) setEntities(result.items); },
+            error => { if (expected === identityGeneration.current) setEntityError(error); },
+          );
+        }
+        authChannel.current?.postMessage('scope-changed');
       }
     }
-    catch (error) { setSelectionError(error); }
+    catch (error) {
+      if (expected === identityGeneration.current) {
+        if (!state.session.trusted_development) setState({ error });
+        else setSelectionError(error);
+      }
+    }
     finally { setSwitching(false); }
   }
   return <AuthContext.Provider value={{ logout: () => void logout() }}><EntitySelectionContext.Provider value={{ items: entities, select, pending: switching }}>
@@ -147,9 +180,9 @@ export function ContextBoundary({ children }: { children: ReactNode }) {
       <p>Business switching could not be confirmed. Your current business and draft are preserved.</p>
       <ErrorNotice error={selectionError} />
     </div>}
-    {entityError !== undefined && state.session.trusted_development && <div className="standalone">
+    {entityError !== undefined && <div className="standalone">
       <p>Business choices could not be loaded.</p><ErrorNotice error={entityError} onReview={() => window.location.reload()} />
     </div>}
-    <div inert={switching}><ScopeBoundary session={state.session}>{children}</ScopeBoundary></div>
+    {!(switching && !state.session.trusted_development) && <div inert={switching}><ScopeBoundary session={state.session}>{children}</ScopeBoundary></div>}
   </EntitySelectionContext.Provider></AuthContext.Provider>;
 }

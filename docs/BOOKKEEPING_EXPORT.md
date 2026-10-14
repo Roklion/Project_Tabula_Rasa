@@ -4,7 +4,9 @@ Revision `0005_bookkeeping_cutover` adds operator authority/evidence controls
 outside the portable bookkeeping inventory. Revisions
 `0006_identity_control_plane` and `0007_identity_sessions` add separate identity
 and durable authentication tables, also outside this inventory. Revision
-`0008_owner_lock_scope` changes only identity trigger scope, not the inventory.
+`0008_owner_lock_scope` changes only identity trigger scope, and
+`0009_workspace_lifecycle` adds only control-plane lifecycle records; neither
+changes the bookkeeping inventory.
 Existing v1 exports from
 `0004_mileage_order` remain valid; the exporter reports the observed supported
 revision and validates the same exact collection/field coverage. Migrated
@@ -79,7 +81,7 @@ completeness, relationships and accounting meaning beyond JSON Schema.
 | Manifest field | Meaning |
 | --- | --- |
 | `format`, `format_version` | `tabula-rasa-bookkeeping`, integer `1`; independent of Sheets/archive format 13 |
-| `database_schema_version` | Observed supported PostgreSQL revision (`0004_mileage_order` through `0008_owner_lock_scope`; all have the same v1 bookkeeping inventory, excluding identity/session records) |
+| `database_schema_version` | Observed supported PostgreSQL revision (`0004_mileage_order` through `0009_workspace_lifecycle`; all have the same v1 bookkeeping inventory, excluding identity/session/lifecycle records) |
 | `entity_id` | Explicit selected business entity; also present on every entity-local record |
 | `snapshot_at` | Database transaction-start instant in UTC; all reads use that transaction's coherent snapshot |
 | `counts` | Count for every included canonical collection, including zero counts |

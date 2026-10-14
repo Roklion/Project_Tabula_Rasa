@@ -17,6 +17,10 @@ attach organization ownership to retained canonical entities and add durable
 authentication state without copying or rebaselining ledger records. Revision
 `0008_owner_lock_scope` narrows user owner locks to state updates/deletion,
 preserving membership and last-active-owner invariants. These revisions are
+extended by `0009_workspace_lifecycle`, which adds recipient-bound invitations,
+bootstrap idempotency receipts and server-verified session email while retaining
+the bookkeeping inventory. See [Workspace lifecycle](WORKSPACE_LIFECYCLE.md).
+Identity revisions are
 forward-only: recover with an approved compatible procedure instead of a
 destructive identity downgrade. See [Named-user authentication](NAMED_USER_AUTH.md).
 

@@ -41,6 +41,9 @@ class PostgresRuntime:
         self.resolve_context = resolver
         self.service_factory = service_factory
         self.identity = identity
+        from tabula_rasa.application.workspaces import WorkspaceService
+        from tabula_rasa.infrastructure.postgres.workspaces import PostgresWorkspaceRepository
+        self.workspaces = WorkspaceService(PostgresWorkspaceRepository(database)) if identity is not None else None
 
     def services(self, context) -> ApplicationServices:
         with translate_database_errors():

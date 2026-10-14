@@ -38,7 +38,8 @@ def list_entities(request: Request):
     runtime = request.app.state.runtime
     if getattr(runtime, "identity", None) is not None:
         session = runtime.identity.authenticated(request)
-        return EntityList(items=[EntityInfo(id=item.entity_id, name=item.name)
+        return EntityList(items=[EntityInfo(id=item.entity_id, name=item.name,
+                                    organization_id=item.organization_id, organization_name=item.organization_name, role=item.role)
                                 for item in runtime.identity.sessions.identity.allowed_entities(session.user_id)])
     context = resolve_context(request)
     with runtime.operation():
