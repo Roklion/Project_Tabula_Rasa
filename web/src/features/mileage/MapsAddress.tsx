@@ -43,8 +43,8 @@ export function MapsAddress({ browserKey, regionCode, label, onSelect, onClear }
           if (!place.id) { fail(); return; }
           selectedText = element.value;
           onSelect({ placeId: place.id, text: selectedText }); setStatus('Address selected. Review the recorded location below.');
-        } catch { fail(); }
-        finally { selecting = false; }
+        } catch { if (active && generation === current) fail(); }
+        finally { if (generation === current) selecting = false; }
       }
       element.addEventListener('change', changed); element.addEventListener('input', changed);
       element.addEventListener('gmp-select', selected); element.addEventListener('gmp-error', fail);
