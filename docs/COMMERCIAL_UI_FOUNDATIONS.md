@@ -220,12 +220,12 @@ included even when they have no independent URL.
 | `/recurring`, `/recurring/new`, `/recurring/:recordId` | #330 future-only edits, occurrence history and confirmed generation/transitions |
 | `/mileage`, `/mileage/new`, `/mileage/:recordId` | #330 manual log/create/protected or read-only detail, filters/totals/CSV; #326 workflow navigation |
 | `/transactions/:recordId/receipts` | #330 linked/attach/recovery, read-only, unavailable and partial-failure surfaces; source-owned receipts remain with their functional owners |
-| `/data` | #330 explicit current availability; absent browser imports/backups remain excluded and keep their initiative workflow owners |
+| `/data` | #357/#364 provide three authorized import workflows; browser backups remain outside this slice |
 | Unknown route / route-error fallback | #329 shared headers and recovery/navigation treatment |
 | Shell/menu/entity selector/Terms/Privacy links | #326 shell; static legal documents keep their existing server owner and content; no legal or authorization change |
 | Signed-out (`/signed-out` or unauthorized route), session-unavailable and setup-required states | #312 `ContextBoundary` retains identity/session ownership; #330 applies shared headers, surfaces and native Sign in/Sign out controls, preserving private-view unmount and receipt-abort guards |
 | Complete authorized workspace/entity switching and first-use onboarding screens | #314/#317 remain open at the integration baseline; unfinished journeys are excluded, and their functional owners must consume the shared primitives when delivered. External OIDC-provider pages retain their provider owner |
-| Maps, internal administration/provider secrets, internal-only imports/copy/bulk/report catalogs and source receipt workflows | Existing unsupported commercial workflows are explicitly excluded; the initiative's preservation/port owners remain responsible, and this visual slice does not retire the internal edition |
+| Maps, internal administration/provider secrets, remaining internal-only report catalogs and source receipt workflows | Unsupported commercial workflows retain their initiative owners; #357/#358/#362/#364 now provide the documented import/copy/bulk/conversion ports, and this visual slice does not retire the internal edition |
 
 ### Evidence and affected checks
 

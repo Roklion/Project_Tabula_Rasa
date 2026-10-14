@@ -4,11 +4,11 @@ import { ActionButton, PageHeader, SectionHeader } from '../../components/Visual
 import { ErrorNotice, LoadingState } from '../../components/States';
 import { useCsvDownload } from './useCsvDownload';
 
-export function FinancialCsvExports() {
+export function FinancialCsvExports({ embedded = false }: { embedded?: boolean }) {
   const session = useEntity();
   const transfer = useCsvDownload();
   const today = new Date().toISOString().slice(0, 10);
-  return <><PageHeader title="Data & backup" description={`Downloads for ${session.entity.name}.`} /><section className="surface" aria-label="Financial CSV exports">
+  return <>{!embedded && <PageHeader title="Data & backup" description={`Downloads for ${session.entity.name}.`} />}<section className="surface" aria-label="Financial CSV exports">
     <SectionHeader title="Exports" description={`Financial CSV downloads for ${session.entity.name}.`} />
     <p>Transactions and journal postings are separate CSVs. Each download reads the current business's ledger, including inactive accounts. An empty ledger produces column headings.</p>
     <div className="actions">

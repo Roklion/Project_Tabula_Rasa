@@ -7,6 +7,7 @@ from tabula_rasa.mixed_use import validate_mixed_use_allocation
 from tabula_rasa.reference_data import clean_text
 from tabula_rasa.transaction import RECURRING_FIELDS
 from tabula_rasa.errors import StorageValidationError
+from tabula_rasa.copying import copied_transaction_description
 
 from .mixed_use_contracts import MixedUseRepository
 from .transactions import TransactionService
@@ -32,6 +33,20 @@ class MixedUseService:
 
     def allocation(self, total_expense, business_use_percentage):
         return validate_mixed_use_allocation(total_expense, business_use_percentage)
+
+    def copy_draft(self, source_id):
+        """Freeze a fresh complete pair as an independent receipt-free create."""
+        source = self.get(source_id, fresh=True)
+        fields = ('txn_date', 'account_id', 'category_id', 'payee_id', 'tag_ids',
+                  'description', 'reference', 'total_expense',
+                  'business_use_percentage', 'allocation_rationale')
+        draft = self._transactions.copy_associations(
+            {field: source[field] for field in fields}
+        )
+        draft.update(source_id=str(uuid4()), linked_transaction_id=str(uuid4()),
+                     copied_from_source_id=source['id'],
+                     description=copied_transaction_description(source))
+        return draft
 
     def prepare_pair(self, data, references, **options):
         return prepare_mixed_use_expense(
@@ -64,6 +79,11 @@ class MixedUseService:
 
     def _create(self, data, *, recurring, expected_schedule=None):
         data = dict(data)
+        copied_from = clean_text(data.pop('copied_from_source_id', ''), 'Copy source ID')
+        if copied_from:
+            data['description'] = copied_transaction_description(
+                {'id': copied_from, 'description': data.get('description', '')}
+            )
         data["source_id"] = clean_text(
             data.get("source_id", data.get("id")), "Mixed-use source ID"
         ) or str(uuid4())

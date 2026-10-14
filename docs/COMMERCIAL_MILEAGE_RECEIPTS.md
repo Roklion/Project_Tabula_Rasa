@@ -52,8 +52,7 @@ deployment-wide Maps lookup and transient route calculation; explicit review
 and confirmation update the editable draft before Save persists confirmed
 records. #361 extends the same receipt controls to mixed-use source ownership.
 See [workflow ports](COMMERCIAL_WORKFLOW_PORTS.md) for their transport,
-configuration, conflict and verification contracts. QuickBooks mileage import
-remains separately tracked by #364.
+configuration, conflict and verification contracts. QuickBooks mileage preview/import under #364 is also available in Data & backup.
 
 The entity-qualified transport provides:
 

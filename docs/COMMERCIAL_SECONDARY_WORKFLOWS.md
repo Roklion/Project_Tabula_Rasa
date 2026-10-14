@@ -72,8 +72,7 @@ with the original source baseline required for linking/removing references.
 Source and projection retain one receipt set; generic transaction receipt
 endpoints refuse derived rows. Recurring templates do not own receipts; generated
 sources own their own set. See [workflow ports](COMMERCIAL_WORKFLOW_PORTS.md) for
-recovery, conflicts and validation. Copy and Expense-to-recurring conversion
-remain separately tracked by #362.
+recovery, conflicts and validation. Independent source copy and ordinary Expense-to-recurring conversion are also available under #362; their preparation, baseline and recovery contracts are documented in the same workflow guide.
 
 ## Assets and depreciation
 

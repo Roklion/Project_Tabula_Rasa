@@ -101,6 +101,9 @@ HTTP method. No unsafe-method-to-write fallback exists for registered routes.
 | Recurring create/update, explicit reconciliation and state transition | `write` |
 | Asset types/list/detail | `read` |
 | Assets create/update/delete, explicit depreciation posting and override changes | `write` |
+| Transaction/mixed-use copy draft preparation | `read` |
+| Transaction bulk update/delete and Expense-to-recurring conversion | `write` |
+| Transaction CSV, QuickBooks transactions and mileage preparation/preview/import | `import` |
 
 Login and callback are the only public authentication protocol operations.
 Session inspection, permitted-entity discovery/selection, activity and
@@ -115,7 +118,7 @@ without claiming confirmed server revocation. Framework API docs/OpenAPI keep
 their existing protected middleware; health/version and the public browser
 shell contain no private bookkeeping data.
 
-Complete bookkeeping export/import, entity setup, backup/list/download,
+Complete bookkeeping export, entity setup, backup/list/download,
 archive recovery/restore, migration/cutover/reset, credentials/connections,
 organization/profile administration and audit/support are **not exposed HTTP
 operations in this revision**. Existing operator CLIs remain internal and keep

@@ -33,6 +33,7 @@ h3 { font-size: var(--type-card-title); margin: 0 0 var(--space-2); }
 p { margin: 0 0 var(--space-4); }
 a { color: var(--primary); overflow-wrap: anywhere; }
 button, input, select, textarea { font: inherit; }
+input[type="file"] { min-width: 0; max-width: 100%; }
 button, .button { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-height: var(--control-height); max-width: 100%; padding: var(--space-2) var(--space-4); border: 1px solid var(--border-strong); border-radius: var(--radius-control); background: var(--surface); cursor: pointer; color: var(--text-primary); text-align: center; overflow-wrap: anywhere; text-decoration: none; }
 button:hover, .button:hover { background: var(--hover); }
 .button, .action-primary { background: var(--primary); color: var(--surface-primary); border-color: var(--primary); }

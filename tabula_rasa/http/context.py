@@ -39,7 +39,7 @@ class TrustedDevelopmentContext:
         self.hosted = hosted
         self.context = RequestContext(
             "synthetic-operator", "synthetic", entity_id,
-            frozenset({"bookkeeping:read", "bookkeeping:write"}),
+            frozenset({"bookkeeping:read", "bookkeeping:write", "bookkeeping:import"}),
             "development:" + entity_id, csrf_token, True,
         )
         from dataclasses import replace
