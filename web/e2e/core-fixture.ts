@@ -1,6 +1,6 @@
 export const session = {
   actor_id: 'synthetic', organization_id: 'synthetic', entity: { id: 'alpha', name: 'Alpha demonstration' },
-  capabilities: ['bookkeeping:read', 'bookkeeping:write'], cache_scope: 'core-alpha', csrf_token: 'synthetic', trusted_development: true,
+  capabilities: ['bookkeeping:read', 'bookkeeping:write', 'bookkeeping:import'], cache_scope: 'core-alpha', csrf_token: 'synthetic', trusted_development: true,
 };
 export const longName = 'Operating account with a deliberately long synthetic label for field and table wrapping';
 export const account = { id: 'account', name: longName, type: 'Bank', classification: 'Asset', opening_balance: '0.00', parent_id: null, active: true, baseline: 'synthetic' };

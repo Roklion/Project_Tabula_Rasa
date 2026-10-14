@@ -1,7 +1,7 @@
 export const longName = 'Synthetic business label with deliberately long words for responsive fields and management records';
 export const longId = 'synthetic-record-identity-with-long-stable-provenance-0123456789';
 export const session = { actor_id: 'synthetic', organization_id: 'synthetic', entity: { id: 'alpha', name: 'Alpha demonstration' },
-  capabilities: ['bookkeeping:read', 'bookkeeping:write'], cache_scope: 'forms-secondary-alpha', csrf_token: 'synthetic', trusted_development: true };
+  capabilities: ['bookkeeping:read', 'bookkeeping:write', 'bookkeeping:import'], cache_scope: 'forms-secondary-alpha', csrf_token: 'synthetic', trusted_development: true };
 export const account = { id: 'account', name: longName, type: 'Bank', classification: 'Asset', opening_balance: '0.00', parent_id: null, active: true, baseline: 'loaded-account' };
 export const accumulated = { ...account, id: 'accumulated', name: 'Accumulated depreciation', type: 'Other' };
 export const category = { id: 'category', name: 'Synthetic expense category with a long descriptive label', kind: 'Expense', parent_id: null, baseline: 'loaded-category' };
@@ -35,6 +35,7 @@ export function secondaryResponse(url: URL, capabilities = session.capabilities)
     const json = path.endsWith('/session') ? { ...session, capabilities } : path === '/api/v1/entities' ? { items: [session.entity] }
       : path.endsWith('/accounts') ? { items: [account, accumulated] } : path.endsWith('/categories') ? { items: [category] }
         : path.endsWith('/payees') || path.endsWith('/tags') ? { items: references } : path.endsWith('/transactions') ? { items: [transaction] }
+          : path.endsWith('/mixed-use/mixed/copy-draft') ? { ...mixed, source_id: 'synthetic-copy-source', linked_transaction_id: 'synthetic-copy-projection', new_payee_name: '', new_tag_name: '' }
           : path.endsWith('/mixed-use/allocation') ? { allocated_amount: '740.74' } : path.endsWith('/mixed-use/mixed') ? mixed : path.endsWith('/mixed-use') ? { items: [mixed] }
             : path.endsWith('/recurring/recurring') ? { schedule: recurring, occurrences: [{ ...transaction, id: longId, recurring_occurrence_type: 'initial', recurring_scheduled_date: '2026-10-01', source_id: '' }] }
               : path.endsWith('/recurring') ? { items: [recurring] } : path.endsWith('/assets/types') ? { items: ['Equipment'] }

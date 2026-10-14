@@ -149,7 +149,18 @@ commands and loaded baselines remain unchanged.
 The final spacing/badge feedback adds a 16px gap below mileage CSV download and
 separate Expense / Mixed-use pills, retaining the existing combined accessible
 row name and source-owned mutation boundary.
-**Integrated visual sign-off is pending re-review of this implementation.**
+The maintainer accepted the revised visual appearance in this chat on October 13,
+2026, after the final spacing and separate-pill feedback. This is retained human
+visual acceptance of the synthetic preview, independently of automated success.
+Post-integration acceptance also includes current main `97dc8d5` (merged PR #367):
+its three import uploaders, mixed-use copy and expense-to-recurring screens reuse
+the current fields/tables. Existing ledger bulk/copy selection, baseline and
+uncertain-write owners were preserved through the ledger conflict resolution.
+The new representative route captures cover desktop/390px/320px; native tests
+remain responsible for imports/copy/bulk success, failure and isolation behavior.
+
+**Visual appearance accepted; detailed device/accessibility and hosted CI/review
+completion remain separate.**
 Actual manual browser/device versions, zoom,
 touch, keyboard and contrast observations have not been supplied, so that
 specific acceptance is also pending. No material visual defect is declared an

@@ -43,6 +43,25 @@ async function capture(page: Page, name: string, accessibility = true) {
 test.beforeEach(async ({ page }) => { await transport(page); });
 test.afterEach(async () => { await retainEvidence(test.info()); });
 
+test('current main import copy and conversion routes consume the shared light presentation', async ({ page }) => {
+  test.setTimeout(90_000);
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+    for (const [name, path, heading] of [
+      ['data-imports', '/data', 'Data & backup'], ['mixed-copy', '/mixed-use/mixed/copy', 'Copy mixed-use expense'],
+      ['expense-recurring', '/transactions/transaction/recurring', 'Make expense recurring'],
+    ] as const) {
+      await page.goto(path);
+      await expect(page.getByRole('heading', { name: heading, exact: true }).first()).toBeVisible();
+      await expect(page.getByRole('status').filter({ hasText: /Loading/ })).toHaveCount(0);
+      if (name === 'data-imports') await expect(page.getByLabel('QuickBooks mileage CSV', { exact: true })).toBeVisible();
+      if (name === 'mixed-copy') await expect(page.getByRole('button', { name: 'Save mixed-use copy', exact: true })).toBeVisible();
+      if (name === 'expense-recurring') await expect(page.getByLabel('Schedule name', { exact: true })).toBeVisible();
+      await capture(page, name);
+    }
+  }
+});
+
 test('secondary detail actions say Manage for writers and View for read-only users', async ({ page }) => {
   for (const [path, label, heading] of [
     ['/recurring', longName, 'Recurring schedule'], ['/mixed-use', '2026-10-07 · ' + longName, 'Mixed-use expense'],
