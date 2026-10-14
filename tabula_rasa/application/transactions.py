@@ -8,7 +8,8 @@ from typing import Any
 from uuid import uuid4
 
 from tabula_rasa.accounting_postings import accounting_postings
-from tabula_rasa.errors import StorageValidationError
+from tabula_rasa.errors import StorageConflictError, StorageNotFoundError, StorageValidationError
+from tabula_rasa.copying import copied_transaction_description
 from tabula_rasa.ledger_validation import iso_date
 from tabula_rasa.reference_data import clean_text
 from tabula_rasa.transaction import (
@@ -68,7 +69,7 @@ class TransactionService:
         )
 
     def create(
-        self, *, transaction_id: str | None = None, **data: Any
+        self, *, transaction_id: str | None = None, copied_from_transaction_id: str = '', **data: Any
     ) -> TransactionRecord:
         transaction_id = (
             clean_text(transaction_id, "Transaction ID", required=True)
@@ -77,6 +78,11 @@ class TransactionService:
         )
         validate_transaction_create(data)
         data = dict(data)
+        if copied_from_transaction_id:
+            data['description'] = copied_transaction_description({
+                'id': clean_text(copied_from_transaction_id, 'Copy source ID', required=True),
+                'description': data.get('description', ''),
+            })
         if data.get("receipt_references") in (None, ""):
             data["receipt_references"] = []
         created_at = utc_now()
@@ -195,6 +201,30 @@ class TransactionService:
         self, transaction_ids: Sequence[str], *, expected: Sequence[ExpectedRecord]
     ) -> dict[str, str]:
         return self._repository.bulk_delete(transaction_ids, expected=expected)
+
+    def copy_associations(self, data: Mapping[str, Any]) -> dict[str, Any]:
+        """New copies retain only currently active managed associations."""
+        from tabula_rasa.reference_data import normalize_tag_ids
+
+        active_tags = {row['id'] for row in self._tags.list(active_only=True)}
+        active_payees = {row['id'] for row in self._payees.list(active_only=True)}
+        return {**data, 'payee_id': data.get('payee_id', '') if data.get('payee_id') in active_payees else '',
+                'tag_ids': [identity for identity in normalize_tag_ids(data.get('tag_ids', [])) if identity in active_tags]}
+
+    def copy_draft(self, transaction_id: str, *, expected: ExpectedRecord) -> dict[str, Any]:
+        """Read a complete loaded source; creates still use the existing owner."""
+        identity = clean_text(transaction_id, 'Transaction ID', required=True)
+        current = next((row for row in self.list(fresh=True) if row['id'] == identity), None)
+        if current is None:
+            raise StorageNotFoundError('Transaction no longer exists.')
+        reject_derived_transaction(current)
+        if (expected.get('baseline') != current.get('baseline') if 'baseline' in expected else expected != current):
+            raise StorageConflictError('Transaction changed since it was loaded.', code='stale')
+        fields = ('txn_date', 'kind', 'amount', 'account_id', 'to_account_id', 'category_id',
+                  'payee_id', 'tag_ids', 'description', 'reference')
+        draft = {field: current.get(field, '') for field in fields}
+        draft['description'] = copied_transaction_description(current)
+        return self.copy_associations(draft)
 
     def postings(self, **filters) -> list[dict[str, Any]]:
         """Translate Simple Ledger records with the existing accounting owner."""

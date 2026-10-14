@@ -8,6 +8,11 @@ They consume the #277/#278 foundation and #280 protected-edit contract.
 The implementation consumes #280 from merged PR #296, including its final
 `b70b7d4` revision and merge commit `9260b895`.
 
+[Commercial import, copy and bulk workflows](COMMERCIAL_WORKFLOW_PORTS.md) extends
+these owners through #357/#358/#362/#364 with the existing Data & backup imports,
+ordinary copy/bulk and mixed-use copy/Expense conversion. Their implementation
+does not expand the default alpha or authorize #303 live cutover.
+
 ## Business selection
 
 The local development seed creates Alpha and Beta demonstration entities in the

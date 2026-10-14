@@ -33,6 +33,7 @@ ROUTE_POLICIES = MappingProxyType({
         'create_tag', 'merge_payees', 'merge_tags', 'create_transaction', 'create_journal',
         'create_mileage', 'link_document', 'create_mixed_use', 'create_recurring',
         'reconcile_recurring', 'transition_recurring', 'create_asset', 'post_depreciation',
+        'bulk_update_transactions', 'bulk_delete_transactions', 'convert_expense_to_recurring',
     )},
     **{name: RoutePolicy('PATCH', 'write') for name in (
         'update_account', 'update_category', 'update_payee', 'update_tag',
@@ -47,6 +48,12 @@ ROUTE_POLICIES = MappingProxyType({
     'upload_document': RoutePolicy('PUT', 'write'),
     'override_depreciation': RoutePolicy('PUT', 'write'),
     'preview_allocation': RoutePolicy('POST', 'read'),
+    'prepare_transaction_copy': RoutePolicy('POST', 'read'),
+    'copy_mixed_use_draft': RoutePolicy('POST', 'read'),
+    **{name: RoutePolicy('POST', 'import') for name in (
+        'prepare_transaction_csv', 'preview_quickbooks_transactions', 'preview_quickbooks_mileage',
+        'import_transaction_csv', 'import_quickbooks_transactions', 'import_quickbooks_mileage',
+    )},
     'get_session': RoutePolicy('GET', 'read', 'identity'),
     'list_entities': RoutePolicy('GET', 'read', 'identity'),
     **{name: RoutePolicy('GET', 'session', 'identity') for name in (

@@ -133,6 +133,12 @@ export function createApi(fetcher: typeof fetch = (...args) => fetch(...args)) {
       '/api/v1/entities/{entity_id}/transactions', listParams(s, signal)))),
     createTransaction: (s: Session, body: Schemas['TransactionCreate']) => safe(async () => unwrap(await client.POST(
       '/api/v1/entities/{entity_id}/transactions', { ...createParams(s), body }))),
+    prepareTransactionCopy: (s: Session, id: string, baseline: string) => safe(async () => unwrap(await client.POST(
+      '/api/v1/entities/{entity_id}/transactions/{record_id}/copy-draft', { ...mutationParams(s, id), body: { baseline } }))),
+    bulkUpdateTransactions: (s: Session, body: Schemas['TransactionBulkUpdate']) => safe(async () => unwrap(await client.POST(
+      '/api/v1/entities/{entity_id}/transactions/bulk/update', { ...createParams(s), body }))),
+    bulkDeleteTransactions: (s: Session, body: Schemas['TransactionBulkSelection']) => safe(async () => unwrap(await client.POST(
+      '/api/v1/entities/{entity_id}/transactions/bulk/delete', { ...createParams(s), body }))),
     updateTransaction: (s: Session, id: string, body: Schemas['TransactionUpdate']) => safe(async () => unwrap(await client.PATCH(
       '/api/v1/entities/{entity_id}/transactions/{record_id}', { ...mutationParams(s, id), body }))),
     deleteTransaction: (s: Session, id: string, baseline: string) => safe(async () => unwrap(await client.DELETE(
@@ -159,8 +165,29 @@ export function createApi(fetcher: typeof fetch = (...args) => fetch(...args)) {
       '/api/v1/entities/{entity_id}/mileage/{record_id}', { ...mutationParams(s, id), body }))),
     deleteMileage: (s: Session, id: string, baseline: string) => safe(async () => unwrap(await client.DELETE(
       '/api/v1/entities/{entity_id}/mileage/{record_id}', { ...mutationParams(s, id), body: { baseline } }))),
+    prepareTransactionCsv: (s: Session, file: File) => safe(async () => unwrap(await client.POST(
+      '/api/v1/entities/{entity_id}/imports/csv/prepare', { ...createParams(s),
+        body: '', bodySerializer: () => file, headers: { ...headers(s.csrf_token), 'Content-Type': 'application/octet-stream' } }))),
+    previewQuickBooksTransactions: (s: Session, file: File, auto_create: boolean) => safe(async () => unwrap(await client.POST(
+      '/api/v1/entities/{entity_id}/imports/quickbooks/preview', {
+        params: { path: { entity_id: s.entity.id }, query: { filename: file.name, auto_create } },
+        body: '', bodySerializer: () => file, headers: { ...headers(s.csrf_token), 'Content-Type': 'application/octet-stream' } }))),
+    importTransactionCsv: (s: Session, file: File) => safe(async () => unwrap(await client.POST(
+      '/api/v1/entities/{entity_id}/imports/csv', { ...createParams(s),
+        body: '', bodySerializer: () => file, headers: { ...headers(s.csrf_token), 'Content-Type': 'application/octet-stream' } }))),
+    importQuickBooksTransactions: (s: Session, file: File, auto_create: boolean) => safe(async () => unwrap(await client.POST(
+      '/api/v1/entities/{entity_id}/imports/quickbooks', {
+        params: { path: { entity_id: s.entity.id }, query: { filename: file.name, auto_create } },
+        body: '', bodySerializer: () => file, headers: { ...headers(s.csrf_token), 'Content-Type': 'application/octet-stream' } }))),
+    previewQuickBooksMileage: (s: Session, file: File) => safe(async () => unwrap(await client.POST(
+      '/api/v1/entities/{entity_id}/imports/quickbooks-mileage/preview', { ...createParams(s),
+        body: '', bodySerializer: () => file, headers: { ...headers(s.csrf_token), 'Content-Type': 'application/octet-stream' } }))),
+    importQuickBooksMileage: (s: Session, file: File) => safe(async () => unwrap(await client.POST(
+      '/api/v1/entities/{entity_id}/imports/quickbooks-mileage', { ...createParams(s),
+        body: '', bodySerializer: () => file, headers: { ...headers(s.csrf_token), 'Content-Type': 'application/octet-stream' } }))),
     mixedUse: (s: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET('/api/v1/entities/{entity_id}/mixed-use', listParams(s, signal)))),
     mixedUseSource: (s: Session, id: string, signal?: AbortSignal) => safe(async () => unwrap(await client.GET('/api/v1/entities/{entity_id}/mixed-use/{record_id}', { ...mutationParams(s, id), signal }))),
+    mixedUseCopyDraft: (s: Session, id: string, signal?: AbortSignal) => safe(async () => unwrap(await client.POST('/api/v1/entities/{entity_id}/mixed-use/{record_id}/copy-draft', { ...mutationParams(s, id), signal }))),
     previewAllocation: (s: Session, body: Schemas['AllocationRequest'], signal?: AbortSignal) => safe(async () => unwrap(await client.POST('/api/v1/entities/{entity_id}/mixed-use/allocation', { ...createParams(s), body, signal }))),
     createMixedUse: (s: Session, body: Schemas['MixedUseCreate']) => safe(async () => unwrap(await client.POST('/api/v1/entities/{entity_id}/mixed-use', { ...createParams(s), body }))),
     updateMixedUse: (s: Session, id: string, body: Schemas['MixedUseUpdate']) => safe(async () => unwrap(await client.PATCH('/api/v1/entities/{entity_id}/mixed-use/{record_id}', { ...mutationParams(s, id), body }))),
@@ -168,6 +195,7 @@ export function createApi(fetcher: typeof fetch = (...args) => fetch(...args)) {
     recurring: (s: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET('/api/v1/entities/{entity_id}/recurring', listParams(s, signal)))),
     recurringSchedule: (s: Session, id: string, signal?: AbortSignal) => safe(async () => unwrap(await client.GET('/api/v1/entities/{entity_id}/recurring/{record_id}', { ...mutationParams(s, id), signal }))),
     createRecurring: (s: Session, body: Schemas['RecurringCreate']) => safe(async () => unwrap(await client.POST('/api/v1/entities/{entity_id}/recurring', { ...createParams(s), body }))),
+    convertExpenseToRecurring: (s: Session, id: string, body: Schemas['ExpenseRecurringConversion']) => safe(async () => unwrap(await client.POST('/api/v1/entities/{entity_id}/recurring/from-transaction/{record_id}', { ...mutationParams(s, id), body }))),
     updateRecurring: (s: Session, id: string, body: Schemas['RecurringUpdate']) => safe(async () => unwrap(await client.PATCH('/api/v1/entities/{entity_id}/recurring/{record_id}', { ...mutationParams(s, id), body }))),
     transitionRecurring: (s: Session, id: string, baseline: string, transition: 'pause' | 'resume' | 'end') => safe(async () => unwrap(await client.POST('/api/v1/entities/{entity_id}/recurring/{record_id}/{transition}', { params: { path: { ...path(s, id), transition } }, headers: headers(s.csrf_token), body: { baseline } }))),
     reconcileRecurring: (s: Session, body: Schemas['ReconcileRequest']) => safe(async () => unwrap(await client.POST('/api/v1/entities/{entity_id}/recurring/reconcile', { ...createParams(s), body }))),

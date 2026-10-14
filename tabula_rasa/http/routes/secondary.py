@@ -13,6 +13,7 @@ from ..models.secondary import (
     Allocation, AllocationRequest, Asset, AssetCreate, AssetDetail, AssetList, AssetOverride,
     AssetPost, AssetPostResult, AssetTypes, AssetUpdate, MixedUse, MixedUseCreate, MixedUseList,
     MixedUseUpdate, Recurring, RecurringCreate, RecurringDetail, RecurringList, RecurringUpdate,
+    ExpenseRecurringConversion,
     ReconcileRequest, ReconcileResult, asset_detail_response, asset_response, mixed_response,
     occurrence_response, recurring_response,
 )
@@ -57,6 +58,12 @@ def update_mixed_use(entity_id: str, record_id: str, body: MixedUseUpdate, reque
         return mixed_response(service.update(record_id, expected_source=expected, **body.changes.model_dump(exclude_unset=True)))
 
 
+@router.post('/mixed-use/{record_id}/copy-draft', response_model=MixedUseCreate, operation_id='copy_mixed_use_draft')
+def copy_mixed_use_draft(entity_id: str, record_id: str, request: Request, context: Context):
+    with service_operation(request, context, 'mixed_use') as service:
+        return MixedUseCreate(**service.copy_draft(record_id))
+
+
 @router.delete('/mixed-use/{record_id}', response_model=MutationResult, operation_id='delete_mixed_use')
 def delete_mixed_use(entity_id: str, record_id: str, body: ProtectedMutation, request: Request, context: Context):
     with service_operation(request, context, 'mixed_use') as service:
@@ -90,6 +97,22 @@ def reconcile_recurring(entity_id: str, body: ReconcileRequest, request: Request
     with service_operation(request, context, 'recurring') as service:
         result = service.reconcile(as_of=body.through_date)
         return ReconcileResult(generated_count=len(result['generated']), attention_count=len(result['attention']))
+
+
+@router.post('/recurring/from-transaction/{record_id}', response_model=RecurringDetail,
+             status_code=201, operation_id='convert_expense_to_recurring')
+def convert_expense_to_recurring(entity_id: str, record_id: str, body: ExpenseRecurringConversion,
+                                request: Request, context: Context):
+    expected = required_baseline(body.baseline)
+    with service_operation(request, context, 'recurring') as service:
+        values = body.model_dump(exclude={'baseline', 'changes'})
+        result = service.from_transaction(record_id, expected_transaction=expected,
+                                          **values, **body.changes.model_dump())
+        schedule = recurring_response(dict(result['schedule'], next_due_date='',
+                                           latest_current_occurrence_date=result['transaction']['recurring_scheduled_date'],
+                                           attention_message=''))
+        return RecurringDetail(schedule=schedule, occurrences=[occurrence_response(result['transaction'])],
+                               mixed_sources=[])
 
 
 @router.get('/recurring/{record_id}', response_model=RecurringDetail, operation_id='get_recurring')

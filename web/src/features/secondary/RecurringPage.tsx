@@ -33,9 +33,7 @@ function RecurringFields<T extends Changes>({ form, creating = false, mixed = fa
       <TextField form={form} name={path('name')} label="Schedule name" />
       {creating && <><TextField form={form} name={path('start_date')} label="Start date" type="date" />
         <SelectField form={form} name={path('source_kind')} label="Expense source" options={[{ id: 'transaction', name: 'Ordinary expense' }, { id: 'mixed_use', name: 'Mixed-use expense' }]} /></>}
-      <SelectField form={form} name={path('recurrence_unit')} label="Repeat unit" options={['day', 'week', 'month', 'year'].map(id => ({ id, name: id }))} />
-      <TextField form={form} name={path('recurrence_interval')} label="Repeat every" inputMode="numeric" />
-      <TextField form={form} name={path('end_date')} label="End date (optional)" type="date" />
+      <RecurrenceFields form={form} />
     </FormSection>
     <FormSection title="Expense template">
       {(creating ? form.watch(path('source_kind')) === 'mixed_use' : mixed) ? <>
@@ -46,6 +44,13 @@ function RecurringFields<T extends Changes>({ form, creating = false, mixed = fa
     </FormSection>
     <ExpenseReferences form={form} creating={creating} />
   </>;
+}
+
+export function RecurrenceFields<T extends { recurrence_unit: string; recurrence_interval: string; end_date: string }>({ form }: { form: UseFormReturn<T> }) {
+  const path = (name: string) => name as Path<T>;
+  return <><SelectField form={form} name={path('recurrence_unit')} label="Repeat unit" options={['day', 'week', 'month', 'year'].map(id => ({ id, name: id }))} />
+    <TextField form={form} name={path('recurrence_interval')} label="Repeat every" inputMode="numeric" />
+    <TextField form={form} name={path('end_date')} label="End date (optional)" type="date" /></>;
 }
 
 function GenerateOccurrences() {

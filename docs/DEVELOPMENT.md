@@ -52,6 +52,10 @@ the server-side #222 membership/context seam, #280 loaded-baseline form contract
 and #223 health/request/job seams. Keep ordinary development and tests synthetic;
 the current Streamlit/Sheets setup and validation gates continue to apply.
 
+[Existing workflow ports](COMMERCIAL_WORKFLOW_PORTS.md) documents
+#357/#358/#362/#364's transaction/mileage imports, ordinary copy/bulk and
+mixed-use copy/Expense conversion, their service reuse and scoped validation.
+
 [Secondary workflows](COMMERCIAL_SECONDARY_WORKFLOWS.md) covers #284 recurring/
 mixed-use and #285 assets/depreciation. Their native browser/API coverage extends
 the existing compiled-app/disposable-PostgreSQL fixture. Generation and posting
