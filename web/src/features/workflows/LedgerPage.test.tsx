@@ -76,7 +76,9 @@ it('does not enable bulk selection when refreshing the visible ledger fails', as
   await setup(undefined, false);
   vi.mocked(api.ledger).mockRejectedValue(new ApiError('unavailable'));
   await userEvent.click(screen.getByRole('button', { name: 'Bulk actions' }));
-  await screen.findByRole('button', { name: 'Bulk actions' });
+  // The real query policy retries unavailable reads after a 1s backoff.
+  // Wait beyond that backoff for the final error UI on slower CI runners.
+  await screen.findByRole('button', { name: 'Bulk actions' }, { timeout: 5_000 });
   expect(screen.getAllByRole('alert').length).toBeGreaterThan(0);
   expect(screen.queryByRole('button', { name: 'Leave Bulk mode' })).not.toBeInTheDocument();
   expect(screen.queryByRole('checkbox', { name: /^Select / })).not.toBeInTheDocument();
