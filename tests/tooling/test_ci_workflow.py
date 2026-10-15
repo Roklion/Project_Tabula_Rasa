@@ -77,6 +77,7 @@ def test_ci_preserves_complete_python_and_windows_coverage() -> None:
         'tests/postgres/test_browser_quality.py', 'tests/postgres/test_browser_mileage_documents.py',
         'tests/postgres/test_browser_secondary.py',
         'tests/postgres/test_browser_alpha.py',
+        'tests/postgres/test_browser_workflow_ports.py',
         'tests/postgres/test_identity_browser.py',
         'tests/postgres/test_workspace_browser.py',
         '--junitxml=browser-results.xml']

@@ -197,7 +197,21 @@ class PostgresReceiptRepository(EntityRepository):
                     raise StorageConflictError('Inspect the mixed-use pair before changing receipts.')
                 token = self.expected_source.get('baseline') if isinstance(self.expected_source, Mapping) else None
                 check_baseline(self.key('mixed_use_sources', source), source_row, token, required=True)
+                # Reuse the source owner's pair validation, including fields
+                # beyond the relationship marker, before any metadata writes.
+                self.mixed_repository().complete_pair(connection, source_row)
         return ('mixed_use_source_id', source) if source else ('entry_id', transaction_id)
+
+    def mixed_repository(self):
+        from .mixed_use import PostgresMixedUseRepository
+        return PostgresMixedUseRepository(self.database, self.entity_id)
+
+    def changed_source(self, connection, column, target):
+        """Return committed mutation metadata without a second request/readback."""
+        if column == 'mixed_use_source_id':
+            repository = self.mixed_repository()
+            return repository.project(connection, repository.get_row(connection, 'mixed_use_sources', target))
+        return None
 
     def linked_documents(self, connection, column, target):
         return list(connection.execute(text(
@@ -233,6 +247,7 @@ class PostgresReceiptRepository(EntityRepository):
             if accepted.metadata.document_id not in ids:
                 ids.append(accepted.metadata.document_id)
             write_document_links(connection, self.entity_id, column, target, ids)
+            return self.changed_source(connection, column, target)
 
     def unlink(self, profile_key, transaction_id, storage_key):
         self.check_profile(profile_key)
@@ -241,3 +256,4 @@ class PostgresReceiptRepository(EntityRepository):
             documents = [self.document(row) for row in self.linked_documents(connection, column, target)]
             ids = [document.metadata.document_id for document in documents if document.storage_key != storage_key]
             write_document_links(connection, self.entity_id, column, target, ids)
+            return self.changed_source(connection, column, target)

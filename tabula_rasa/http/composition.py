@@ -36,10 +36,11 @@ def translate_database_errors():
 class PostgresRuntime:
     """One pool; compose a fresh service graph after resolving each request."""
 
-    def __init__(self, database, resolver, *, service_factory, identity=None):
+    def __init__(self, database, resolver, *, service_factory, maps=None, identity=None):
         self.database = database
         self.resolve_context = resolver
         self.service_factory = service_factory
+        self.maps = maps
         self.identity = identity
         from tabula_rasa.application.workspaces import WorkspaceService
         from tabula_rasa.infrastructure.postgres.workspaces import PostgresWorkspaceRepository
@@ -74,7 +75,11 @@ class PostgresRuntime:
             if self.identity is not None:
                 self.identity.close()
         finally:
-            self.database.dispose()
+            try:
+                if self.maps is not None:
+                    self.maps.close()
+            finally:
+                self.database.dispose()
 
 
 def open_runtime(settings):
@@ -114,7 +119,9 @@ def open_runtime(settings):
             return create_postgres_services(database, context.entity_id,
                 document_store=document_store, document_store_kind="google_drive")
 
-        runtime = PostgresRuntime(database, resolver, service_factory=services, identity=identity)
+        from .maps import environment_maps
+        runtime = PostgresRuntime(database, resolver, service_factory=services,
+                                  maps=environment_maps(dict(os.environ)), identity=identity)
         if settings.trusted_entity_id:
             # Only explicit seed tooling creates synthetic entities.
             for context in resolver.contexts:
@@ -155,7 +162,9 @@ def open_migrated_runtime(settings, *, resolve_context, entity_profiles, profile
                 raise RuntimeError('Identity and ledger database bindings must agree.')
         services = MigratedProfileServices(database, entity_profiles=entity_profiles, secrets=profile_secrets)
         services.validate()
+        from .maps import load_mileage_maps
         runtime = PostgresRuntime(database, resolve_context, service_factory=services,
+                                  maps=load_mileage_maps(profile_secrets),
                                   identity=resolve_context if isinstance(resolve_context, NamedIdentity) else None)
         if not runtime.ready():
             raise RuntimeError("The migrated database is not ready.")

@@ -1,18 +1,21 @@
 """Thin explicit commands for secondary workflows; GET never schedules jobs."""
 
 from datetime import date
+from contextlib import contextmanager
 
 from fastapi import APIRouter, Request
 
 from tabula_rasa.errors import StorageValidationError
 from tabula_rasa.mixed_use import MixedUseAllocationError
+from tabula_rasa.application.receipt_context import mixed_use_receipt_service
 from ..baselines import required_baseline
 from ..errors import ERROR_RESPONSES
 from ..models.mutations import MutationResult, ProtectedMutation
+from ..models.documents import DocumentList, document_response
 from ..models.secondary import (
     Allocation, AllocationRequest, Asset, AssetCreate, AssetDetail, AssetList, AssetOverride,
     AssetPost, AssetPostResult, AssetTypes, AssetUpdate, MixedUse, MixedUseCreate, MixedUseList,
-    MixedUseUpdate, Recurring, RecurringCreate, RecurringDetail, RecurringList, RecurringUpdate,
+    MixedUseUpdate, MixedUseDocumentLink, Recurring, RecurringCreate, RecurringDetail, RecurringList, RecurringUpdate,
     ExpenseRecurringConversion,
     ReconcileRequest, ReconcileResult, asset_detail_response, asset_response, mixed_response,
     occurrence_response, recurring_response,
@@ -69,6 +72,36 @@ def delete_mixed_use(entity_id: str, record_id: str, body: ProtectedMutation, re
     with service_operation(request, context, 'mixed_use') as service:
         service.delete(record_id, expected_source=required_baseline(body.baseline))
         return MutationResult(status='fully_applied')
+
+
+@contextmanager
+def mixed_receipts(request, context, record_id, expected):
+    with service_operation(request, context, 'mixed_use') as sources, \
+            service_operation(request, context, 'receipts') as receipts:
+        source = sources.get(record_id, fresh=True)
+        yield source, mixed_use_receipt_service(receipts, sources, record_id, expected)
+
+
+@router.get('/mixed-use/{record_id}/receipts', response_model=DocumentList, operation_id='mixed_use_documents')
+def mixed_use_documents(entity_id: str, record_id: str, request: Request, context: Context):
+    with mixed_receipts(request, context, record_id, {}) as (source, receipts):
+        return DocumentList(items=[document_response(doc) for doc in
+                                  receipts.references(source['linked_transaction_id'], fresh=True)])
+
+
+@router.post('/mixed-use/{record_id}/receipts', response_model=MixedUse, operation_id='link_mixed_use_document')
+def link_mixed_use_document(entity_id: str, record_id: str, body: MixedUseDocumentLink, request: Request, context: Context):
+    expected = required_baseline(body.baseline)
+    with mixed_receipts(request, context, record_id, expected) as (source, receipts):
+        return mixed_response(receipts.link_document(source['linked_transaction_id'], body.document_id))
+
+
+@router.delete('/mixed-use/{record_id}/receipts/{document_id}', response_model=MixedUse, operation_id='unlink_mixed_use_document')
+def unlink_mixed_use_document(entity_id: str, record_id: str, document_id: str, body: ProtectedMutation,
+                             request: Request, context: Context):
+    expected = required_baseline(body.baseline)
+    with mixed_receipts(request, context, record_id, expected) as (source, receipts):
+        return mixed_response(receipts.unlink_document(source['linked_transaction_id'], document_id))
 
 
 @router.get('/recurring', response_model=RecurringList, operation_id='list_recurring')

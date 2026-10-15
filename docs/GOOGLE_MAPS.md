@@ -1,8 +1,8 @@
 # Google Maps mileage setup
 
 Google address suggestions and route mileage are optional, app-wide features.
-They are deliberately separate from each business profile's Sheets service
-account and human Drive OAuth grant. When Maps is not configured or Google is
+They are deliberately separate from each business profile's human Sheets/Drive
+OAuth grant. When Maps is not configured or Google is
 unavailable, Mileage continues to accept manual addresses and miles.
 
 This setup creates paid Google Maps Platform access. Complete the quota and
@@ -62,7 +62,42 @@ this repository.
 11. Perform one controlled live validation, then inspect key usage, API metrics,
     quota consumption, and billing. Rotate or disable any unused test key.
 
-## Streamlit Secrets
+## Commercial browser/API configuration (#363)
+
+The shared HTTP runtime accepts deployment-wide environment settings:
+
+| Variable | Purpose |
+| --- | --- |
+| `TABULA_RASA_MAPS_BROWSER_API_KEY` | Website-restricted Maps JavaScript / Places (New) key; this key alone is exposed to the authorized browser |
+| `TABULA_RASA_MAPS_ROUTES_API_KEY` | Separate server-only Routes key |
+| `TABULA_RASA_MAPS_ROUTES_TIMEOUT_SECONDS` | Bounded request timeout, default 15 seconds |
+| `TABULA_RASA_MAPS_REGION_CODE` | Optional two-letter autocomplete country restriction |
+
+For an operator-bound migrated runtime, reuse its trusted application-wide
+`google_maps` table below, including `autocomplete_region_code`. Do not copy
+human Drive grants or quota-monitoring credentials into the HTTP environment.
+Absent configuration preserves manual entry; equal browser/server keys suppress
+the browser key so a server credential cannot accidentally cross the API.
+
+Before enabling lookup, add the exact commercial website origins to the browser
+key's website restrictions. Local Vite and same-origin API deployments need their
+actual ports/origins, rather than the Streamlit examples above. Restrict that key
+to Maps JavaScript API and Places API (New). Keep Routes excluded from it.
+The separate Routes key stays on the API server and is restricted to Routes API.
+Inspect the selected host's documented egress; use an IP-restricted key where
+stable egress is available. If unavailable, record the existing dedicated-key,
+quota and monitoring alternative explicitly under #133. Changing keys, broadening
+origins or removing restrictions is not authorized by the workflow port.
+
+The widget uses the [Places autocomplete element](https://developers.google.com/maps/documentation/javascript/reference/places-widget),
+and restrictions follow [Google's API security guidance](https://developers.google.com/maps/api-security-best-practices).
+Retain the existing attribution, terms, privacy and transient-content policy.
+Run a controlled non-sensitive lookup and both route directions before rollout,
+then inspect usage/quota and record sanitized evidence against the selected
+revision. Synthetic validation does not prove deployed restrictions or complete
+#133/#303 acceptance. See [workflow ports](COMMERCIAL_WORKFLOW_PORTS.md).
+
+## Internal-edition Streamlit Secrets
 
 Add this application-wide table to ignored `.streamlit/secrets.toml`:
 

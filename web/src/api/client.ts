@@ -151,12 +151,26 @@ export function createApi(fetcher: typeof fetch = (...args) => fetch(...args)) {
       '/api/v1/entities/{entity_id}/ledger', { ...listParams(s, signal), params: { path: { entity_id: s.entity.id }, query: filters } }))),
     reports: (s: Session, filters: { start?: string; end?: string } = {}, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
       '/api/v1/entities/{entity_id}/reports/summary', { ...listParams(s, signal), params: { path: { entity_id: s.entity.id }, query: filters } }))),
+    downloadTransactionsCsv: (s: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
+      '/api/v1/entities/{entity_id}/exports/transactions.csv', { ...listParams(s, signal), parseAs: 'blob' }))),
+    downloadJournalPostingsCsv: (s: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
+      '/api/v1/entities/{entity_id}/exports/journal-postings.csv', { ...listParams(s, signal), parseAs: 'blob' }))),
+    downloadSelectedLedgerCsv: (s: Session, entry_ids: string[], filters: { start?: string; end?: string; kind?: 'All' | 'Income' | 'Expense' | 'Transfer' | 'Journal'; account_ids?: string[]; category_ids?: string[]; tag_ids?: string[] } = {}, signal?: AbortSignal) => safe(async () => {
+      const options = { params: { path: { entity_id: s.entity.id } }, headers: headers(s.csrf_token),
+        body: { kind: 'All' as const, account_ids: [], category_ids: [], tag_ids: [], ...filters, entry_ids },
+        signal, parseAs: 'blob' as const };
+      return unwrap(await client.POST('/api/v1/entities/{entity_id}/ledger/selected.csv', options));
+    }),
     updateJournal: (s: Session, id: string, body: Schemas['JournalUpdate']) => safe(async () => unwrap(await client.PATCH(
       '/api/v1/entities/{entity_id}/journals/{record_id}', { ...mutationParams(s, id), body }))),
     deleteJournal: (s: Session, id: string, baseline: string) => safe(async () => unwrap(await client.DELETE(
       '/api/v1/entities/{entity_id}/journals/{record_id}', { ...mutationParams(s, id), body: { baseline } }))),
     mileage: (s: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
       '/api/v1/entities/{entity_id}/mileage', listParams(s, signal)))),
+    mileageMaps: (s: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
+      '/api/v1/entities/{entity_id}/mileage/maps', listParams(s, signal)))),
+    calculateMileageRoute: (s: Session, body: Schemas['MileageRouteRequest'], signal?: AbortSignal) => safe(async () => unwrap(await client.POST(
+      '/api/v1/entities/{entity_id}/mileage/routes', { ...createParams(s), body, signal }))),
     mileageTrip: (s: Session, id: string, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
       '/api/v1/entities/{entity_id}/mileage/{record_id}', { ...mutationParams(s, id), signal }))),
     createMileage: (s: Session, body: Schemas['MileageCreate']) => safe(async () => unwrap(await client.POST(
@@ -212,6 +226,14 @@ export function createApi(fetcher: typeof fetch = (...args) => fetch(...args)) {
       '/api/v1/entities/{entity_id}/documents', listParams(s, signal)))),
     transactionDocuments: (s: Session, id: string, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
       '/api/v1/entities/{entity_id}/transactions/{record_id}/receipts', { ...mutationParams(s, id), signal }))),
+    mixedUseDocuments: (s: Session, id: string, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
+      '/api/v1/entities/{entity_id}/mixed-use/{record_id}/receipts', { ...mutationParams(s, id), signal }))),
+    linkMixedUseDocument: (s: Session, id: string, body: Schemas['MixedUseDocumentLink']) => safe(async () => unwrap(await client.POST(
+      '/api/v1/entities/{entity_id}/mixed-use/{record_id}/receipts', { ...mutationParams(s, id), body }))),
+    unlinkMixedUseDocument: (s: Session, id: string, document_id: string, baseline: string) => safe(async () => unwrap(await client.DELETE(
+      '/api/v1/entities/{entity_id}/mixed-use/{record_id}/receipts/{document_id}', {
+        params: { path: { entity_id: s.entity.id, record_id: id, document_id } }, headers: headers(s.csrf_token), body: { baseline },
+      }))),
     uploadDocument: (s: Session, id: string, file: File) => safe(async () => unwrap(await client.PUT(
       '/api/v1/entities/{entity_id}/documents/{document_id}/content', {
         params: { path: { entity_id: s.entity.id, document_id: id }, query: { filename: file.name } },

@@ -61,6 +61,12 @@ mixed-use and #285 assets/depreciation. Their native browser/API coverage extend
 the existing compiled-app/disposable-PostgreSQL fixture. Generation and posting
 are explicit commands; page loads remain read-only and #223 retains durable jobs.
 
+The existing-functionality ports #359/#361/#363 are documented in
+[Commercial workflow ports](COMMERCIAL_WORKFLOW_PORTS.md): financial CSVs,
+source-owned mixed-use receipts and optional Maps mileage. Native regression
+tests exercise the compiled application with disposable PostgreSQL and synthetic
+providers; hosted dependency checks remain separate #133/#303 operator evidence.
+
 ## Local main-branch push guard
 
 The tracked .githooks/pre-push hook blocks pushes that would update remote

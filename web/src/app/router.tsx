@@ -6,7 +6,7 @@ import { ReferencesPage } from '../features/concurrency/ReferenceEditors';
 import { BookkeepingPage } from '../features/concurrency/BookkeepingEditors';
 import { ManagedMergeForm } from '../features/concurrency/ManagedMergeForm';
 import { MileageDetail, MileagePage, NewMileage } from '../features/mileage/MileagePage';
-import { ReceiptsPage } from '../features/documents/ReceiptsPage';
+import { ReceiptsPage, MixedUseReceiptsPage } from '../features/documents/ReceiptsPage';
 import { ReferenceCreator } from '../features/workflows/ReferenceCreators';
 import { EntryCreator } from '../features/workflows/EntryCreators';
 import { LedgerPage } from '../features/workflows/LedgerPage';
@@ -36,6 +36,7 @@ const routes = [{
     { path: 'mixed-use/new', element: <NewMixedUse /> },
     { path: 'mixed-use/:recordId/copy', element: <CopyMixedUse /> },
     { path: 'mixed-use/:recordId', element: <MixedUseDetail /> },
+    { path: 'mixed-use/:recordId/receipts', element: <MixedUseReceiptsPage /> },
     { path: 'recurring', element: <RecurringPage /> },
     { path: 'recurring/new', element: <NewRecurring /> },
     { path: 'recurring/:recordId', element: <RecurringDetail /> },

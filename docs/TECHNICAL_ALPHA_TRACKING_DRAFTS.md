@@ -1,12 +1,12 @@
 # Transition tracking drafts and acceptance handoff (#288)
 
-These are reviewable GitHub payload drafts under #221/#124. No issues/comments
-have been posted, no workflow has been retired, and no product exclusion has
-been approved by writing this file. Local `TA-*` identifiers are not issue numbers.
-After authorized publication, replace them in the [routing matrix](TECHNICAL_ALPHA.md)
-with actual narrow issue links, or record the owner's explicit retirement/exclusion
-decision. #288's remaining-workflows-ticketed criterion stays open until then.
-None of these long-tail flows is added to the default technical-alpha matrix.
+This inventory under #221/#124 preserves the transition handoff from #288.
+The October 11 acceptance published TA-1/2/3/5/6/7/8 as #357/#358/#359/#361/#362/
+#363/#364. The owner removed TA-4 (#360, not planned) and standalone report
+downloads because neither is an existing supported feature. The corrected
+[routing matrix](TECHNICAL_ALPHA.md) and [workflow-port evidence](COMMERCIAL_WORKFLOW_PORTS.md)
+distinguish implementation from deployment and #303 live-owner acceptance.
+None of these long-tail flows expands the default technical-alpha matrix.
 
 Published owners and implementation routing: TA-1 → #357, TA-2 → #358,
 TA-6 → #362 and TA-8 → #364 now have browser/API/service/PostgreSQL ports,
@@ -43,30 +43,26 @@ cannot be mutated through generic bulk actions. CSV export belongs to TA-3.
 Define atomic versus recoverable batch failure behavior using existing repository
 owners, and test stale selection, protected records, duplicate create and two entities.
 
-## TA-3 — Commercial web: Financial ledger CSV and report downloads
+## TA-3 / #359 — Commercial web: Existing financial CSV downloads
 
 Parent #221; consumes existing ledger/reporting/export calculations and filters.
 
-Add filtered/selected financial CSV and supported report downloads matching the
-documented internal surfaces. Preserve displayed filter scope, journal grouping,
-transfer exclusion, mileage separation, balance/sign conventions, escaping of
-formula-leading spreadsheet text and read-only entity/capability enforcement.
+Port only Transactions **Export selected**, Data & backup **Download transactions
+CSV**, and **Download journal postings CSV**. Preserve complete-entry selection,
+journal grouping, transfer/mileage separation, balance/sign conventions, escaping
+of formula-leading spreadsheet text and read-only entity/capability enforcement.
 Verify empty/populated scopes, accounting totals, spreadsheet-text safety and
 two-entity isolation. No byte-store configuration or full recovery/export rewrite.
-Complete operator export remains #260; customer delivery remains #224.
+Standalone report downloads are excluded. Complete operator export remains #260;
+customer portability remains #345 under #224.
 
 ## TA-4 — Commercial web: Category template import
 
-Parent #221; consumes existing category template parser/domain validation and
-category hierarchy/reference repositories.
+Removed as not planned by the owner's October 11 correction (#360). No existing
+category-template import was verified. Ordinary category management and default
+initialization remain supported; no new template parser or migration gate is added.
 
-Expose preview and explicit apply for the supported template format, preserving
-normalization, hierarchy/cycle rules, duplicate checks and existing-category
-behavior. Define fresh mutation-boundary checks and failure outcome before writing.
-Test invalid templates, unchanged existing references, successful hierarchy setup
-and two-entity isolation. Do not add a second category-rule implementation.
-
-## TA-5 — Commercial web: Mixed-use source receipt management
+## TA-5 / #361 — Commercial web: Mixed-use source receipt management
 
 Parent #221; follows completed #284 and consumes #283/#233/#251.
 
@@ -92,7 +88,7 @@ independent copy, invalid/protected conversion, success and two-entity isolation
 Existing #159 separately owns proposed mixed-use bulk source editing; it is not
 an implemented internal workflow or a prerequisite to this migration slice.
 
-## TA-7 — Commercial web: Maps address lookup and mileage route calculation
+## TA-7 / #363 — Commercial web: Maps address lookup and mileage route calculation
 
 Parent #221; consumes existing Maps integration and #286 manual mileage workflow.
 Coordinate #133's deployable Routes API key restrictions.
@@ -133,7 +129,11 @@ the existing commercial manual filtered CSV is already delivered by #286.
 - #298/#224: commercial activation and recovery agreement; alpha has no authority
   to claim customer readiness or retire internal workflows.
 
-## Draft #288 status update
+## Historical pre-acceptance #288 status draft (superseded)
+
+The text below preserves the earlier preparation handoff. #288 was accepted and
+closed on October 11; its published seven-port scope and exclusions above govern
+current work. These historical pending instructions are not current gate status.
 
 The remaining runtime implementation is prepared: default hosted synthetic HTTP
 composition loads an explicit environment/origin/entity-bound Drive secret file,
