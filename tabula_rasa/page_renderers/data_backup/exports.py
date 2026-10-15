@@ -4,13 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import date, datetime, timezone
-import csv
-import io
 
 import streamlit as st
 
 from tabula_rasa.google_drive import GoogleDriveError
-from tabula_rasa.ledger_presentation import ledger_frame
+from tabula_rasa.application.financial_csv import prepare_financial_csv_exports
 from tabula_rasa.page_renderers.data_backup.context import DataBackupContext
 from tabula_rasa.page_renderers.mileage import mileage_frame
 from tabula_rasa.page_renderers.mileage_service import mileage_action
@@ -43,37 +41,10 @@ def prepare_csv_exports(
     transactions = services.transactions.list()
     journals = services.journals.list()
     mileage_trips = [trip.as_record() for trip in mileage_action(services.mileage.list_trips)]
-    transaction_frame = ledger_frame(
-        transactions,
-        accounts,
-        categories,
-        display_paths=False,
-        tags=tags,
-    )
     mileage_log = mileage_frame(mileage_trips, tags)
-    journal_output = io.StringIO(newline="")
-    journal_writer = csv.DictWriter(journal_output, fieldnames=[
-        "Entry ID", "Date", "Memo", "Posting ID", "Position", "Account type",
-        "Account ID", "Account", "Debit", "Credit", "Payee", "Description",
-    ])
-    journal_writer.writeheader()
-    account_names = {row["id"]: row["name"] for row in accounts}
-    category_names = {row["id"]: row["name"] for row in categories}
-    for entry in journals:
-        for line in entry["postings"]:
-            names = account_names if line["target_type"] == "account" else category_names
-            journal_writer.writerow({
-                "Entry ID": entry["id"], "Date": entry["txn_date"], "Memo": entry["description"],
-                "Posting ID": line["id"], "Position": line["position"],
-                "Account type": line["target_type"], "Account ID": line["target_id"],
-                "Account": names.get(line["target_id"], ""),
-                "Debit": line["amount"] if line["side"] == "Debit" else "",
-                "Credit": line["amount"] if line["side"] == "Credit" else "",
-                "Payee": line.get("payee", ""), "Description": line["description"],
-            })
     return {
-        "transactions": transaction_frame.to_csv(index=False).encode("utf-8"),
-        "journals": journal_output.getvalue().encode("utf-8"),
+        **prepare_financial_csv_exports(transactions=transactions, journals=journals,
+                                        accounts=accounts, categories=categories, tags=tags),
         "mileage": mileage_log.to_csv(index=False).encode("utf-8"),
     }
 

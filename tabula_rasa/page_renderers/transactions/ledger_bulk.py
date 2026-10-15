@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tabula_rasa.application.financial_csv import frame_csv
+
 from collections.abc import Mapping
 from collections.abc import Sequence
 from datetime import date
@@ -508,7 +510,7 @@ def render_bulk_actions(
         ]
         st.download_button(
             "Export selected",
-            selected_frame.to_csv(index=False).encode("utf-8"),
+            frame_csv(selected_frame),
             file_name=f"tabula-rasa-selected-{date.today()}.csv",
             mime="text/csv",
             width="stretch",

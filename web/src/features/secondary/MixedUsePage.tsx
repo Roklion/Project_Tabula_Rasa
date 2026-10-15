@@ -137,6 +137,7 @@ function MixedUseDetailQuery({ recordId }: { recordId: string }) {
         </>}
       </dl>
     </section>
+    <Link className="button action-secondary" to={'/mixed-use/' + encodeURIComponent(data.id) + '/receipts'}>Manage source receipts</Link>
     {session.capabilities.includes('bookkeeping:write') ? <ProtectedEditor key={recordId} session={session} loaded={loaded(data)} title="Edit mixed-use expense"
       fields={form => <MixedFields form={form} />} onClose={() => navigate('/mixed-use')}
       save={async (id, baseline, changes) => loaded(await api.updateMixedUse(session, id, { baseline, changes }))}
