@@ -11,7 +11,7 @@ from sqlalchemy import text
 from tabula_rasa.application.identity import IdentityError
 from tabula_rasa.application.ledger_setup import LedgerSetupService
 from tabula_rasa.application.workspaces import (
-    InvitationCredential, grant_allowed, normalized_email, require_capability,
+    InvitationCredential, grant_allowed, normalized_email, require_capability, require_bootstrap_id,
 )
 from .control_plane import PostgresIdentityRepository, identity_operation
 from .reference_data import PostgresLedgerSetupRepository
@@ -53,8 +53,7 @@ class PostgresWorkspaceRepository:
         return role
 
     def bootstrap(self, actor, request_id, workspace_name, business_name, organization_id=None):
-        if not isinstance(request_id, str) or not 16 <= len(request_id) <= 128:
-            raise IdentityError('validation')
+        require_bootstrap_id(request_id)
         names = [workspace_name, business_name]
         if any(not isinstance(name, str) or not name.strip() or len(name) > 160 for name in names):
             raise IdentityError('validation')
@@ -86,6 +85,7 @@ class PostgresWorkspaceRepository:
         return {'state': 'ready', 'organization_id': row['organization_id'], 'entity_id': row['entity_id']}
 
     def bootstrap_status(self, actor, request_id):
+        require_bootstrap_id(request_id)
         with identity_operation(self.database, read_only=True) as connection:
             row = connection.execute(text('''SELECT * FROM workspace_bootstraps
                 WHERE user_id=:user AND request_id=:request'''), {'user': actor, 'request': request_id}).mappings().first()

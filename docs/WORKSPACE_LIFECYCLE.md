@@ -83,7 +83,8 @@ bindings established at startup. Existing bound ledgers, memberships and
 invitations remain available there; bootstrap status remains a read-only lookup.
 
 Authenticated named users, including users without any memberships, can call
-`POST /api/v1/workspaces/bootstrap` with `request_id` (16–128 characters),
+`POST /api/v1/workspaces/bootstrap` with `request_id` (16–128 ASCII letters,
+digits, underscores or hyphens, so each accepted ID is one recoverable URL segment),
 `workspace_name` and `business_name` (required, trimmed, at most 160 characters).
 The acting internal user becomes Owner. No caller-supplied owner/entity IDs or
 legal/tax fields are accepted. Books use the existing standard chart of accounts
