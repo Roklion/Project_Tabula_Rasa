@@ -330,7 +330,7 @@ membership and claimed profile IDs do not unlock that interface.
 
 - The React shell uses the visual tokens, typography and approximately 760px
   stacking boundary above. Navigation covers Dashboard, Transactions, Assets,
-  Mileage, Accounts, Categories, Reports, and Data & backup in the same order.
+  Mileage, Accounts, Categories & contacts, Reports, and Data & backup in the same order.
   A labeled Menu button exposes navigation on narrow screens.
 - The server-resolved business name is always visible. The fixed synthetic
   context is identified as technical-alpha development. This shell does not
@@ -393,8 +393,10 @@ membership and claimed profile IDs do not unlock that interface.
   validation errors are associated with their labeled fields and generic messages.
 
 **Current behavior — shared commercial visual foundation (#325):** The React
-stylesheet owns the full palette, type roles and spacing grid above. Primary
-surfaces use 16px padding. Native single-line controls have a 44px minimum;
+stylesheet owns the shared type roles and spacing grid above, with the approved
+commercial palette below. Primary surfaces use 16px padding. Native single-line
+controls have a 40px minimum on desktop with a fine pointer and 44px on touch or
+narrow layouts;
 multiple selects remain multiline listboxes (128px minimum), and textareas are
 vertically resizable (112px minimum). Disabled controls retain legible neutral
 text. Keyboard focus combines a contrasting primary outline with the focus halo.
@@ -410,12 +412,51 @@ foundations for later page slices, not completion of the full design epic.
 The compact [requirement/implementation audit](docs/COMMERCIAL_UI_FOUNDATIONS.md)
 records commercial/Streamlit conflicts, reuse owners, hooks and visual evidence.
 
+**Current behavior — light Soft workspace (#331, owner-selected direction):**
+The commercial app stays light even when the operating system prefers dark.
+This explicitly replaces the earlier commercial neutral palette; the internal
+Streamlit palette above retains its own owner.
+
+| Commercial token | Value / treatment |
+| --- | --- |
+| Canvas | `#EEF2F7` |
+| Primary / secondary surfaces | `#F8FAFD` / `#EAF0F8` |
+| Native control fill | `#EDF2F9` |
+| Hover / selected | `#E5EDF8` / `#E3ECFD` |
+| Primary / secondary text | `#223149` / `#52627A` |
+| Default / subtle / emphasized borders | `#CFDAE9` / `#DCE5F0` / `#7B8DA7` |
+| Primary action / hover / focus halo | `#2E60CC` / `#2858BC` / `#6B96ED`; filled actions use white text |
+| Neutral pending/disabled | `#52627A` on `#E8EDF4` |
+| Controls / surfaces | 8px / 12px radii; surface shadow `0 4px 16px rgb(34 49 73 / 4%)` |
+
+Forms and editor/filter surfaces stop growing at 960px; tables keep the available
+page width and intentional local scrolling. Labels and primary record names/amounts
+use weight 500, ordinary supporting table cells 400 and page headings 600.
+Compact desktop fields retain readable padding;
+touch targets, native multiline selectors and error/focus associations remain.
+Tables share a rounded, subtly bordered region, a tinted header and restrained
+row dividers/hover; financial columns stay right-aligned and tabular. Records use
+primary-name and quieter supporting-detail hierarchy, compact text status/type
+badges and lightweight inline row actions. At desktop widths of at least 1000px,
+action columns stay visible while the financial columns scroll. Narrow layouts
+retain local scrolling and 44px action targets. Writer detail links say Manage
+for Assets, Recurring and Mixed-use; read-only detail links say View. The route,
+loaded baseline, confirmations and available commands remain capability-owned.
+The ledger displays transaction type and source as separate pills (for example,
+Expense and Mixed-use), with the existing combined accessible row name. Mileage
+keeps 16px between Download filtered mileage CSV and the log table. Semantic
+success/error/warning colors and all bookkeeping/state owners remain unchanged.
+The [integrated acceptance record](docs/COMMERCIAL_UI_ACCEPTANCE.md) tracks the
+selected direction, exact-candidate evidence and separate manual/release gates.
+
 **Current behavior — commercial core presentation (#326–#328, EPIC #323 / initiative #124):**
 The shell marks the current main destination with weight and a leading rule as
 well as color. Transactions remains the current main workflow for Journals,
-Mixed-use expenses, Recurring expenses, Payees and Tags. These routes share a
-wrapping, labeled navigation list with a visible current link, including create,
-detail and merge routes. Mileage shares View mileage log / Add trip navigation;
+Mixed-use expenses and Recurring expenses. Categories & contacts groups
+Categories, Payees and Tags, including their create and merge routes. Moving
+between those reference routes keeps Categories & contacts current in the main
+menu. Each group has its own wrapping, labeled navigation list with a visible
+current link. Mileage shares View mileage log / Add trip navigation;
 Add trip remains capability-gated. These are real guarded route links, not ARIA
 tabs. A cancelled dirty navigation retains the draft, menu and initiating focus;
 a completed navigation closes the menu and focuses main content.
@@ -475,6 +516,10 @@ controls. Depreciation and occurrence history remain locally scrollable tables;
 generation, posting and retirement retain explicit protected confirmations.
 Mileage uses the same create/edit fields, a named scrollable log, wrapped text
 and aligned distance columns; manual entry, round trips and scoped CSV remain.
+Shared fields keep their labels and controls at the top of a grid row, so the
+compact date filters do not stretch beside the multiline tags list. Reference
+management pages show their title once; tables retain accessible names without
+repeated visible section headings or captions.
 Receipts group linked files, attachment and unreferenced recovery separately,
 with full filenames, keyboard-accessible metadata, upload/link status and clear
 unlink-retains-file guidance. Read-only users retain inspection/downloads;
@@ -511,7 +556,9 @@ ordinary upload/recovery controls. Generic projections remain read-only. Maps
 suggestions and place IDs remain transient, separate from recorded text; explicit
 distance confirmation updates the editable draft, and only Save persists it.
 Round-trip directions are calculated independently; failures preserve manual
-entry. [Workflow ports](docs/COMMERCIAL_WORKFLOW_PORTS.md) owns these contracts.
+entry. Optional lookup fields share the light two-column field grid; route
+guidance, calculation and failure messages span its full width before editable
+mileage and stack with the fields on narrow screens. [Workflow ports](docs/COMMERCIAL_WORKFLOW_PORTS.md) owns these contracts.
 Transaction and QuickBooks mileage imports, copy, bulk and Expense-to-recurring conversion are also available under #357/#358/#362/#364. [Commercial mileage and receipts](docs/COMMERCIAL_MILEAGE_RECEIPTS.md)
 owns this slice's transport, recovery and validation contract.
 [Commercial core workflows](docs/COMMERCIAL_WORKFLOWS.md) owns #281/#282 scope.
@@ -1615,3 +1662,12 @@ Streamlit controls, and verify success and relevant failure paths at the
 supported desktop and narrow viewports. This is an implementation discipline,
 not a PR or agent-review procedure; repository review rules belong in
 AGENTS.md and .gemini/styleguide.md.
+
+
+**Current behavior — commercial file selection (#331):** Receipt and import
+inputs share a labeled drop zone with a styled native Choose file(s) control.
+Keyboard users retain the native file chooser. A single-file importer refuses
+a multi-file drop; disabled workflows ignore drops. File-type/size validation,
+read-only preparation, explicit import/upload commands and recovery stay with
+the existing workflow owners. Selection never starts a ledger write or receipt
+upload. Maps lookup buttons retain an 8px gap below their input.

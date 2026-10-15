@@ -104,3 +104,12 @@ workflow guides. Extended those tests and components. New code owns a small
 confirmation presentation component, field-error association and accessibility
 assertions; it introduces no parallel accounting, persistence, retry or fixture
 seed workflow.
+
+## Integrated visual acceptance
+
+[#331 acceptance](COMMERCIAL_UI_ACCEPTANCE.md) extends these same browser suites
+with per-image revision/browser/route metadata, representative effective-width
+reflow, a shared-fixture manual preview and explicit intentional-change review.
+It records current #288 status separately from this guide’s historical alpha
+implementation snapshot. Visual/manual sign-off and #224 external-beta gates
+remain distinct from passing automated checks.

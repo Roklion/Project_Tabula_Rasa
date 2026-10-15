@@ -117,10 +117,10 @@ export function ReferencesPage({ resource }: { resource: 'categories' | 'payees'
     actions={session.capabilities.includes('bookkeeping:write') && <Link className="button" to={'/' + resource + '/new'}>Add {resource === 'categories' ? 'category' : resource === 'payees' ? 'payee' : 'tag'}</Link>} />
     {resource === 'categories'
       ? <RecordList resource={resource} title="Categories" list={api.categories} label={row => row.name}
-          columns={[{ title: 'Kind', render: row => row.kind }, { title: 'Parent category', className: 'tableText', render: (row, rows) => rows.find(parent => parent.id === row.parent_id)?.name ?? '—' }]}
+          columns={[{ title: 'Kind', render: row => <span className="recordBadge">{row.kind}</span> }, { title: 'Parent category', className: 'tableText', render: (row, rows) => rows.find(parent => parent.id === row.parent_id)?.name ?? '—' }]}
           editor={(row, close) => <CategoryEditor row={row} onClose={close} />} />
       : <><RecordList key={resource} resource={resource} title={title} list={resource === 'payees' ? api.payees : api.tags} label={row => row.name}
-          columns={[{ title: 'Status', render: row => row.active ? 'Active' : 'Inactive' }]}
+          columns={[{ title: 'Status', render: row => <span className="recordBadge">{row.active ? 'Active' : 'Inactive'}</span> }]}
           editor={(row, close) => <ManagedEditor row={row} resource={resource} onClose={close} />} />
         <div className="actions"><Link className="button action-secondary" to={'/' + resource + '/merge'}>Merge {resource}</Link></div></>}
   </>;

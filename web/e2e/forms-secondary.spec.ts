@@ -1,56 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { execFileSync } from 'node:child_process';
-import { readdir, writeFile } from 'node:fs/promises';
+import { captureEvidence, retainEvidence } from './visual-evidence';
+import { writeFile } from 'node:fs/promises';
 
 const baselineCapture = process.env.TABULA_RASA_VISUAL_BASELINE === '1';
-const longName = 'Synthetic business label with deliberately long words for responsive fields and management records';
-const longId = 'synthetic-record-identity-with-long-stable-provenance-0123456789';
-const session = { actor_id: 'synthetic', organization_id: 'synthetic', entity: { id: 'alpha', name: 'Alpha demonstration' },
-  capabilities: ['bookkeeping:read', 'bookkeeping:write'], cache_scope: 'forms-secondary-alpha', csrf_token: 'synthetic', trusted_development: true };
-const account = { id: 'account', name: longName, type: 'Bank', classification: 'Asset', opening_balance: '0.00', parent_id: null, active: true, baseline: 'loaded-account' };
-const accumulated = { ...account, id: 'accumulated', name: 'Accumulated depreciation', type: 'Other' };
-const category = { id: 'category', name: 'Synthetic expense category with a long descriptive label', kind: 'Expense', parent_id: null, baseline: 'loaded-category' };
-const references = [{ id: 'reference', name: longName, active: true, baseline: 'loaded-reference' },
-  { id: 'source', name: 'Second synthetic source with another long descriptive name', active: true, baseline: 'loaded-source' }];
-const transaction = { id: 'transaction', txn_date: '2026-10-07', kind: 'Expense', amount: '1234.56', account_id: 'account', to_account_id: '',
-  category_id: 'category', payee_id: 'reference', tag_ids: ['reference'], description: longName, reference: 'Synthetic reference',
-  source_type: '', baseline: 'loaded-transaction' };
-const mixed = { ...transaction, id: 'mixed', total_expense: '1234.56', business_use_percentage: '60', allocated_amount: '740.74',
-  allocation_rationale: 'Synthetic allocation rationale spanning several words and lines in a narrow viewport.', linked_transaction_id: longId,
-  ledger_status: 'linked', recurring_schedule_id: '', recurring_scheduled_date: '', recurring_occurrence_type: '', baseline: 'loaded-mixed' };
-const recurring = { ...transaction, id: 'recurring', name: longName, source_kind: 'transaction', start_date: '2026-10-01', end_date: '',
-  recurrence_unit: 'month', recurrence_interval: '1', total_expense: '', business_use_percentage: '100', allocation_rationale: '', status: 'active',
-  next_due_date: '2026-11-01', latest_current_occurrence_date: '2026-10-01', attention_message: '', baseline: 'loaded-recurring' };
-const asset = { id: 'asset', name: longName, asset_type: 'Equipment', notes: 'Synthetic multiline notes.\nA second line preserves useful context.',
-  acquisition_date: '2026-01-01', depreciation_start_date: '2026-01-01', cost_basis: '12345.67', salvage_value: '0.00', useful_life_quarters: '4',
-  depreciation_expense_account_id: 'category', accumulated_depreciation_account_id: 'accumulated', payee_id: 'reference', tag_ids: ['reference'],
-  reference: 'Synthetic reference', source_transaction_id: longId, status: 'active', retired_date: '', depreciation_method: 'straight_line', baseline: 'loaded-asset' };
-const assetDetail = { asset, terms_locked: true, posting_accounts_locked: true, can_delete: false,
-  schedule: [{ sequence: 1, scheduled_date: '2026-03-31', depreciation_amount: '3086.42', cumulative_depreciation: '3086.42', remaining_book_value: '9259.25',
-    override_reason: 'Synthetic override reason with enough words to wrap.', posting_status: 'Posted', journal_entry_id: longId }], history: [{ id: 'posted' }] };
-const mileage = { id: 'mileage', trip_date: '2026-10-07', miles: '123.4', vehicle: 'Synthetic vehicle', start_location: longName,
-  destination: 'Synthetic destination with a long address and business name', business_purpose: 'Visit the synthetic demonstration business for a scheduled appointment.',
-  notes: 'Synthetic trip notes.\nSecond line for a narrow screen.', tag_ids: ['reference'], baseline: 'loaded-mileage' };
-const receipt = { id: longId, filename: 'synthetic-receipt-with-a-deliberately-long-filename-for-narrow-screens-0123456789.pdf', mime_type: 'application/pdf', byte_size: 1234, sha256: 'a'.repeat(64) };
+import { session, longName, longId, category, receipt, secondaryResponse } from './secondary-fixture';
 
 async function transport(page: Page, capabilities = session.capabilities) {
-  await page.route('**/api/v1/**', route => {
-    const path = new URL(route.request().url()).pathname;
-    // Every request stays intercepted. Unmatched reads are empty synthetic lists;
-    // mutation tests below replace only the endpoint they explicitly exercise.
-    const json = path.endsWith('/session') ? { ...session, capabilities } : path === '/api/v1/entities' ? { items: [session.entity] }
-      : path.endsWith('/accounts') ? { items: [account, accumulated] } : path.endsWith('/categories') ? { items: [category] }
-        : path.endsWith('/payees') || path.endsWith('/tags') ? { items: references } : path.endsWith('/transactions') ? { items: [transaction] }
-          : path.endsWith('/mixed-use/allocation') ? { allocated_amount: '740.74' } : path.endsWith('/mixed-use/mixed') ? mixed : path.endsWith('/mixed-use') ? { items: [mixed] }
-            : path.endsWith('/recurring/recurring') ? { schedule: recurring, occurrences: [{ ...transaction, id: longId, recurring_occurrence_type: 'initial', recurring_scheduled_date: '2026-10-01', source_id: '' }] }
-              : path.endsWith('/recurring') ? { items: [recurring] } : path.endsWith('/assets/types') ? { items: ['Equipment'] }
-                : path.endsWith('/assets/asset') ? assetDetail : path.endsWith('/assets') ? { items: [asset] }
-                  : path.endsWith('/mileage/mileage') ? mileage : path.endsWith('/mileage') ? { items: [mileage] }
-                    : path.endsWith('/receipts') ? { items: [receipt] } : path.endsWith('/documents') ? { items: [{ ...receipt, id: 'unreferenced', filename: 'synthetic-unreferenced.pdf' }], needing_integrity: 0 }
-                      : { items: [] };
-    return route.fulfill({ json });
-  });
+  await page.route('**/api/v1/**', route => route.fulfill({ json: secondaryResponse(new URL(route.request().url()), capabilities) }));
 }
 
 async function capture(page: Page, name: string, accessibility = true) {
@@ -80,20 +37,184 @@ async function capture(page: Page, name: string, accessibility = true) {
       expect(results.violations, name).toEqual([]);
     }
   }
-  await page.screenshot({ path: test.info().outputPath(`${name}-${width}.png`), fullPage: true });
+  await captureEvidence(page, test.info(), `${name}-${width}.png`);
 }
 
 test.beforeEach(async ({ page }) => { await transport(page); });
-test.afterEach(async ({ page }) => {
-  const screenshots = (await readdir(test.info().outputPath('.'))).filter(name => name.endsWith('.png'));
-  await writeFile(test.info().outputPath('revision.json'), JSON.stringify({
-    revision: process.env.TABULA_RASA_VISUAL_REVISION ?? execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
-    worktreeChanges: baselineCapture ? 'Untouched HEAD archive; test harness only.' : execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim(),
-    baselineCapture, project: test.info().project.name, finalViewport: page.viewportSize(),
-    screenshots: screenshots.map(filename => { const width = Number(filename.match(/-(1440|390|320)\.png$/)?.[1]);
-      return { filename, viewport: { width, height: width === 1440 ? 1000 : 844 } }; }),
-    data: 'Synthetic intercepted transport only; no live service, ledger, credentials or receipt contents.',
-  }, null, 2));
+test.afterEach(async () => { await retainEvidence(test.info()); });
+
+test('current main import copy and conversion routes consume the shared light presentation', async ({ page }) => {
+  test.setTimeout(90_000);
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+    for (const [name, path, heading] of [
+      ['data-imports', '/data', 'Data & backup'], ['mixed-copy', '/mixed-use/mixed/copy', 'Copy mixed-use expense'],
+      ['expense-recurring', '/transactions/transaction/recurring', 'Make expense recurring'],
+    ] as const) {
+      await page.goto(path);
+      await expect(page.getByRole('heading', { name: heading, exact: true }).first()).toBeVisible();
+      await expect(page.getByRole('status').filter({ hasText: /Loading/ })).toHaveCount(0);
+      if (name === 'data-imports') await expect(page.getByLabel('QuickBooks mileage CSV', { exact: true })).toBeVisible();
+      if (name === 'mixed-copy') await expect(page.getByRole('button', { name: 'Save mixed-use copy', exact: true })).toBeVisible();
+      if (name === 'expense-recurring') await expect(page.getByLabel('Schedule name', { exact: true })).toBeVisible();
+      await capture(page, name);
+    }
+  }
+});
+
+test('secondary detail actions say Manage for writers and View for read-only users', async ({ page }) => {
+  for (const [path, label, heading] of [
+    ['/recurring', longName, 'Recurring schedule'], ['/mixed-use', '2026-10-07 · ' + longName, 'Mixed-use expense'],
+    ['/assets', longName, 'Asset detail'],
+  ] as const) {
+    await page.goto(path);
+    const manage = page.getByRole('link', { name: 'Manage ' + label, exact: true });
+    await expect(manage).toBeVisible();
+    await expect(manage).toHaveText('Manage↗');
+    await expect(page.getByRole('link', { name: 'View ' + label, exact: true })).toHaveCount(0);
+    await manage.click();
+    await expect(page.getByRole('heading', { name: heading, exact: true }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeVisible();
+  }
+  await page.route('**/api/v1/session', route => route.fulfill({ json: { ...session, capabilities: ['bookkeeping:read'] } }));
+  for (const [path, label] of [['/recurring', longName], ['/mixed-use', '2026-10-07 · ' + longName], ['/assets', longName]] as const) {
+    await page.goto(path);
+    await expect(page.getByRole('link', { name: 'View ' + label, exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Manage ' + label, exact: true })).toHaveCount(0);
+    await page.getByRole('link', { name: 'View ' + label, exact: true }).click();
+    await expect(page.getByRole('heading', { name: /^Saved / }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: /Save changes|Pause schedule|Post due depreciation/ })).toHaveCount(0);
+  }
+});
+
+test('reference management stays under Categories and contacts across links, creates and merges', async ({ page }) => {
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+    for (const path of ['/categories', '/categories/new', '/payees', '/payees/new', '/payees/merge', '/tags', '/tags/new', '/tags/merge']) {
+      await page.goto(path);
+      const group = page.getByRole('navigation', { name: 'Reference data', exact: true });
+      await expect(group.getByRole('link')).toHaveText(['Categories', 'Payees', 'Tags']);
+      await expect(group.locator('[aria-current="page"]')).toHaveCount(1);
+      await expect(page.getByRole('navigation', { name: 'Entries', exact: true })).toHaveCount(0);
+      if (width === 390) await page.getByRole('button', { name: 'Menu', exact: true }).click();
+      const main = page.getByRole('navigation', { name: 'Main navigation' });
+      await expect(main.locator('[aria-current]')).toHaveCount(1);
+      await expect(main.getByRole('link', { name: 'Categories & contacts', exact: true })).toHaveAttribute('aria-current', /page|true/);
+      await expect(main.getByRole('link', { name: 'Transactions', exact: true })).not.toHaveAttribute('aria-current');
+    }
+    await page.goto('/categories');
+    await page.getByRole('navigation', { name: 'Reference data' }).getByRole('link', { name: 'Payees', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Payees', exact: true })).toBeVisible();
+    await expect(page.getByRole('main')).toBeFocused();
+    await capture(page, 'reference-navigation');
+    await page.goto('/categories/new');
+    await page.getByLabel('Category name').fill('Synthetic category draft');
+    const tags = page.getByRole('navigation', { name: 'Reference data' }).getByRole('link', { name: 'Tags', exact: true });
+    await tags.focus(); await page.keyboard.press('Enter');
+    await expect(page.getByRole('alertdialog', { name: 'Unsaved changes' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(tags).toBeFocused();
+    await expect(page.getByLabel('Category name')).toHaveValue('Synthetic category draft');
+  }
+});
+
+test('mileage filters keep compact aligned dates beside tall tag choices', async ({ page }) => {
+  for (const width of [1440, 1024, 390, 320]) {
+    await page.setViewportSize({ width, height: width > 760 ? 1000 : 844 });
+    await page.goto('/mileage');
+    const filters = page.getByRole('region', { name: 'Mileage filters' });
+    const from = filters.getByLabel('From', { exact: true });
+    const to = filters.getByLabel('To', { exact: true });
+    const tags = filters.getByLabel('Filter by tags', { exact: true });
+    await expect(tags.getByRole('option')).toHaveCount(2);
+    await tags.selectOption('source');
+    await expect(filters.getByText('Selected: Second synthetic source with another long descriptive name')).toBeVisible();
+    const bounds = await Promise.all([from, to, tags].map(control => control.boundingBox()));
+    const controlHeight = await page.evaluate(() => matchMedia('(min-width: 761px) and (pointer: fine)').matches ? 40 : 44);
+    expect(bounds[0]!.height).toBe(controlHeight); expect(bounds[1]!.height).toBe(controlHeight);
+    expect(bounds[2]!.height).toBeGreaterThanOrEqual(128);
+    if (width > 760) {
+      expect(Math.abs(bounds[0]!.y - bounds[1]!.y)).toBeLessThanOrEqual(1);
+      if (bounds[2]!.x > bounds[1]!.x) expect(Math.abs(bounds[0]!.y - bounds[2]!.y)).toBeLessThanOrEqual(1);
+      else expect(bounds[2]!.y).toBeGreaterThan(bounds[0]!.y + bounds[0]!.height);
+    } else {
+      expect(bounds[1]!.y).toBeGreaterThan(bounds[0]!.y + bounds[0]!.height);
+      expect(bounds[2]!.y).toBeGreaterThan(bounds[1]!.y + bounds[1]!.height);
+    }
+    await filters.getByRole('button', { name: 'Clear filters' }).click();
+    await expect(tags).toHaveValues([]);
+    const download = await page.getByRole('button', { name: 'Download filtered mileage CSV', exact: true }).boundingBox();
+    const table = await page.getByRole('region', { name: 'Mileage log', exact: true }).boundingBox();
+    expect(table!.y - download!.y - download!.height).toBeGreaterThanOrEqual(16);
+    const region = page.getByRole('region', { name: 'Mileage log', exact: true });
+    const actionCell = region.locator('tbody td.tableActions').first();
+    const actionHeader = region.getByRole('columnheader', { name: 'Actions', exact: true });
+    if (width >= 1000) {
+      await expect(actionHeader).toHaveCSS('position', 'sticky');
+      await expect(actionCell).toHaveCSS('position', 'sticky');
+      await region.evaluate(element => { element.scrollLeft = 400; });
+      const [container, action] = await Promise.all([region.boundingBox(), actionCell.boundingBox()]);
+      expect(action!.x).toBeGreaterThanOrEqual(container!.x);
+      expect(action!.x + action!.width).toBeLessThanOrEqual(container!.x + container!.width + 1);
+      await region.evaluate(element => { element.scrollLeft = 0; });
+    } else await expect(actionCell).toHaveCSS('position', 'static');
+    await capture(page, 'mileage-filter-alignment');
+  }
+});
+
+test('reference pages use one visible title and retain named tables and protected editors', async ({ page }) => {
+  for (const width of [1440, 320]) {
+    await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+    for (const [route, title, edit] of [['categories', 'Categories', 'Edit category'], ['payees', 'Payees', 'Edit payee'], ['tags', 'Tags', 'Edit tag']] as const) {
+      await page.goto('/' + route);
+      await expect(page.getByRole('table', { name: title, exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: title, exact: true })).toHaveCount(1);
+      await expect(page.locator('caption')).toHaveCount(0);
+      await capture(page, route + '-title');
+      await page.getByRole('button', { name: /^Edit / }).first().click();
+      await expect(page.getByRole('heading', { name: edit, exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeVisible();
+      await page.getByRole('button', { name: 'Back to records', exact: true }).click();
+      await expect(page.getByRole('table', { name: title, exact: true })).toBeVisible();
+    }
+  }
+  await page.route('**/api/v1/session', route => route.fulfill({ json: { ...session, capabilities: ['bookkeeping:read'] } }));
+  for (const route of ['categories', 'payees', 'tags']) {
+    await page.goto('/' + route);
+    await expect(page.getByRole('table')).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Edit / })).toHaveCount(0);
+    await page.route('**/api/v1/entities/alpha/' + route + '*', route => route.fulfill({ json: { items: [] } }));
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'No records to edit' })).toBeVisible();
+    await expect(page.getByRole('table')).toHaveCount(0);
+  }
+});
+
+test('integrated form and receipt reflow keeps keyboard controls and retention guidance', async ({ page }) => {
+  test.setTimeout(90_000);
+  for (const width of [720, 320]) {
+    const reflow = width === 720 ? '1440px desktop at 200% equivalent CSS width' : '1280px desktop at 400% equivalent CSS width';
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/transactions/new');
+    await expect(page.getByLabel('From account', { exact: true })).toContainText(longName);
+    await page.getByLabel('Description / memo').fill('Synthetic review draft with a long sentence and readable field labels.');
+    const back = page.getByRole('button', { name: 'Back to records', exact: true });
+    await back.focus(); await page.keyboard.press('Enter');
+    const dialog = page.getByRole('alertdialog', { name: 'Discard draft' });
+    await expect(dialog.getByRole('button', { name: 'Keep editing' })).toBeFocused();
+    await captureEvidence(page, test.info(), `form-confirmation-reflow-${width}.png`, reflow);
+    await page.keyboard.press('Escape'); await expect(back).toBeFocused();
+    await capture(page, 'transaction-reflow');
+    // A direct load discards only this synthetic fixture draft, avoiding an
+    // unrelated navigation confirmation on the way to the receipt surface.
+    await page.goto('/transactions/transaction/receipts');
+    await expect(page.getByText('Inspect ' + receipt.filename, { exact: true })).toBeVisible();
+    const inspect = page.locator('summary').filter({ hasText: 'Inspect ' + receipt.filename });
+    await inspect.focus(); await page.keyboard.press('Enter');
+    await expect(page.getByText(receipt.sha256, { exact: false }).first()).toBeVisible();
+    await capture(page, 'receipt-reflow');
+    await captureEvidence(page, test.info(), `receipt-keyboard-reflow-${width}.png`, reflow);
+  }
 });
 
 test('identity availability surfaces share controls without exposing private routes', async ({ page }) => {

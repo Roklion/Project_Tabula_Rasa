@@ -27,11 +27,11 @@ export function Accounts() {
       : query.isError ? <ErrorNotice error={query.error} operation="read" onReview={() => void query.refetch()} />
       : query.data.items.length === 0 ? <EmptyState title="No accounts yet">Add an account to start bookkeeping.</EmptyState>
       : <TableRegion label="Accounts"><table>
-        <caption>Business accounts</caption><thead><tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Classification</th><th scope="col">Parent account</th><th scope="col" className="amount">Opening balance</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
-        <tbody>{query.data.items.map(account => <tr key={account.id}><th scope="row" className="tableText">{account.name}</th>
+        <caption>Business accounts</caption><thead><tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Classification</th><th scope="col">Parent account</th><th scope="col" className="amount">Opening balance</th><th scope="col">Status</th><th scope="col" className="tableActions">Actions</th></tr></thead>
+        <tbody>{query.data.items.map(account => <tr key={account.id}><th scope="row" className="tableText"><span className="recordTitle">{account.name}</span></th>
           <td>{account.type}</td><td>{account.classification}</td><td className="tableText">{query.data.items.find(parent => parent.id === account.parent_id)?.name ?? '—'}</td><td className="amount">{account.opening_balance}</td>
-          <td>{account.active ? 'Active' : 'Inactive'}</td><td>{session.capabilities.includes('bookkeeping:write') &&
-            <ActionButton aria-label={'Edit ' + account.name} onClick={() => setSelected(structuredClone(account))}>Edit</ActionButton>}</td></tr>)}</tbody></table></TableRegion>}
+          <td>{account.active ? 'Active' : 'Inactive'}</td><td className="tableActions"><div className="rowActions">{session.capabilities.includes('bookkeeping:write') &&
+            <ActionButton aria-label={'Edit ' + account.name} onClick={() => setSelected(structuredClone(account))}>Edit</ActionButton>}</div></td></tr>)}</tbody></table></TableRegion>}
   </>;
 }
 

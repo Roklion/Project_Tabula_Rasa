@@ -49,14 +49,14 @@ export function MileagePage() {
     </div><ActionButton onClick={() => { setStart(''); setEnd(''); setTagIds([]); }}>Clear filters</ActionButton></section>
     {trips.isPending ? <LoadingState label="Loading mileage…" /> : trips.isError ? <ErrorNotice error={trips.error} operation="read" onReview={() => void trips.refetch()} /> : <>
       <p role="status">Trips: {rows.length} · Business miles: {(rows.reduce((sum, row) => sum + Math.round(Number(row.miles) * 10), 0) / 10).toFixed(1)}</p>
-      <div className="actions"><ActionButton disabled={!rows.length} onClick={download}>Download filtered mileage CSV</ActionButton></div>
+      <div className="actions tableToolbar"><ActionButton disabled={!rows.length} onClick={download}>Download filtered mileage CSV</ActionButton></div>
       {!rows.length ? <EmptyState title="No mileage trips">Add a trip or adjust the filters.</EmptyState> :
         <TableRegion label="Mileage log"><table><caption>Business mileage</caption>
-          <thead><tr>{['Date', 'Miles', 'From', 'Destination', 'Business purpose', 'Vehicle', 'Tags', 'Notes', 'ID', 'Actions'].map(label => <th key={label} scope="col" className={label === 'Miles' ? 'amount' : undefined}>{label}</th>)}</tr></thead>
+          <thead><tr>{['Date', 'Miles', 'From', 'Destination', 'Business purpose', 'Vehicle', 'Tags', 'Notes', 'ID', 'Actions'].map(label => <th key={label} scope="col" className={label === 'Miles' ? 'amount' : label === 'Actions' ? 'tableActions' : undefined}>{label}</th>)}</tr></thead>
           <tbody>{rows.map(row => <tr key={row.id}><th scope="row">{row.trip_date}</th><td className="amount">{row.miles}</td><td className="tableText">{row.start_location}</td>
             <td className="tableText">{row.destination}</td><td className="tableText">{row.business_purpose}</td><td className="tableText">{row.vehicle}</td><td className="tableText">{row.tag_ids.map(id => names.get(id) ?? id).join(', ')}</td><td className="tableText">{row.notes}</td><td className="ledgerIdentity">{row.id}</td>
-            <td><ActionButton aria-label={(session.capabilities.includes('bookkeeping:write') ? 'Edit ' : 'View ') + tripLabel(row)} onClick={() => navigate('/mileage/' + encodeURIComponent(row.id))}>
-              {session.capabilities.includes('bookkeeping:write') ? 'Edit' : 'View'}</ActionButton></td></tr>)}</tbody>
+            <td className="tableActions"><div className="rowActions"><ActionButton aria-label={(session.capabilities.includes('bookkeeping:write') ? 'Edit ' : 'View ') + tripLabel(row)} onClick={() => navigate('/mileage/' + encodeURIComponent(row.id))}>
+              {session.capabilities.includes('bookkeeping:write') ? 'Edit' : 'View'}</ActionButton></div></td></tr>)}</tbody>
         </table></TableRegion>}
     </>}
   </>;

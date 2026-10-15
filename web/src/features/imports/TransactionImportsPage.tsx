@@ -1,3 +1,4 @@
+import { FilePicker } from '../../components/FilePicker';
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -79,9 +80,9 @@ function ImportWorkflow({ quickbooks = false, onDirtyChange }: { quickbooks?: bo
       : 'Required columns: Date, Type, Amount, Account, Category. Optional columns: Payee, Description, Reference. Type must be Income or Expense.'} />
     <p className="muted">Selected business: {session.entity.name}. Each file is limited to 25 MB and 1,000 rows; split larger sources into batches.</p>
     <fieldset disabled={mutation.isPending || uncertain}>
-      <label htmlFor={quickbooks ? 'quickbooks-transactions-file' : 'tabula-transactions-file'}>{quickbooks ? 'QuickBooks export' : 'Transaction CSV file'}</label>
-      <input id={quickbooks ? 'quickbooks-transactions-file' : 'tabula-transactions-file'} type="file" accept={quickbooks ? '.csv,.xlsx,.zip' : '.csv'}
-        onChange={event => void prepare(event.target.files?.[0])} />
+      <FilePicker id={quickbooks ? 'quickbooks-transactions-file' : 'tabula-transactions-file'}
+        label={quickbooks ? 'QuickBooks export' : 'Transaction CSV file'} accept={quickbooks ? '.csv,.xlsx,.zip' : '.csv'}
+        disabled={mutation.isPending || uncertain} onFiles={files => void prepare(files[0])} />
       {quickbooks && <><label className="checkbox"><input type="checkbox" checked={autoCreate} onChange={event => {
         setAutoCreate(event.target.checked); void prepare(file, event.target.checked);
       }} /> Automatically create missing accounts and categories</label>

@@ -1,7 +1,6 @@
 import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { execFileSync } from 'node:child_process';
-import { readdir, writeFile } from 'node:fs/promises';
+import { captureEvidence, retainEvidence } from './visual-evidence';
 
 const session = {
   actor_id: 'synthetic', organization_id: 'synthetic', entity: { id: 'alpha', name: 'Alpha demonstration' },
@@ -25,15 +24,27 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test.afterEach(async ({ page }) => {
-  await writeFile(test.info().outputPath('revision.json'), JSON.stringify({
-    revision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
-    worktreeChanges: execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim(),
-    project: test.info().project.name,
-    finalViewport: page.viewportSize(),
-    screenshots: (await readdir(test.info().outputPath('.'))).filter(name => name.endsWith('.png')),
-    data: 'Intercepted synthetic transport only; no live services.',
-  }, null, 2));
+test.afterEach(async () => { await retainEvidence(test.info()); });
+
+test('light Soft workspace stays light under a dark operating-system preference', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/accounts/new');
+  const form = page.locator('.surface.editor');
+  await expect(form).toBeVisible();
+  await expect(page.locator('html')).toHaveCSS('color-scheme', 'light');
+  expect((await form.boundingBox())!.width).toBeLessThanOrEqual(960);
+  const name = page.getByLabel('Account name');
+  const fine = await page.evaluate(() => matchMedia('(pointer: fine)').matches);
+  expect((await name.boundingBox())!.height).toBe(fine ? 40 : 44);
+  await expect(name).toHaveCSS('border-radius', '8px');
+  await name.focus(); await expect(name).toHaveCSS('outline-style', 'solid');
+  expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()).violations).toEqual([]);
+  await captureEvidence(page, test.info(), 'light-form-dark-system-1440.png');
+  await page.goto('/accounts');
+  await expect(page.getByRole('rowheader', { name: longName })).toHaveCSS('font-weight', '400');
+  expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()).violations).toEqual([]);
+  await captureEvidence(page, test.info(), 'light-table-dark-system-1440.png');
 });
 
 test('representative account form and table reflow with long labels', async ({ page }) => {
@@ -58,7 +69,7 @@ test('representative account form and table reflow with long labels', async ({ p
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
       const accessibility = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
       expect(accessibility.violations).toEqual([]);
-      await page.screenshot({ path: test.info().outputPath(`${surface}-${width}.png`), fullPage: true });
+      await captureEvidence(page, test.info(), `${surface}-${width}.png`);
     }
   }
 });
@@ -79,7 +90,7 @@ test('shared global styles leave every existing route family reachable', async (
       await expect(page.getByRole('status').filter({ hasText: /Loading/ })).toHaveCount(0);
       await expect(page.getByRole('heading', { name: 'Page unavailable' })).toHaveCount(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), route).toBe(true);
-      await page.screenshot({ path: test.info().outputPath(`route-${route.replaceAll('/', '_') || 'dashboard'}-${width}.png`), fullPage: true });
+      await captureEvidence(page, test.info(), `route-${route.replaceAll('/', '_') || 'dashboard'}-${width}.png`);
     }
   }
 });
@@ -145,9 +156,9 @@ test('disabled action tones stay neutral under the pointer', async ({ page }) =>
     const button = page.getByRole('button', { name: `Pending ${tone}`, exact: true });
     await button.hover();
     await expect(button).toBeDisabled();
-    await expect(button).toHaveCSS('background-color', 'rgb(241, 242, 241)');
-    await expect(button).toHaveCSS('color', 'rgb(98, 102, 107)');
-    await expect(button).toHaveCSS('border-top-color', 'rgb(221, 222, 217)');
+    await expect(button).toHaveCSS('background-color', 'rgb(232, 237, 244)');
+    await expect(button).toHaveCSS('color', 'rgb(82, 98, 122)');
+    await expect(button).toHaveCSS('border-top-color', 'rgb(207, 218, 233)');
   }
 });
 

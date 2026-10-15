@@ -81,8 +81,8 @@ export function RecurringPage() {
     <RecordList resource="recurring" title="Recurring schedules" list={api.recurring} label={row => row.name} canEdit={() => false} editor={() => null}
       detailsTarget={row => '/recurring/' + encodeURIComponent(row.id)} columns={[
         { title: 'Cadence', render: row => row.recurrence_interval + ' ' + row.recurrence_unit }, { title: 'Next due', render: row => row.next_due_date || 'None' },
-        { title: 'Latest occurrence', render: row => row.latest_current_occurrence_date || 'None' }, { title: 'Status', render: row => row.status },
-        { title: 'Attention', className: 'tableText', render: row => row.attention_message || 'None' }, { title: 'ID', className: 'tableText', render: row => row.id }]} />
+        { title: 'Latest occurrence', render: row => row.latest_current_occurrence_date || 'None' }, { title: 'Status', render: row => <span className="recordBadge">{row.status}</span> },
+        { title: 'Attention', className: 'tableText', render: row => row.attention_message || 'None' }, { title: 'ID', className: 'ledgerIdentity', render: row => row.id }]} />
     {session.capabilities.includes('bookkeeping:write') && <GenerateOccurrences />}
   </>;
 }
