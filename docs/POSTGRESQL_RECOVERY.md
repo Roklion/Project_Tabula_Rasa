@@ -184,7 +184,7 @@ future identity/job/audit schemas or external document bytes.
 Use the application release and immutable Alembic chain appropriate to the
 requested point. Do not upgrade, stamp or downgrade the restored target before
 checking it: that changes the state being verified. The current verifier accepts
-only #260's supported revisions (`0004_mileage_order` through `0010_onboarding_routes`)
+only #260's supported revisions (`0004_mileage_order` through `0011_control_plane_join`, including both control-plane branches)
 and requires the exact expected revision. Older/unknown points stop explicitly;
 use their retained release/tooling in an isolated environment and record the gap.
 Never extend ordinary startup with historical format conversion.

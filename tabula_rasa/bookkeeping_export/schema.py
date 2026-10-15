@@ -14,10 +14,10 @@ FORMAT_VERSION = 1
 # inventory remains complete; cutover controls are deployment records.
 # Identity control-plane tables contain no canonical bookkeeping fields and
 # intentionally do not travel in entity exports or restore artifacts.
-SUPPORTED_DATABASE_REVISION = "0010_onboarding_routes"
+SUPPORTED_DATABASE_REVISION = "0011_control_plane_join"
 SUPPORTED_DATABASE_REVISIONS = ("0004_mileage_order", "0005_bookkeeping_cutover",
                                 "0006_identity_control_plane", "0007_identity_sessions", "0008_owner_lock_scope",
-                                "0009_workspace_lifecycle", SUPPORTED_DATABASE_REVISION)
+                                "0009_workspace_lifecycle", "0009_external_connections", "0010_onboarding_routes", SUPPORTED_DATABASE_REVISION)
 ROOT = "id:text created_at:instant updated_at:instant incarnation_id:text version:integer"
 
 

@@ -1,5 +1,10 @@
 # Whole-profile acceptance and controlled bookkeeping cutover
 
+For approved named ownership of existing accepted entities, follow
+[existing entity claims and external connections](EXTERNAL_CONNECTIONS_AND_LEGACY_CLAIMS.md).
+#319 maps control-plane ownership without reimporting books; #303 retains the
+separate actual live execution and authority-activation approvals.
+
 This guide owns #257/#258 under [EPIC #220](https://github.com/Roklion/Project_Tabula_Rasa/issues/220)
 and [initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124).
 It also owns [#299](https://github.com/Roklion/Project_Tabula_Rasa/issues/299)'s

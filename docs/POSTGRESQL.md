@@ -25,6 +25,12 @@ Identity revisions are
 forward-only: recover with an approved compatible procedure instead of a
 destructive identity downgrade. See [Named-user authentication](NAMED_USER_AUTH.md).
 
+Revision `0009_external_connections` adds tenant-owned provider references
+and approved existing-entity claims without rewriting bookkeeping. Follow
+[external connection and claim setup](EXTERNAL_CONNECTIONS_AND_LEGACY_CLAIMS.md)
+for separate encrypted secret custody and operator approval. It is forward-only
+and does not activate authority, install credentials or migrate live profiles.
+
 ## Access and migration tools
 
 Use synchronous **SQLAlchemy Core 2.0 + Psycopg 3**, with **Alembic** for
@@ -733,3 +739,7 @@ provenance, historical references and external document metadata. See
 artifact procedure, format/validation contract, #224 customer-delivery handoff
 and #258's verified-export activation evidence. It does not switch the active
 ledger or replace #259's managed backup/PITR recovery requirements.
+
+Forward revision `0011_control_plane_join` joins the independent
+`0009_external_connections` and `0010_onboarding_routes` branches. Upgrade to
+this single head from either supported branch; neither branch is rewritten.

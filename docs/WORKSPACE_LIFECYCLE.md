@@ -133,12 +133,14 @@ Privately distributed invitations are supported now: share the app's
 `/invitations` route separately from the credential. That route returns to
 acceptance after login for both new and existing members, without creating an
 organization. Credentials must be pasted after login and never enter URLs.
-Connections remain optional and deferred to #318; invites are optional and can
+Connections remain optional through Data & backup (#318); invites are optional and can
 be sent later. Existing live Sheets migration remains the explicit #258/#303
 operator process, with no browser import or authority switch during setup.
 
-Apply forward migration `0010_onboarding_routes` before this browser revision.
-It extends the exact server/database login return-path allowlist with
+Apply forward migration `0011_control_plane_join` before this browser revision.
+It joins the existing `0009_external_connections` and `0010_onboarding_routes`
+branches without rewriting either. The onboarding migration
+extends the exact server/database login return-path allowlist with
 `/invitations`, preserving all existing sessions, login attempts and bookkeeping
 records. External URLs and query-bearing return paths remain forbidden. Native
 browser tests cover desktop/mobile setup, failures, lost responses, refresh,

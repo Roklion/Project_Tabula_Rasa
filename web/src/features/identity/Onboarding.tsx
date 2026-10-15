@@ -103,7 +103,7 @@ export function LedgerSetup({ session, organization }: { session: SessionState; 
         <p>{!organization && <>Workspace: {workspace.trim()} · </>}Business: {business.trim()}</p>
         <Field id="setup-defaults" label="Bookkeeping defaults"><select id="setup-defaults" defaultValue="standard"><option value="standard">Standard basic bookkeeping</option></select></Field>
         <p>Start with the supported chart of accounts and Income/Expense categories. Opening balances start at zero. Review accounts before recording your first transaction.</p>
-        <p>External connections are optional and coming later. You can invite collaborators later from Workspace &amp; members.</p>
+        <p>External connections are optional. Connect Google Drive later from Data &amp; backup, or invite collaborators from Workspace &amp; members.</p>
         {!attempted && <ActionButton disabled={pending} onClick={() => setStep(1)}>Back</ActionButton>}
       </>}
       <div className="actions"><ActionButton tone="primary" type="submit" pending={pending}
