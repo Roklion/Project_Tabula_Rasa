@@ -18,7 +18,9 @@ export function visualReview(): Plugin {
           || /^\/api\/v1\/entities\/[^/]+\/(?:mixed-use|recurring|assets|mileage)\/[^/]+$/.test(url.pathname)
           || /^\/api\/v1\/entities\/[^/]+\/(?:transactions|mixed-use)\/[^/]+\/receipts$/.test(url.pathname)
           || /^\/api\/v1\/entities\/[^/]+\/mixed-use\/[^/]+\/copy-draft$/.test(url.pathname);
-        if (request.method !== 'GET' || !supported) {
+        const preparation = request.method === 'POST'
+          && /^\/api\/v1\/entities\/[^/]+\/mixed-use\/(?:allocation|[^/]+\/copy-draft)$/.test(url.pathname);
+        if (!preparation && (request.method !== 'GET' || !supported)) {
           response.statusCode = 405;
           response.end(JSON.stringify({ error: { code: 'unavailable' }, request_id: 'synthetic-preview-read-only' }));
           return;

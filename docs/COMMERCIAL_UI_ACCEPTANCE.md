@@ -108,7 +108,8 @@ npm --prefix web run dev -- --config vite.visual-review.config.ts --host 127.0.0
 For phone review on the same trusted network, explicitly use `--host 0.0.0.0`
 and the machine's LAN address. This is a local synthetic preview, not a deployed
 environment. The explicit preview Vite configuration and adapter reuses existing test responses, disables the
-real API proxy and terminates all API requests. Writes are rejected, and file/auth
+real API proxy and terminates all API requests. Only the exact non-mutating mixed-use copy-draft and allocation POSTs are
+admitted alongside supported reads. Writes are rejected, and file/auth
 requests never reach a provider. Draft, navigation and error interactions work;
 it does not implement persistence, receipt bytes, successful saves or complete
 filter-backend behavior. Restart ordinary Vite without the preview config when finished.

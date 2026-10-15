@@ -146,6 +146,18 @@ test('mileage filters keep compact aligned dates beside tall tag choices', async
     const download = await page.getByRole('button', { name: 'Download filtered mileage CSV', exact: true }).boundingBox();
     const table = await page.getByRole('region', { name: 'Mileage log', exact: true }).boundingBox();
     expect(table!.y - download!.y - download!.height).toBeGreaterThanOrEqual(16);
+    const region = page.getByRole('region', { name: 'Mileage log', exact: true });
+    const actionCell = region.locator('tbody td.tableActions').first();
+    const actionHeader = region.getByRole('columnheader', { name: 'Actions', exact: true });
+    if (width >= 1000) {
+      await expect(actionHeader).toHaveCSS('position', 'sticky');
+      await expect(actionCell).toHaveCSS('position', 'sticky');
+      await region.evaluate(element => { element.scrollLeft = 400; });
+      const [container, action] = await Promise.all([region.boundingBox(), actionCell.boundingBox()]);
+      expect(action!.x).toBeGreaterThanOrEqual(container!.x);
+      expect(action!.x + action!.width).toBeLessThanOrEqual(container!.x + container!.width + 1);
+      await region.evaluate(element => { element.scrollLeft = 0; });
+    } else await expect(actionCell).toHaveCSS('position', 'static');
     await capture(page, 'mileage-filter-alignment');
   }
 });
