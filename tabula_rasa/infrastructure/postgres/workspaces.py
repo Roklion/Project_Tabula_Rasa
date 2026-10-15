@@ -113,7 +113,8 @@ class PostgresWorkspaceRepository:
             # Admins can demote themselves, but cannot alter an Owner or peer
             # Admin. DB deferred constraints protect the last active Owner.
             if acting_role != 'owner' and (current['role'] == 'owner'
-                    or current['role'] == 'admin' and actor != target or not grant_allowed(acting_role, role)):
+                    or current['role'] == 'admin' and actor != target
+                    or role != current['role'] and not grant_allowed(acting_role, role)):
                 raise IdentityError('forbidden')
             if role == 'owner' and acting_role != 'owner':
                 raise IdentityError('forbidden')
@@ -181,6 +182,8 @@ class PostgresWorkspaceRepository:
             return {'state': 'accepted' if accept else 'declined'}
 
     def _require_fresh(self, session):
+        # Match the verified OIDC auth_time tolerance; retain the five-minute
+        # upper bound rather than treating session validity as recent login.
         if (session is None or not session.verified_email
-                or not timedelta(0) <= self.clock() - session.authenticated_at <= timedelta(minutes=5)):
+                or not -timedelta(seconds=60) <= self.clock() - session.authenticated_at <= timedelta(minutes=5)):
             raise IdentityError('reauthentication_required')
