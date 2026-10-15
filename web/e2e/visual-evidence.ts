@@ -14,10 +14,19 @@ const captures = new WeakMap<TestInfo, Capture[]>();
 const hash = (bytes: string | Buffer) => createHash('sha256').update(bytes).digest('hex');
 const git = (...args: string[]) => execFileSync('git', args, { encoding: 'utf8' }).trim();
 
+// Public rendering inputs shared by status and content hashing. Never enumerate unrelated data paths.
+const publicSources = ['web/index.html', 'web/tsconfig.json', 'web/public', 'web/src', 'web/e2e',
+  'web/package.json', 'web/package-lock.json', 'web/playwright.config.ts', 'web/vite.config.ts',
+  'web/vite.visual-review.config.ts', 'web/visual-review.ts'];
+
+export function sourceStatus(root = git('rev-parse', '--show-toplevel')) {
+  return git('-C', root, 'status', '--porcelain', '--untracked-files=all', '--', ...publicSources);
+}
+
 // Hash only public application/harness sources, never local configuration or data.
 export async function sourceHash(root = git('rev-parse', '--show-toplevel')) {
   const paths = git('-C', root, 'ls-files', '--cached', '--others', '--exclude-standard', '--',
-    'web/index.html', 'web/tsconfig.json', 'web/public', 'web/src', 'web/e2e', 'web/package.json', 'web/package-lock.json', 'web/playwright.config.ts', 'web/vite.config.ts', 'web/vite.visual-review.config.ts', 'web/visual-review.ts')
+    ...publicSources)
     .split('\n').filter(Boolean).sort();
   const digest = createHash('sha256');
   if (!paths.length) throw new Error('Visual evidence requires application and harness sources.');
@@ -52,7 +61,8 @@ export async function retainEvidence(info: TestInfo) {
   // Keep manifests for failures and tests without screenshots as well.
   await mkdir(info.outputPath('.'), { recursive: true });
   const metadata = {
-    schema: 1, revision: git('rev-parse', 'HEAD'), worktreeChanges: git('status', '--porcelain'),
+    schema: 2, revision: git('rev-parse', 'HEAD'), worktreeChanges: sourceStatus(),
+    worktreeChangesScope: 'Public rendering sources only; does not attest repository-wide cleanliness.',
     sourceSha256: await sourceHash(), project: info.project.name, platform: platform(),
     test: info.title, status: info.status, retry: info.retry, screenshots,
     data: 'Synthetic intercepted transport only; no live services, credentials, ledger or receipt bytes.',

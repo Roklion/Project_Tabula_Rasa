@@ -51,9 +51,13 @@ The existing Playwright projects cover Chromium desktop/mobile emulation,
 Firefox and WebKit. The suites retain PNGs and `revision.json` for each test,
 including failures. Each screenshot identifies its route, actual CSS viewport,
 browser engine/version, device scale, capture time, reflow scenario and PNG
-SHA-256. The manifest records actual Git HEAD, worktree changes, platform, test
+SHA-256. Schema 2 manifests record actual Git HEAD, public-source worktree
+changes, platform, test
 result/retry and a hash of public application/harness sources. It never substitutes
-an operator-supplied revision for the observed HEAD. A dirty worktree is explicitly
+an operator-supplied revision for the observed HEAD. Public-source status uses
+the same allowlist as hashing and excludes unrelated receipt/import filenames.
+Its explicit scope does not attest repository-wide cleanliness; older schema 1
+status was repository-wide. A dirty source worktree is explicitly
 development evidence; rerun from the clean candidate for exact-commit sign-off.
 
 720px and 320px exercise effective layout widths equivalent to 1440px at 200%

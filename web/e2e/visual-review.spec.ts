@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, rm, rename, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { sourceHash } from './visual-evidence';
+import { sourceHash, sourceStatus } from './visual-evidence';
 
 let server: ViteDevServer;
 let origin: string;
@@ -120,4 +120,25 @@ test('preview admits only exact non-mutating mixed-use POST preparation routes',
   await page.goto(new URL('/mixed-use/mixed', origin).href);
   await expect(page.getByRole('heading', { name: 'Edit mixed-use expense', exact: true })).toBeVisible();
   await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+
+test('evidence status retains public changes without exposing unrelated file metadata', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'tabula-status-evidence-'));
+  try {
+    execFileSync('git', ['init', '--quiet', root]);
+    await mkdir(join(root, 'web/src'), { recursive: true });
+    await writeFile(join(root, 'web/src/public.ts'), 'export const synthetic = true;');
+    execFileSync('git', ['-C', root, 'add', 'web']);
+    await writeFile(join(root, 'web/src/public.ts'), 'export const synthetic = false;');
+    await writeFile(join(root, 'web/src/new-public.ts'), 'export const other = true;');
+    const expected = sourceStatus(root);
+    expect(expected).toContain('web/src/public.ts');
+    expect(expected).toContain('web/src/new-public.ts');
+    for (const filename of ['synthetic-receipt.pdf', 'synthetic-import.xlsx', 'synthetic-backup.zip']) {
+      await writeFile(join(root, filename), 'synthetic unrelated bytes');
+    }
+    expect(sourceStatus(root)).toBe(expected);
+    expect(sourceStatus(root)).not.toMatch(/receipt|import|backup/);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
