@@ -211,6 +211,8 @@ def test_schema_export_is_deterministic_offline(monkeypatch, tmp_path):
     operation = schema["paths"]["/api/v1/entities/{entity_id}/accounts"]["get"]
     assert any(item["name"] == "entity_id" and item["in"] == "path" for item in operation["parameters"])
     assert "ErrorEnvelope" in schema["components"]["schemas"]
+    expired = schema['paths']['/api/v1/invitations/respond']['post']['responses']['410']
+    assert expired['content']['application/json']['schema'] == {'$ref': '#/components/schemas/ErrorEnvelope'}
 
 
 @pytest.mark.parametrize("code,status,mapped", [

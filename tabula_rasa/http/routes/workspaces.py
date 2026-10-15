@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Request, Response
 
 from ..errors import ERROR_RESPONSES, TransportError
+from ..models.common import ErrorEnvelope
 from ..models.workspaces import (
     BootstrapRequest, BootstrapResult, MemberChange, MemberList, InviteRequest,
     InviteIssued, InvitationList, InvitationResponse, InvitationOutcome, OwnershipGrant,
@@ -76,7 +77,8 @@ def revoke_invitation(organization_id: str, invitation_id: str, request: Request
     return Response(status_code=204)
 
 
-@router.post('/api/v1/invitations/respond', response_model=InvitationOutcome, operation_id='respond_invitation')
+@router.post('/api/v1/invitations/respond', response_model=InvitationOutcome, operation_id='respond_invitation',
+             responses={410: {'model': ErrorEnvelope, 'description': 'Invitation expired'}})
 def respond_invitation(body: InvitationResponse, request: Request):
     service, session = workflow(request)
     return service.respond(session, body.credential.get_secret_value(), body.accept)

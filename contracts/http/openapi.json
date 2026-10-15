@@ -14601,6 +14601,16 @@
             },
             "description": "Duplicate or concurrent change"
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invitation expired"
+          },
           "422": {
             "content": {
               "application/json": {

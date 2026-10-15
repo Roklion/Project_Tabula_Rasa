@@ -75,6 +75,12 @@ again after signing in. Pending invitations confer no discovery or ledger access
 
 ## Backend bootstrap and retry contract
 
+Bootstrap is available in the native PostgreSQL runtime. The migrated-profile
+runtime rejects workspace and additional-business creation before any records
+are written, because it serves only the operator-configured entity/profile
+bindings established at startup. Existing bound ledgers, memberships and
+invitations remain available there; bootstrap status remains a read-only lookup.
+
 Authenticated named users, including users without any memberships, can call
 `POST /api/v1/workspaces/bootstrap` with `request_id` (16–128 characters),
 `workspace_name` and `business_name` (required, trimmed, at most 160 characters).

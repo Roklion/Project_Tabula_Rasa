@@ -23,10 +23,13 @@ class InvitationCredential:
 
 
 class WorkspaceService:
-    def __init__(self, repository):
+    def __init__(self, repository, *, bootstrap_enabled=True):
         self.repository = repository
+        self.bootstrap_enabled = bootstrap_enabled
 
     def bootstrap(self, session, request_id, workspace_name, business_name, organization_id=None):
+        if not self.bootstrap_enabled:
+            raise IdentityError('forbidden')
         return self.repository.bootstrap(session.user_id, request_id, workspace_name, business_name, organization_id)
 
     def bootstrap_status(self, session, request_id):

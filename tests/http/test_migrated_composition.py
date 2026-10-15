@@ -5,7 +5,7 @@ import pytest
 
 from tabula_rasa.http.errors import TransportError
 from tabula_rasa.http.migrated import MigratedProfileServices
-from tabula_rasa.http.composition import open_migrated_runtime
+from tabula_rasa.http.composition import PostgresRuntime, open_migrated_runtime
 from tabula_rasa.http.config import HttpSettings
 from tabula_rasa.http.context import RequestContext
 from tabula_rasa.http.identity import NamedIdentity
@@ -130,12 +130,33 @@ def test_shared_production_factory_validates_all_bindings_and_preserves_request_
     assert factory.call_count == 2
     assert runtime.resolve_context is resolver and runtime.ready()
     assert runtime.identity is resolver
+    from tabula_rasa.application.identity import IdentityError
+    bootstrap = Mock()
+    monkeypatch.setattr(runtime.workspaces.repository, 'bootstrap', bootstrap)
     for profile in services:
         context = RequestContext("actor", "org", profile, frozenset({"bookkeeping:read"}), "session", "csrf")
         assert runtime.services(context) is services[profile]
         factory.assert_called_with(profile, secrets, database=database)
+        for organization_id in (None, 'organization-' + profile):
+            with pytest.raises(IdentityError, match='forbidden'):
+                runtime.workspaces.bootstrap(SimpleNamespace(user_id=profile), 'request-' + profile,
+                                             'Workspace', 'Business', organization_id)
+    bootstrap.assert_not_called()
+    members = Mock(return_value=[{'user_id': 'alpha'}])
+    monkeypatch.setattr(runtime.workspaces.repository, 'members', members)
+    assert runtime.workspaces.members(SimpleNamespace(user_id='alpha'), 'org') == [{'user_id': 'alpha'}]
     runtime.close()
     database.dispose.assert_called_once()
+
+
+def test_native_workspace_bootstrap_remains_available_for_independent_users(monkeypatch):
+    runtime = PostgresRuntime(Mock(), Mock(), service_factory=Mock(), identity=Mock())
+    bootstrap = Mock(side_effect=lambda actor, *args: {'state': 'ready', 'entity_id': actor})
+    monkeypatch.setattr(runtime.workspaces.repository, 'bootstrap', bootstrap)
+    for actor in ('alpha', 'beta'):
+        assert runtime.workspaces.bootstrap(SimpleNamespace(user_id=actor), 'request-' + actor,
+                                             'Workspace', 'Business') == {'state': 'ready', 'entity_id': actor}
+        bootstrap.assert_called_with(actor, 'request-' + actor, 'Workspace', 'Business', None)
 
 
 @pytest.mark.parametrize('mismatch', ['database', 'environment'])
