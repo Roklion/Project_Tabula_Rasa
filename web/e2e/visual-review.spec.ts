@@ -24,7 +24,8 @@ test('manual preview serves the shared synthetic financial, form and receipt fix
   expect(await read('/api/v1/session')).toMatchObject({ actor_id: 'synthetic', entity: { id: 'alpha' } });
   expect(await read('/api/v1/entities/alpha/reports/summary')).toMatchObject({ profit_loss: { net: '-150.25' } });
   expect(await read('/api/v1/entities/alpha/ledger')).toMatchObject({ items: [{ record_id: 'ordinary' }, {}, {}] });
-  expect(await read('/api/v1/entities/alpha/accounts')).toMatchObject({ items: [{ id: 'account' }, {}] });
+  expect(await read('/api/v1/entities/alpha/journals')).toMatchObject({ items: [{ id: 'entry', postings: [{ side: 'Debit' }, { side: 'Credit' }] }] });
+  expect(await read('/api/v1/entities/alpha/accounts')).toMatchObject({ items: [{ id: 'account' }, { id: 'accumulated' }, { id: 'equity' }] });
   expect(await read('/api/v1/entities/alpha/transactions/transaction/receipts')).toMatchObject({ items: [{ mime_type: 'application/pdf' }] });
 });
 
@@ -59,8 +60,11 @@ test('evidence digest binds HTML and public rendering assets while excluding pri
     await writeFile(join(root, 'web/public/mark.svg'), '<svg>synthetic second asset</svg>');
     const assetChanged = await sourceHash(root);
     expect(assetChanged).not.toBe(htmlChanged);
+    await writeFile(join(root, 'web/tsconfig.json'), JSON.stringify({ compilerOptions: { jsx: 'react-jsx' } }));
+    const compilerChanged = await sourceHash(root);
+    expect(compilerChanged).not.toBe(assetChanged);
     await writeFile(join(root, '.env'), 'SYNTHETIC_CONFIG=excluded');
-    expect(await sourceHash(root)).toBe(assetChanged);
+    expect(await sourceHash(root)).toBe(compilerChanged);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
@@ -84,4 +88,17 @@ test('dirty tracked deletion and rename retain distinct reproducible source dige
     await rename(join(root, 'web/index.html'), join(root, 'web/renamed.html'));
     expect(await sourceHash(root)).not.toBe(present);
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+
+test('explicit preview renders journals and opens the same journal from the ledger', async ({ page }) => {
+  await page.goto(new URL('/journals', origin).href);
+  await expect(page.getByRole('region', { name: 'Journals', exact: true })).toContainText('Complete synthetic journal');
+  await page.getByRole('button', { name: 'Edit 2026-10-06 · Complete synthetic journal', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Edit journal', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Posting 2', exact: true })).toBeVisible();
+  await page.goto(new URL('/transactions', origin).href);
+  await page.getByRole('button', { name: 'Edit 2026-10-06 · Complete synthetic journal · 40.00', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Edit journal', exact: true })).toBeVisible();
+  await expect(page.getByRole('status')).toContainText('Difference: 0.00');
 });

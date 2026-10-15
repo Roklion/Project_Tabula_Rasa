@@ -26,6 +26,12 @@ export const assetDetail = { asset, terms_locked: true, posting_accounts_locked:
 export const mileage = { id: 'mileage', trip_date: '2026-10-07', miles: '123.4', vehicle: 'Synthetic vehicle', start_location: longName,
   destination: 'Synthetic destination with a long address and business name', business_purpose: 'Visit the synthetic demonstration business for a scheduled appointment.',
   notes: 'Synthetic trip notes.\nSecond line for a narrow screen.', tag_ids: ['reference'], baseline: 'loaded-mileage' };
+export const equity = { ...account, id: 'equity', name: 'Equity', type: 'Equity', classification: 'Equity' };
+export const journalRecord = { id: 'entry', txn_date: '2026-10-06', description: 'Complete synthetic journal', baseline: 'loaded-journal',
+  postings: [
+    { id: 'synthetic-debit', target_type: 'account', target_id: 'account', side: 'Debit', amount: '40.00', payee_id: '', description: 'Needle posting' },
+    { id: 'synthetic-credit', target_type: 'account', target_id: 'equity', side: 'Credit', amount: '40.00', payee_id: '', description: 'Sibling retained' },
+  ] };
 export const receipt = { id: longId, filename: 'synthetic-receipt-with-a-deliberately-long-filename-for-narrow-screens-0123456789.pdf', mime_type: 'application/pdf', byte_size: 1234, sha256: 'a'.repeat(64) };
 
 export function secondaryResponse(url: URL, capabilities = session.capabilities) {
@@ -33,8 +39,9 @@ export function secondaryResponse(url: URL, capabilities = session.capabilities)
     // Every request stays intercepted. Unmatched reads are empty synthetic lists;
     // mutation tests below replace only the endpoint they explicitly exercise.
     const json = path.endsWith('/session') ? { ...session, capabilities } : path === '/api/v1/entities' ? { items: [session.entity] }
-      : path.endsWith('/accounts') ? { items: [account, accumulated] } : path.endsWith('/categories') ? { items: [category] }
+      : path.endsWith('/accounts') ? { items: [account, accumulated, equity] } : path.endsWith('/categories') ? { items: [category] }
         : path.endsWith('/payees') || path.endsWith('/tags') ? { items: references } : path.endsWith('/transactions') ? { items: [transaction] }
+          : path.endsWith('/journals') ? { items: [journalRecord] }
           : path.endsWith('/mixed-use/mixed/copy-draft') ? { ...mixed, source_id: 'synthetic-copy-source', linked_transaction_id: 'synthetic-copy-projection', new_payee_name: '', new_tag_name: '' }
           : path.endsWith('/mixed-use/allocation') ? { allocated_amount: '740.74' } : path.endsWith('/mixed-use/mixed') ? mixed : path.endsWith('/mixed-use') ? { items: [mixed] }
             : path.endsWith('/recurring/recurring') ? { schedule: recurring, occurrences: [{ ...transaction, id: longId, recurring_occurrence_type: 'initial', recurring_scheduled_date: '2026-10-01', source_id: '' }] }
