@@ -153,7 +153,7 @@ export function ContextBoundary({ children, onScopeChange }: { children: ReactNo
     try {
       const session = await api.selectEntity(state.session, id);
       if (expected === identityGeneration.current) {
-        resetRoute.current = true;
+        resetRoute.current = !session.trusted_development;
         logoutContext.current = { csrf_token: session.csrf_token };
         setState({ session });
         if (!session.trusted_development) {

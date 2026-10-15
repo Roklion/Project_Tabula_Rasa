@@ -23,7 +23,8 @@ receipt requests and revokes object URLs. Success loads the new scope and
 returns navigation to Dashboard, dropping record-specific URLs. An uncertain
 or denied switch shows a safe error with Reload/Sign out and retains no private
 view. Restricted synthetic-alpha selection retains its existing failure/draft
-behavior. Other tabs receive a data-free scope-change signal and reload authority.
+behavior and keeps the current page after a confirmed switch. Other named-user
+tabs receive a data-free scope-change signal and reload authority.
 
 Visible named tabs also check on focus/pageshow/visibility and every 60 seconds.
 Committed membership changes affect the next protected server request. Changed
