@@ -6,7 +6,7 @@ within [initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/1
 It builds on #311/#312 named sessions and the
 [ADR 0003 role contract](adr/0003-commercial-identity-and-tenancy.md).
 This gate does not authorize external beta, hosted provider setup, migration,
-or production recovery. #314â€“#321, #223 operations and #224 release requirements
+or production recovery. #314–#321, #223 operations and #224 release requirements
 retain their separate acceptance and operator checkpoints.
 
 ## Request boundary
