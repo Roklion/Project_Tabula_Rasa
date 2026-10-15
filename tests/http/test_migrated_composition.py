@@ -172,3 +172,25 @@ def test_production_cannot_bind_secrets_with_an_arbitrary_resolver(monkeypatch, 
             entity_profiles={'alpha': 'alpha'}, profile_secrets={})
     database.assert_not_called()
     binding.assert_not_called()
+
+
+@pytest.mark.parametrize('drive', [None, {'receipt_folder': None}])
+def test_named_binding_preserves_empty_document_scope_for_optional_legacy_config(monkeypatch, drive):
+    from contextlib import nullcontext
+    from tabula_rasa.migration.model import Binding
+    connection = Mock()
+    connection.execute.return_value.mappings.return_value.first.return_value = {
+        'profile_key': 'alpha', 'organization_id': 'org'}
+    monkeypatch.setattr('tabula_rasa.infrastructure.postgres.control_plane.identity_operation',
+                        lambda *args, **kwargs: nullcontext(connection))
+    controller = Mock()
+    monkeypatch.setattr('tabula_rasa.infrastructure.postgres.cutover.PostgresCutoverController',
+                        Mock(return_value=controller))
+    config = {'business_profiles': {'alpha': {'name': 'Alpha', 'spreadsheet_id': 'workbook-alpha',
+              'google_drive': drive}},
+              'bookkeeping_backends': {'alpha': {'backend': 'postgres', 'entity_id': 'entity-alpha', 'mode': 'rehearsal'}}}
+    binding = MigratedProfileServices(Mock(), entity_profiles={'entity-alpha': 'alpha'}, secrets=config,
+                                      connections=Mock())
+    binding.validate()
+    controller.require_postgres.assert_called_once_with(Binding('alpha', 'workbook-alpha', 'entity-alpha'),
+                                                        mode='rehearsal', document_scope='')

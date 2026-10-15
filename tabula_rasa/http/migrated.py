@@ -56,7 +56,9 @@ class MigratedProfileServices:
                 raise IdentityError('forbidden')
         selected = select_profile_secrets(self.secrets, profile)
         binding = Binding(profile, str(selected['spreadsheet_id']).strip(), entity_id)
-        scope = selected.get('google_drive', {}).get('receipt_folder', {}).get('id', '')
+        drive = selected.get('google_drive')
+        folder = drive.get('receipt_folder') if isinstance(drive, Mapping) else None
+        scope = str(folder.get('id', '')) if isinstance(folder, Mapping) else ''
         PostgresCutoverController(self.database).require_postgres(binding, mode=configured['mode'], document_scope=scope)
 
     def _named_services(self, context):

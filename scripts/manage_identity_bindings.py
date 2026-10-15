@@ -28,7 +28,8 @@ def stage_connection(database, secrets, payload, *, environment, expected_revisi
     """Preflight exact payload/managed folder before any metadata mutation."""
     from tabula_rasa.http.connections import google_store
     from tabula_rasa.google_drive import DRIVE_SCOPE
-    if (not secrets or payload.get('environment') != environment or payload.get('provider') != 'google_drive'
+    if (not isinstance(environment, str) or environment not in {'test', 'development', 'staging', 'production'}
+            or not secrets or payload.get('environment') != environment or payload.get('provider') != 'google_drive'
             or set(payload) != {'environment', 'provider', 'organization_id', 'entity_id', 'profile_key',
                                'scope_key', 'google_drive_oauth', 'google_drive'}):
         raise IdentityError('forbidden')
@@ -64,6 +65,8 @@ def main(argv=None):
     parser.add_argument('--environment', choices=['test', 'development', 'staging', 'production'])
     parser.add_argument('--revision', type=int, default=0)
     args = parser.parse_args(argv)
+    if args.operation == 'connection' and args.environment is None:
+        parser.error('--environment is required for connection operations')
     database = None
     try:
         payload = read_private(args.input)

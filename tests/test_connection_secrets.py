@@ -44,3 +44,31 @@ def test_operator_cli_errors_do_not_echo_input_or_credentials(tmp_path, capsys, 
     source.write_text('{"refresh_token":"synthetic-never-echo"}', encoding='utf-8')
     assert main(['claim', '--input', str(source)]) == 1
     assert 'synthetic-never-echo' not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize('environment', [None, '', 'unknown', 7, ['test']])
+@pytest.mark.parametrize('apply', [False, True])
+def test_provisioning_rejects_missing_or_unsupported_environment_before_binding(environment, apply, monkeypatch):
+    from unittest.mock import Mock
+    from scripts.manage_identity_bindings import stage_connection
+    database, secrets = Mock(), Mock()
+    provider = Mock()
+    monkeypatch.setattr('tabula_rasa.http.connections.google_store', provider)
+    payload = dict(environment=environment, provider='google_drive', organization_id='org', entity_id='entity',
+                   profile_key='profile', scope_key='folder', google_drive_oauth={}, google_drive={})
+    with pytest.raises(IdentityError, match='forbidden'):
+        stage_connection(database, secrets, payload, environment=environment,
+                         expected_revision=0, apply=apply)
+    assert not database.mock_calls and not secrets.mock_calls
+    provider.assert_not_called()
+
+
+def test_connection_cli_requires_environment_before_reading_input(monkeypatch, tmp_path):
+    from unittest.mock import Mock
+    from scripts.manage_identity_bindings import main
+    read = Mock()
+    monkeypatch.setattr('scripts.manage_identity_bindings.read_private', read)
+    with pytest.raises(SystemExit) as error:
+        main(['connection', '--input', str(tmp_path / 'not-read.json')])
+    assert error.value.code == 2
+    read.assert_not_called()
