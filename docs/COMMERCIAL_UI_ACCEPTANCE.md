@@ -102,19 +102,16 @@ Git. Retain the accepted evidence before Actions artifacts expire.
 ## Manual review preview and record
 
 ```powershell
-$env:TABULA_RASA_VISUAL_REVIEW = '1'
-npm --prefix web run dev -- --host 127.0.0.1 --port 5192 --strictPort
-# After stopping the preview:
-Remove-Item Env:TABULA_RASA_VISUAL_REVIEW
+npm --prefix web run dev -- --config vite.visual-review.config.ts --host 127.0.0.1 --port 5192 --strictPort
 ```
 
 For phone review on the same trusted network, explicitly use `--host 0.0.0.0`
 and the machine's LAN address. This is a local synthetic preview, not a deployed
-environment. The opt-in Vite adapter reuses existing test responses, disables the
+environment. The explicit preview Vite configuration and adapter reuses existing test responses, disables the
 real API proxy and terminates all API requests. Writes are rejected, and file/auth
 requests never reach a provider. Draft, navigation and error interactions work;
 it does not implement persistence, receipt bytes, successful saves or complete
-filter-backend behavior. Restart ordinary Vite without the flag when finished.
+filter-backend behavior. Restart ordinary Vite without the preview config when finished.
 
 | Review item | Required recorded observation |
 | --- | --- |

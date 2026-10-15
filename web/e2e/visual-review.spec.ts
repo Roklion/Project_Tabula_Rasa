@@ -1,16 +1,15 @@
 import { expect, test } from '@playwright/test';
 import { createServer, type ViteDevServer } from 'vite';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, rename, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { sourceHash } from './visual-evidence';
-import { visualReview } from '../visual-review.ts';
 
 let server: ViteDevServer;
 let origin: string;
 test.beforeAll(async () => {
-  server = await createServer({ configFile: false, plugins: [visualReview()],
+  server = await createServer({ configFile: resolve('vite.visual-review.config.ts'),
     server: { host: '127.0.0.1', port: 0,
       // Even an accidentally retained proxy cannot receive a preview request.
       proxy: { '/api': { target: 'http://127.0.0.1:1' } } },
@@ -62,5 +61,27 @@ test('evidence digest binds HTML and public rendering assets while excluding pri
     expect(assetChanged).not.toBe(htmlChanged);
     await writeFile(join(root, '.env'), 'SYNTHETIC_CONFIG=excluded');
     expect(await sourceHash(root)).toBe(assetChanged);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+
+test('dirty tracked deletion and rename retain distinct reproducible source digests', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'tabula-deleted-evidence-'));
+  try {
+    execFileSync('git', ['init', '--quiet', root]);
+    await mkdir(join(root, 'web/public'), { recursive: true });
+    const asset = join(root, 'web/public/mark.svg');
+    await writeFile(join(root, 'web/index.html'), '<html>synthetic</html>');
+    await writeFile(asset, '<svg>synthetic</svg>');
+    execFileSync('git', ['-C', root, 'add', 'web']);
+    const present = await sourceHash(root);
+    await rm(asset);
+    const absent = await sourceHash(root);
+    expect(absent).not.toBe(present);
+    expect(await sourceHash(root)).toBe(absent);
+    await writeFile(asset, '');
+    expect(await sourceHash(root)).not.toBe(absent);
+    await rename(join(root, 'web/index.html'), join(root, 'web/renamed.html'));
+    expect(await sourceHash(root)).not.toBe(present);
   } finally { await rm(root, { recursive: true, force: true }); }
 });

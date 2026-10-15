@@ -17,13 +17,19 @@ const git = (...args: string[]) => execFileSync('git', args, { encoding: 'utf8' 
 // Hash only public application/harness sources, never local configuration or data.
 export async function sourceHash(root = git('rev-parse', '--show-toplevel')) {
   const paths = git('-C', root, 'ls-files', '--cached', '--others', '--exclude-standard', '--',
-    'web/index.html', 'web/public', 'web/src', 'web/e2e', 'web/package.json', 'web/package-lock.json', 'web/playwright.config.ts', 'web/vite.config.ts', 'web/visual-review.ts')
+    'web/index.html', 'web/public', 'web/src', 'web/e2e', 'web/package.json', 'web/package-lock.json', 'web/playwright.config.ts', 'web/vite.config.ts', 'web/vite.visual-review.config.ts', 'web/visual-review.ts')
     .split('\n').filter(Boolean).sort();
   const digest = createHash('sha256');
   if (!paths.length) throw new Error('Visual evidence requires application and harness sources.');
   for (const path of paths) {
     digest.update(path + '\0');
-    digest.update(await readFile(resolve(root, path)));
+    try {
+      const bytes = await readFile(resolve(root, path));
+      digest.update('present\0'); digest.update(bytes);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      digest.update('absent\0');
+    }
     digest.update('\0');
   }
   return digest.digest('hex');

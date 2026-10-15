@@ -534,8 +534,6 @@ distance confirmation updates the editable draft, and only Save persists it.
 Round-trip directions are calculated independently; failures preserve manual
 entry. Optional lookup fields share the light two-column field grid; route
 guidance, calculation and failure messages span its full width before editable
-mileage and stack with the fields on narrow screens. Optional lookup fields share the light two-column field grid; route
-guidance, calculation and failure messages span its full width before editable
 mileage and stack with the fields on narrow screens. [Workflow ports](docs/COMMERCIAL_WORKFLOW_PORTS.md) owns these contracts.
 Transaction and QuickBooks mileage imports, copy, bulk and Expense-to-recurring conversion are also available under #357/#358/#362/#364. [Commercial mileage and receipts](docs/COMMERCIAL_MILEAGE_RECEIPTS.md)
 owns this slice's transport, recovery and validation contract.
