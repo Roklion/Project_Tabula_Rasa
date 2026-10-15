@@ -37,6 +37,9 @@ test('preview rejects writes and auth/provider/content routes without a proxy fa
     ['GET', '/api/v1/entities/alpha/documents/document/content'],
     ['GET', '/api/v1/entities/alpha/exports/transactions.csv'],
     ['GET', '/api/v1/entities/alpha/unknown'],
+    ['GET', '/api/v1/entities/alpha/mixed-use/allocation'],
+    ['GET', '/api/v1/entities/alpha/mixed-use/mixed/copy-draft'],
+    ['GET', '/api/v1/entities/alpha/mileage/routes'],
   ]) {
     const response = await fetch(new URL(path, origin), { method });
     expect(response.status).toBe(405);

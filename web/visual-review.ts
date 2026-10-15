@@ -16,11 +16,11 @@ export function visualReview(): Plugin {
         const supported = url.pathname === '/api/v1/session' || url.pathname === '/api/v1/entities'
           || /^\/api\/v1\/entities\/[^/]+\/(?:reports\/summary|ledger|accounts|categories|payees|tags|transactions|journals|mixed-use|recurring|assets|assets\/types|mileage|mileage\/maps|documents)$/.test(url.pathname)
           || /^\/api\/v1\/entities\/[^/]+\/(?:mixed-use|recurring|assets|mileage)\/[^/]+$/.test(url.pathname)
-          || /^\/api\/v1\/entities\/[^/]+\/(?:transactions|mixed-use)\/[^/]+\/receipts$/.test(url.pathname)
-          || /^\/api\/v1\/entities\/[^/]+\/mixed-use\/[^/]+\/copy-draft$/.test(url.pathname);
+          || /^\/api\/v1\/entities\/[^/]+\/(?:transactions|mixed-use)\/[^/]+\/receipts$/.test(url.pathname);
+        const postOnly = /^\/api\/v1\/entities\/[^/]+\/(?:mixed-use\/allocation|mixed-use\/[^/]+\/copy-draft|mileage\/routes)$/.test(url.pathname);
         const preparation = request.method === 'POST'
           && /^\/api\/v1\/entities\/[^/]+\/mixed-use\/(?:allocation|[^/]+\/copy-draft)$/.test(url.pathname);
-        if (!preparation && (request.method !== 'GET' || !supported)) {
+        if (!preparation && (request.method !== 'GET' || !supported || postOnly)) {
           response.statusCode = 405;
           response.end(JSON.stringify({ error: { code: 'unavailable' }, request_id: 'synthetic-preview-read-only' }));
           return;
