@@ -80,6 +80,15 @@ def render_local_profile_admin(
     store_path: Path = LOCAL_PROFILE_STORE_PATH,
 ) -> None:
     """Render the reauthenticated local profile-administration page."""
+    from tabula_rasa.legacy_admin import legacy_admin_boundary, legacy_admin_unlocked, password_binding
+    address = st.get_option("server.address")
+    if not legacy_admin_boundary(address, st.session_state):
+        st.error("Local profile administration requires the restricted loopback operator session.")
+        st.stop()
+        return
+    encoded_hash = base_secrets.get("app_password_hash")
+    if not legacy_admin_unlocked(address, st.session_state, encoded_hash):
+        st.session_state.pop("local_profile_admin_unlocked", None)
     render_page_header(
         "Account settings",
         "Manage isolated business profiles, storage, recovery, and deployment "
@@ -102,6 +111,7 @@ def render_local_profile_admin(
             encoded_hash = base_secrets.get("app_password_hash")
             if encoded_hash and verify_password(password, str(encoded_hash)):
                 st.session_state["local_profile_admin_unlocked"] = True
+                st.session_state["local_profile_admin_password_binding"] = password_binding(encoded_hash)
                 st.session_state["account_settings_route_pending"] = True
                 st.rerun()
             unlock_error.error("Incorrect password.")

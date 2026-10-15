@@ -16,6 +16,11 @@ evidence does not replace the #313 action-policy or #321 hosted rollout gates.
 
 ## Stages and migration boundary
 
+[External connections and existing entity claims](EXTERNAL_CONNECTIONS_AND_LEGACY_CLAIMS.md)
+owns #318/#319's encrypted grant setup, Owner connection controls, claim
+preflight/idempotent apply and retained local-admin boundary. Actual live
+mapping/grant installation and hosted acceptance remain #303/#321.
+
 | Mode | Allowed identity/data boundary | Exit or transition requirement |
 | --- | --- | --- |
 | Local development/test | Existing explicit loopback synthetic fixtures, or fake OIDC/disposable PostgreSQL tests. Real OIDC development uses a dedicated nonproduction client and separately named non-Secure loopback cookies. | Keep fixture injection unavailable on public hosts; no production secrets or private books. |

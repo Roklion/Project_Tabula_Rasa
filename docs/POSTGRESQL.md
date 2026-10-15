@@ -20,6 +20,12 @@ preserving membership and last-active-owner invariants. These revisions are
 forward-only: recover with an approved compatible procedure instead of a
 destructive identity downgrade. See [Named-user authentication](NAMED_USER_AUTH.md).
 
+Revision `0009_external_connections` adds tenant-owned provider references
+and approved existing-entity claims without rewriting bookkeeping. Follow
+[external connection and claim setup](EXTERNAL_CONNECTIONS_AND_LEGACY_CLAIMS.md)
+for separate encrypted secret custody and operator approval. It is forward-only
+and does not activate authority, install credentials or migrate live profiles.
+
 ## Access and migration tools
 
 Use synchronous **SQLAlchemy Core 2.0 + Psycopg 3**, with **Alembic** for

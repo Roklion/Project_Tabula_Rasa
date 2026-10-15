@@ -117,8 +117,9 @@ def test_shared_production_factory_validates_all_bindings_and_preserves_request_
     database.health.return_value = {"connected": True, "revision": head_revision()}
     monkeypatch.setattr("tabula_rasa.http.composition.Database", Mock(return_value=database))
     services = {profile: object() for profile in ("alpha", "beta")}
-    factory = Mock(side_effect=lambda profile, *args, **kwargs: SimpleNamespace(services=services[profile]))
-    monkeypatch.setattr("tabula_rasa.composition.create_application", factory)
+    binding = Mock(side_effect=lambda context: services[context.entity_id])
+    factory = Mock(return_value=binding)
+    monkeypatch.setattr("tabula_rasa.http.migrated.MigratedProfileServices", factory)
     secrets = {"bookkeeping_backends": {profile: {
         "backend": "postgres", "entity_id": profile, "mode": "rehearsal",
     } for profile in services}}
@@ -127,13 +128,14 @@ def test_shared_production_factory_validates_all_bindings_and_preserves_request_
     runtime = open_migrated_runtime(settings,
         resolve_context=resolver, entity_profiles={profile: profile for profile in services},
         profile_secrets=secrets, database_settings=object())
-    assert factory.call_count == 2
+    binding.validate.assert_called_once()
+    assert factory.call_args.kwargs['connections'] is runtime.connections
     assert runtime.resolve_context is resolver and runtime.ready()
     assert runtime.identity is resolver
     for profile in services:
         context = RequestContext("actor", "org", profile, frozenset({"bookkeeping:read"}), "session", "csrf")
         assert runtime.services(context) is services[profile]
-        factory.assert_called_with(profile, secrets, database=database)
+        binding.assert_called_with(context)
     runtime.close()
     database.dispose.assert_called_once()
 
