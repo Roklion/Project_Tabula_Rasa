@@ -223,3 +223,20 @@ progress { max-width: 100%; accent-color: var(--primary); }
   .formGrid, .formSection .formGrid, .detailSummary { grid-template-columns: minmax(0, 1fr); }
   .recordList li button { max-width: 100%; }
 }
+
+/* Route guidance/actions occupy a complete row before editable mileage. */
+.formGrid > .routeControls, .formGrid > .routeGuidance { grid-column: 1 / -1; }
+.routeControls { display: grid; justify-items: start; gap: var(--space-2); min-width: 0; }
+.routeControls p, .routeGuidance { margin: 0; }
+.mapsLookup > p { margin: 0; }
+.mapsLookup > div { min-width: 0; max-width: 100%; }
+
+.mapsLookup button { margin-top: var(--space-2); }
+.fileDropZone { min-width: 0; padding: var(--space-4); border: 1px dashed var(--border-strong); border-radius: var(--radius-control); background: var(--surface-control); }
+.fileDropZone:focus-within { border-color: var(--primary); }
+.fileDropZone:has(input:disabled) { background: var(--neutral-surface); }
+.fileDropZone .fieldHint { margin: 0 0 var(--space-3); }
+.fileDropZone input[type="file"] { display: block; width: 100%; border: 0; padding: 0; background: transparent; border-radius: 0; }
+.fileDropZone input::file-selector-button { font: inherit; min-height: var(--control-height); margin-right: var(--space-3); padding: var(--space-2) var(--space-4); border: 1px solid var(--border-strong); border-radius: var(--radius-control); background: var(--surface-primary); color: var(--text-primary); cursor: pointer; }
+.fileDropZone input::file-selector-button:hover { background: var(--hover); }
+.fileDropZone input:disabled::file-selector-button { cursor: default; color: var(--neutral); background: var(--neutral-surface); border-color: var(--border-default); }

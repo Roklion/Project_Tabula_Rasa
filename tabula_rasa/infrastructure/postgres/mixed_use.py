@@ -49,8 +49,18 @@ class PostgresMixedUseRepository(EntityRepository):
             raise StorageValidationError('Mixed-use source needs inspection before editing or linking its projection.')
         source = self.project(connection, row)
         projection = self.transactions.project(connection, self.transactions.entry(connection, source['linked_transaction_id']))
-        validate_mixed_use_records([source], [projection])
+        self.validate_record_pair(source, projection)
         return source, projection
+
+    @staticmethod
+    def validate_record_pair(source, projection):
+        # Native documents/links own validated metadata and opaque provider
+        # locators. The frozen Sheets reference decoder must not validate those
+        # locators, but source/projection receipt agreement remains mandatory.
+        if source['receipt_references'] != projection['receipt_references']:
+            raise StorageValidationError('Mixed-use source and projection receipt references do not match')
+        validate_mixed_use_records([{**source, 'receipt_references': []}],
+                                   [{**projection, 'receipt_references': []}])
 
     def list(self, *, fresh=False):
         with self.operation(read_only=True) as connection:
@@ -92,10 +102,10 @@ class PostgresMixedUseRepository(EntityRepository):
             create_payee=no_inline, create_tag=no_inline, original_transaction=current,
         )
         checked.update(source_type='mixed_use_expense', source_id=source['id'])
-        validate_mixed_use_records([source], [checked])
+        self.validate_record_pair(source, checked)
         return checked
 
-    def write_pair(self, connection, source, projection, *, create=False, recurring=False):
+    def write_pair(self, connection, source, projection, *, create=False, recurring=False, replace_receipts=True):
         values = {field: source[field] for field in SOURCE_FIELDS if field not in
                   {'id', 'created_at', 'updated_at', 'relationship_state'}}
         values.update(txn_date=iso_date(source['txn_date']),
@@ -109,8 +119,9 @@ class PostgresMixedUseRepository(EntityRepository):
         write_tags(connection, self.entity_id, 'mixed_use_tags', 'source_id', source['id'], source['tag_ids'])
         self.transactions.write(connection, projection['id'], projection, create=create,
                                 owner=('mixed_use_source_id', source['id']))
-        self.transactions.write_receipts(connection, source['id'], source['receipt_references'],
-                                         target_column='mixed_use_source_id')
+        if replace_receipts:
+            self.transactions.write_receipts(connection, source['id'], source['receipt_references'],
+                                             target_column='mixed_use_source_id')
         if recurring:
             write_occurrence(connection, self.entity_id, source, source_id=source['id'])
         return self.project(connection, self.get_row(connection, 'mixed_use_sources', source['id']))
@@ -153,13 +164,22 @@ class PostgresMixedUseRepository(EntityRepository):
             row, source, projection, refs = self.locked_pair(connection, source_id, references=True)
             self.check_expected(row, 'mixed_use_sources', expected, source)
             validate_mixed_use_changes(source, changes)
-            updated, prepared = build({**{key: value for key, value in source.items() if key != 'payee'}, **changes}, refs, source_id=source_id,
+            # HTTP financial forms omit receipts. Preserve native links while
+            # validating terms; explicit internal receipt changes still use the
+            # existing validated replacement path.
+            replace_receipts = 'receipt_references' in changes
+            receipt_references = source['receipt_references']
+            financial_source = source if replace_receipts else {**source, 'receipt_references': []}
+            financial_projection = projection if replace_receipts else {**projection, 'receipt_references': []}
+            updated, prepared = build({**{key: value for key, value in financial_source.items() if key != 'payee'}, **changes}, refs, source_id=source_id,
                                       linked_transaction_id=projection['id'], created_at=source['created_at'],
-                                      original_transaction=projection)
+                                      original_transaction=financial_projection)
             if updated['id'] != source_id or prepared['id'] != projection['id']:
                 raise StorageValidationError('Source and projection identities cannot change.')
-            prepared = self.validate_pair(connection, updated, prepared, refs, current=projection)
-            return self.write_pair(connection, updated, prepared)
+            prepared = self.validate_pair(connection, updated, prepared, refs, current=financial_projection)
+            if not replace_receipts:
+                updated['receipt_references'] = prepared['receipt_references'] = receipt_references
+            return self.write_pair(connection, updated, prepared, replace_receipts=replace_receipts)
 
     def delete(self, source_id, *, expected=None):
         with self.operation() as connection:

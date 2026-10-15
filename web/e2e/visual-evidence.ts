@@ -15,10 +15,9 @@ const hash = (bytes: string | Buffer) => createHash('sha256').update(bytes).dige
 const git = (...args: string[]) => execFileSync('git', args, { encoding: 'utf8' }).trim();
 
 // Hash only public application/harness sources, never local configuration or data.
-async function sourceHash() {
-  const root = git('rev-parse', '--show-toplevel');
+export async function sourceHash(root = git('rev-parse', '--show-toplevel')) {
   const paths = git('-C', root, 'ls-files', '--cached', '--others', '--exclude-standard', '--',
-    'web/src', 'web/e2e', 'web/package.json', 'web/package-lock.json', 'web/playwright.config.ts', 'web/vite.config.ts', 'web/visual-review.ts')
+    'web/index.html', 'web/public', 'web/src', 'web/e2e', 'web/package.json', 'web/package-lock.json', 'web/playwright.config.ts', 'web/vite.config.ts', 'web/visual-review.ts')
     .split('\n').filter(Boolean).sort();
   const digest = createHash('sha256');
   if (!paths.length) throw new Error('Visual evidence requires application and harness sources.');

@@ -12,7 +12,7 @@ import { ProtectedEditor } from '../concurrency/ProtectedEditor';
 import { useProtectedMutation } from '../concurrency/mutations';
 import { useLoadedRecord } from '../concurrency/useLoadedRecord';
 import { MileageFields } from './MileageFields';
-import { mileageLoaded, type MileageDraft } from './mileageForm';
+import { mileageLoaded, mileagePayload, type MileageDraft } from './mileageForm';
 import { mileageCsvCell } from './mileageCsv';
 import { downloadBlob } from '../../components/downloadBlob';
 import { localDate } from '../../components/localDate';
@@ -65,12 +65,12 @@ export function MileagePage() {
 export function NewMileage() {
   const session = useEntity();
   const form = useForm<MileageDraft>({ defaultValues: { trip_date: localDate(),
-    miles: '', vehicle: '', start_location: '', destination: '', business_purpose: '', notes: '', tag_ids: [], new_tag_name: '', round_trip: false } });
+    miles: '', vehicle: '', start_location: '', destination: '', business_purpose: '', notes: '', tag_ids: [], new_tag_name: '', round_trip: false, maps_reviewed: false } });
   const [failure, setFailure] = useState<unknown>();
   const [created, setCreated] = useState<Schemas['Mileage'][]>([]);
   const [uncertain, setUncertain] = useState(false);
   const mutation = useProtectedMutation(session, async (values: MileageDraft) => {
-    const response = await api.createMileage(session, { ...values, round_trip: !!values.round_trip, return_miles: values.round_trip ? values.return_miles : null });
+    const response = await api.createMileage(session, { ...mileagePayload(values), round_trip: !!values.round_trip, return_miles: values.round_trip ? values.return_miles : null });
     setCreated(response.items); form.reset(values);
   });
   if (!session.capabilities.includes('bookkeeping:write')) return <ErrorNotice error={new ApiError('forbidden')} />;
@@ -113,7 +113,7 @@ function MileageDetailQuery({ recordId }: { recordId: string }) {
     : !query.initialized || !query.data ? <ErrorNotice error={query.error} operation="read" onReview={() => void query.refetch()} />
     : session.capabilities.includes('bookkeeping:write') ? <ProtectedEditor key={recordId} session={session} loaded={mileageLoaded(query.data)} title="Edit mileage trip"
       onClose={() => navigate('/mileage')} fields={form => <MileageFields form={form} />}
-      save={async (id, baseline, changes) => mileageLoaded(await api.updateMileage(session, id, { baseline, changes }))}
+      save={async (id, baseline, changes) => mileageLoaded(await api.updateMileage(session, id, { baseline, changes: mileagePayload(changes) }))}
       remove={(id, baseline) => api.deleteMileage(session, id, baseline)}
       loadLatest={async id => mileageLoaded(await api.mileageTrip(session, id))} />
     : <section className="surface"><SectionHeader title={tripLabel(query.data)} description="Read-only mileage record." /><dl className="detailSummary">

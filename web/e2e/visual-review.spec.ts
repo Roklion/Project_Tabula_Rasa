@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test';
 import { createServer, type ViteDevServer } from 'vite';
+import { execFileSync } from 'node:child_process';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { sourceHash } from './visual-evidence';
 import { visualReview } from '../visual-review.ts';
 
 let server: ViteDevServer;
@@ -28,16 +33,34 @@ test('preview rejects writes and auth/provider/content routes without a proxy fa
   for (const [method, path] of [
     ['POST', '/api/v1/entities/alpha/transactions'], ['PATCH', '/api/v1/entities/alpha/accounts/account'],
     ['DELETE', '/api/v1/entities/alpha/transactions/transaction/receipts/document'],
-    ['GET', '/api'], ['GET', '/api/v2/session'],
+    ['GET', '/api'], ['GET', '/api/v2/session'], ['GET', '/api/v1/auth/login'],
+    ['GET', '/api/v1/entities/alpha/documents/document/content'],
+    ['GET', '/api/v1/entities/alpha/exports/transactions.csv'],
+    ['GET', '/api/v1/entities/alpha/unknown'],
   ]) {
     const response = await fetch(new URL(path, origin), { method });
     expect(response.status).toBe(405);
     expect(response.headers.get('cache-control')).toBe('no-store');
     expect(await response.json()).toMatchObject({ request_id: 'synthetic-preview-read-only' });
   }
-  for (const path of ['/api/v1/auth/login', '/api/v1/entities/alpha/documents/document/content']) {
-    const response = await fetch(new URL(path, origin));
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ items: [] });
-  }
+});
+
+
+test('evidence digest binds HTML and public rendering assets while excluding private configuration', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'tabula-public-evidence-'));
+  try {
+    execFileSync('git', ['init', '--quiet', root]);
+    await mkdir(join(root, 'web/public'), { recursive: true });
+    await writeFile(join(root, 'web/index.html'), '<html>synthetic first entry</html>');
+    await writeFile(join(root, 'web/public/mark.svg'), '<svg>synthetic first asset</svg>');
+    const first = await sourceHash(root);
+    await writeFile(join(root, 'web/index.html'), '<html>synthetic second entry</html>');
+    const htmlChanged = await sourceHash(root);
+    expect(htmlChanged).not.toBe(first);
+    await writeFile(join(root, 'web/public/mark.svg'), '<svg>synthetic second asset</svg>');
+    const assetChanged = await sourceHash(root);
+    expect(assetChanged).not.toBe(htmlChanged);
+    await writeFile(join(root, '.env'), 'SYNTHETIC_CONFIG=excluded');
+    expect(await sourceHash(root)).toBe(assetChanged);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });

@@ -40,6 +40,7 @@ export function secondaryResponse(url: URL, capabilities = session.capabilities)
             : path.endsWith('/recurring/recurring') ? { schedule: recurring, occurrences: [{ ...transaction, id: longId, recurring_occurrence_type: 'initial', recurring_scheduled_date: '2026-10-01', source_id: '' }] }
               : path.endsWith('/recurring') ? { items: [recurring] } : path.endsWith('/assets/types') ? { items: ['Equipment'] }
                 : path.endsWith('/assets/asset') ? assetDetail : path.endsWith('/assets') ? { items: [asset] }
+                  : path.endsWith('/mileage/maps') ? { browser_api_key: null, region_code: null, routes_available: false }
                   : path.endsWith('/mileage/mileage') ? mileage : path.endsWith('/mileage') ? { items: [mileage] }
                     : path.endsWith('/receipts') ? { items: [receipt] } : path.endsWith('/documents') ? { items: [{ ...receipt, id: 'unreferenced', filename: 'synthetic-unreferenced.pdf' }], needing_integrity: 0 }
                       : { items: [] };

@@ -45,10 +45,24 @@ supported formats, batch behavior, failure guidance and remaining owner readines
 
 The browser also provides the complete manual mileage list/create/detail/edit/
 delete journey, date/tag filters, totals, CSV download and round-trip capture.
+When the deployment has restricted Maps keys configured, use the separate Google
+lookup controls to choose endpoints, then **Calculate mileage** and explicitly
+confirm the suggested distances. Recorded location text and editable mileage
+remain available for review; **Save mileage trip** persists your confirmed draft.
+Provider failures preserve manual entry. Return distance is independent.
+On Transactions, select complete entries and choose **Export selected**; journals
+include every posting. Data & backup offers **Download transactions CSV** and
+**Download journal postings CSV**. These financial CSVs are scoped to the selected
+business and keep formula-leading text literal for spreadsheet applications.
 Saved ordinary transactions offer receipt attachment, inspection/download,
 unreferenced-file recovery and confirmed unlink without deleting the file when
 the business's DocumentStore is configured. Upload/link errors keep confirmed
-work and offer retry for unresolved files. See
+work and offer retry for unresolved files.
+Mixed-use source details also offer **Receipts**, with the same upload/download/
+recovery controls. If another client changes that source, linking or removing a
+receipt is refused until you explicitly review and reload it. Removing the
+reference preserves the file. See [workflow ports](COMMERCIAL_WORKFLOW_PORTS.md)
+for these additions and their deployment/readiness boundaries, and
 [Commercial mileage and receipts](COMMERCIAL_MILEAGE_RECEIPTS.md) for these browser
 workflows, their recovery behavior and remaining release boundaries.
 The [technical-alpha release guide](TECHNICAL_ALPHA.md) lists the exact staged

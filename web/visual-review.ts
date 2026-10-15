@@ -13,7 +13,12 @@ export function visualReview(): Plugin {
         if (!url.pathname.startsWith('/api')) return next();
         response.setHeader('Content-Type', 'application/json');
         response.setHeader('Cache-Control', 'no-store');
-        if (request.method !== 'GET' || !url.pathname.startsWith('/api/v1/')) {
+        const supported = url.pathname === '/api/v1/session' || url.pathname === '/api/v1/entities'
+          || /^\/api\/v1\/entities\/[^/]+\/(?:reports\/summary|ledger|accounts|categories|payees|tags|transactions|mixed-use|recurring|assets|assets\/types|mileage|mileage\/maps|documents)$/.test(url.pathname)
+          || /^\/api\/v1\/entities\/[^/]+\/(?:mixed-use|recurring|assets|mileage)\/[^/]+$/.test(url.pathname)
+          || /^\/api\/v1\/entities\/[^/]+\/(?:transactions|mixed-use)\/[^/]+\/receipts$/.test(url.pathname)
+          || /^\/api\/v1\/entities\/[^/]+\/mixed-use\/[^/]+\/copy-draft$/.test(url.pathname);
+        if (request.method !== 'GET' || !supported) {
           response.statusCode = 405;
           response.end(JSON.stringify({ error: { code: 'unavailable' }, request_id: 'synthetic-preview-read-only' }));
           return;

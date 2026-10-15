@@ -27,18 +27,18 @@ SEARCH_FIELDS = (
 )
 
 
-def journal_summary(entry: Mapping) -> dict:
+def journal_summary(entry: Mapping, *, preserve_amounts=False) -> dict:
     row = dict.fromkeys(LEDGER_COLUMNS, "")
     row.update({
         "Date": entry["txn_date"], "Type": "Journal",
         "Account": f"Multiple accounts · {len(entry['postings'])} postings",
-        "Amount": float(entry["amount"]), "Description": entry.get("description", ""),
+        "Amount": Decimal(str(entry["amount"])) if preserve_amounts else float(entry["amount"]), "Description": entry.get("description", ""),
         "ID": entry["id"],
     })
     return row
 
 
-def posting_display_rows(entry, accounts, categories):
+def posting_display_rows(entry, accounts, categories, *, preserve_amounts=False):
     account_paths = hierarchy_paths(accounts)
     category_paths = hierarchy_paths(categories)
     rows = []
@@ -50,7 +50,7 @@ def posting_display_rows(entry, accounts, categories):
             "Payee": line.get("payee", ""), "Description": line.get("description", ""),
             "Amount": None, "Debit": None, "Credit": None,
         })
-        row[line["side"]] = float(line["amount"])
+        row[line["side"]] = Decimal(str(line["amount"])) if preserve_amounts else float(line["amount"])
         rows.append(row)
     return rows
 
@@ -82,15 +82,15 @@ def sort_ledger_entries(entries, summaries, *, field="Date", descending=True):
     return sorted(entries, key=key, reverse=descending)
 
 
-def ledger_summary_frame(entries, accounts, categories, *, tags=()):
+def ledger_summary_frame(entries, accounts, categories, *, tags=(), preserve_amounts=False):
     simple = [row for row in entries if not is_journal(row)]
-    frame = ledger_frame(simple, accounts, categories, tags=tags)
+    frame = ledger_frame(simple, accounts, categories, tags=tags, preserve_amounts=preserve_amounts)
     by_id = {row["ID"]: row for row in frame.to_dict("records")}
-    rows = [journal_summary(entry) if is_journal(entry) else by_id[entry["id"]] for entry in entries]
+    rows = [journal_summary(entry, preserve_amounts=preserve_amounts) if is_journal(entry) else by_id[entry["id"]] for entry in entries]
     return pd.DataFrame(rows, columns=LEDGER_COLUMNS).fillna({"Receipt": "", "Reference": ""})
 
 
-def flatten_ledger_entries(entries, summaries, accounts, categories):
+def flatten_ledger_entries(entries, summaries, accounts, categories, *, preserve_amounts=False):
     """Return display rows and their stable parent map; never sort this frame."""
     by_id = {row["ID"]: row for row in summaries}
     rows, parents = [], []
@@ -99,7 +99,7 @@ def flatten_ledger_entries(entries, summaries, accounts, categories):
         rows.append(by_id[entry["id"]])
         parents.append(entry["id"])
         if is_journal(entry):
-            children = posting_display_rows(entry, accounts, categories)
+            children = posting_display_rows(entry, accounts, categories, preserve_amounts=preserve_amounts)
             rows.extend(children)
             parents.extend([entry["id"]] * len(children))
     columns = list(LEDGER_COLUMNS)

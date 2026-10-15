@@ -26,8 +26,11 @@ tags and stable identity. Read-only users can inspect a trip; writers can edit i
 CSV export prefixes formula-leading text with an apostrophe so spreadsheet
 applications treat it as literal text; the stored trip remains unchanged.
 
-Related create/edit fields share Trip details, Route and purpose, and Tags
-groups. They stack on narrow screens; purpose and notes are multiline controls.
+Related create/edit fields share Trip details, Route and mileage, Tags, and
+Purpose and notes groups. Optional Maps lookups use the shared field grid; route
+guidance, calculation and failure messages span a complete row before editable
+mileage, and the grid stacks on narrow screens. Purpose and notes are multiline
+controls.
 Save mileage trip is the primary action and Back to records retains the draft
 navigation guard. The log wraps long locations, purpose, notes and tags, aligns
 distance headings/values, and scrolls within its named keyboard-focusable region.
@@ -50,11 +53,12 @@ cannot replace a loaded draft/token. A create with uncertain status keeps its
 draft, disables another submission and directs the user to inspect the log;
 neither creates nor edits retry automatically.
 
-The browser provides manual location and distance entry. #364 adds the existing
-QuickBooks Download Trips preview/import in **Data & backup**, documented in
-[Commercial import, copy and bulk workflows](COMMERCIAL_WORKFLOW_PORTS.md).
-Google Maps lookup/route calculation remain with #363; no provider credentials
-or routing rules are added to the HTTP/persistence layer by this import port.
+The browser preserves manual location and distance entry. #363 adds optional
+deployment-wide Maps lookup and transient route calculation; explicit review
+and confirmation update the editable draft before Save persists confirmed
+records. #361 extends the same receipt controls to mixed-use source ownership.
+See [workflow ports](COMMERCIAL_WORKFLOW_PORTS.md) for their transport,
+configuration, conflict and verification contracts. QuickBooks mileage preview/import under #364 is also available in Data & backup.
 
 The entity-qualified transport provides:
 
@@ -78,7 +82,8 @@ is labeled and retains downloads; unavailable storage has a reload/availability
 surface without an attachment control. Selected-file states and partial-failure
 guidance remain visible alongside the existing upload/link progress.
 
-Select supported PDF, PNG, JPG, JPEG, WEBP or HEIC files, then **Attach selected
+Drop supported PDF, PNG, JPG, JPEG, WEBP or HEIC files into **Receipt files**,
+or use its styled native file chooser, then **Attach selected
 receipts**. The complete selected batch is checked before any upload: nonempty
 files, 20 MB per file, 200 MB per selection and at most 100 receipts per target.
 The service also validates each upload and the repository enforces the reference

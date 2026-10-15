@@ -133,14 +133,14 @@ test('ledger filters retain transport scope, reset defaults, complete-entry sear
   const ledger = page.getByRole('region', { name: 'Ledger', exact: true });
   await expect(ledger.locator('tbody')).toHaveCount(3);
   await page.getByLabel('Search transactions').fill(' needle ');
-  await expect(page.getByRole('status')).toHaveText('1 matching entries');
+  await expect(page.getByRole('status').filter({ hasText: /matching entries$/ })).toHaveText('1 matching entries');
   await expect(ledger.locator('tbody')).toHaveCount(1);
   await expect(ledger.getByRole('row')).toHaveCount(4); // header, parent, both siblings
   await expect(ledger.getByText('Sibling retained', { exact: true })).toBeVisible();
   await expect(ledger.locator('.postingRow').getByRole('button')).toHaveCount(0);
   await expect(ledger.locator('.postingRow').getByRole('link')).toHaveCount(0);
   await page.getByRole('button', { name: 'Clear search' }).click();
-  await expect(page.getByRole('status')).toHaveText('3 matching entries');
+  await expect(page.getByRole('status').filter({ hasText: /matching entries$/ })).toHaveText('3 matching entries');
   await page.getByLabel('Sort entries by').selectOption('Amount');
   await page.getByLabel('Entry order').selectOption('Ascending');
   await expect(ledger.locator('tbody').first()).toContainText('Source-owned synthetic expense');
@@ -159,14 +159,14 @@ test('ledger filters retain transport scope, reset defaults, complete-entry sear
   await filters.getByLabel('Tags', { exact: true }).selectOption('tag');
   const params = new URL((await tagged).url()).searchParams;
   await expect(filters.getByText('Selected: ' + longName, { exact: true })).toBeVisible();
-  await expect(page.getByRole('status')).toHaveText('0 matching entries');
+  await expect(page.getByRole('status').filter({ hasText: /matching entries$/ })).toHaveText('0 matching entries');
   await captureEvidence(page, test.info(), 'ledger-selected-filters.png');
   expect(params.get('start')).toBe('2026-10-01'); expect(params.get('end')).toBe('2026-10-31');
   expect(params.get('kind')).toBe('Journal'); expect(params.getAll('account_ids')).toEqual(['account']);
   await page.getByLabel('Search transactions').fill('no matching synthetic record');
   await expect(page.getByRole('heading', { name: 'No matching entries' })).toBeVisible();
   await page.getByRole('button', { name: 'Clear filters' }).click();
-  await expect(page.getByRole('status')).toHaveText('3 matching entries');
+  await expect(page.getByRole('status').filter({ hasText: /matching entries$/ })).toHaveText('3 matching entries');
   await expect(filters.getByLabel('From', { exact: true })).toHaveValue('');
   await expect(filters.getByLabel('To', { exact: true })).toHaveValue('');
   await expect(filters.getByLabel('Type', { exact: true })).toHaveValue('All');

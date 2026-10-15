@@ -1,4 +1,6 @@
-from pydantic import Field
+from typing import Literal
+
+from pydantic import Field, field_validator
 
 from .accounts import DecimalString
 from .common import DTO
@@ -42,6 +44,32 @@ class MileageList(DTO):
 
 class MileageUpdate(ProtectedMutation):
     changes: MileageChanges
+
+
+class MileageMaps(DTO):
+    browser_api_key: str | None = None
+    routes_available: bool = False
+    region_code: str | None = None
+
+
+class MileageRouteRequest(DTO):
+    origin_place_id: str = Field(min_length=1, max_length=512)
+    destination_place_id: str = Field(min_length=1, max_length=512)
+    round_trip: bool = False
+
+    @field_validator('origin_place_id', 'destination_place_id')
+    @classmethod
+    def valid_place_id(cls, value):
+        value = value.strip()
+        if not value or not value.isascii() or any(ord(char) < 32 for char in value):
+            raise ValueError('Invalid selected place.')
+        return value
+
+
+class MileageRoute(DTO):
+    outbound_miles: DecimalString | None = None
+    return_miles: DecimalString | None = None
+    error_code: Literal['quota', 'unavailable', 'no_route'] | None = None
 
 
 def mileage_response(trip):

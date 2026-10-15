@@ -25,6 +25,26 @@ def process_context_receipts(context: Any, workflow: MutableMapping[str, Any]) -
     receipt_service_for_context(context).process_recovery(workflow)
 
 
+def mixed_use_receipt_service(
+    service: ReceiptService,
+    source_service,
+    source_id: str,
+    expected_source: Mapping[str, object],
+) -> ReceiptService:
+    """Bind source ownership while keeping the selected document store.
+
+    Native repositories already own metadata acceptance and protected source
+    mutations. The internal Sheets composition retains its source-service
+    adapter and bounded remote-write reconciliation.
+    """
+    bind = getattr(service.repository, "for_mixed_use", None)
+    repository = (
+        bind(source_id, expected_source=expected_source) if bind is not None
+        else MixedUseReceiptRepository(service.repository, source_service, source_id, expected_source)
+    )
+    return service.with_repository(repository)
+
+
 class MixedUseReceiptRepository:
     """Bind existing source-aware receipt mutations to the neutral receipt port."""
 

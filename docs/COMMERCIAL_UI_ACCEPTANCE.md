@@ -183,3 +183,23 @@ accepted exclusion by automated success alone.
   commercial authority/recovery sign-off; #342/#338 retain capacity/byte-recovery
   work. Screenshots authorize no deployment, provider write, live migration or
   external admission.
+
+## PR #368 integration
+
+The candidate also incorporates PR #368: selected/full financial CSV downloads,
+mixed-use receipts and optional Maps mileage. Its extracted `LedgerTable` remains
+the single owner of export/Bulk selection and grouped posting rendering; the
+accepted badges, description emphasis and pinned Actions header move there.
+Export and receipt surfaces reuse existing shared controls. Maps guidance and
+calculation span a complete field-grid row before editable mileage.
+Synthetic configured-Maps capture uses a local test widget, never the real
+provider; native workflow checks own calculation, persistence, receipt recovery
+and CSV semantics. Earlier clean `211eec7` evidence is historical after this
+integration; retain fresh candidate manifests for current sign-off.
+
+Additional maintainer feedback adds an 8px lookup-button gap and a shared
+labeled file drop zone with a styled native chooser for all receipt/import
+selectors. The picker only supplies files to existing owners; it rejects
+multiple files for single-file importers, ignores disabled/text-only drops,
+and preserves receipt reselection/reset behavior. Native workflow and focused
+picker/drop tests cover unchanged explicit write and recovery boundaries.

@@ -524,9 +524,20 @@ unreferenced receipts before selecting unconfirmed files again.
 Confirmed unlink removes only the reference; unreferenced files can be relinked.
 Read-only users can inspect/download;
 unconfigured document storage shows availability text without upload controls.
-Source-owned receipt workflows stay with their owners. Maps/routing remains with
-#363. The existing QuickBooks mileage import is available in Data & backup under
-#364. [Commercial mileage and receipts](docs/COMMERCIAL_MILEAGE_RECEIPTS.md)
+Source-owned receipt workflows stay with their owners. The #359/#361/#363 ports
+add complete-entry **Export selected**, transactions/journal-postings CSVs on
+Data & backup, mixed-use source receipts and optional Maps lookup/routing.
+Mixed-use receipt changes carry the separately loaded source baseline and share
+ordinary upload/recovery controls. Generic projections remain read-only. Maps
+suggestions and place IDs remain transient, separate from recorded text; explicit
+distance confirmation updates the editable draft, and only Save persists it.
+Round-trip directions are calculated independently; failures preserve manual
+entry. Optional lookup fields share the light two-column field grid; route
+guidance, calculation and failure messages span its full width before editable
+mileage and stack with the fields on narrow screens. Optional lookup fields share the light two-column field grid; route
+guidance, calculation and failure messages span its full width before editable
+mileage and stack with the fields on narrow screens. [Workflow ports](docs/COMMERCIAL_WORKFLOW_PORTS.md) owns these contracts.
+Transaction and QuickBooks mileage imports, copy, bulk and Expense-to-recurring conversion are also available under #357/#358/#362/#364. [Commercial mileage and receipts](docs/COMMERCIAL_MILEAGE_RECEIPTS.md)
 owns this slice's transport, recovery and validation contract.
 [Commercial core workflows](docs/COMMERCIAL_WORKFLOWS.md) owns #281/#282 scope.
 #222 adds authenticated identity/membership context selection,
@@ -1629,3 +1640,12 @@ Streamlit controls, and verify success and relevant failure paths at the
 supported desktop and narrow viewports. This is an implementation discipline,
 not a PR or agent-review procedure; repository review rules belong in
 AGENTS.md and .gemini/styleguide.md.
+
+
+**Current behavior — commercial file selection (#331):** Receipt and import
+inputs share a labeled drop zone with a styled native Choose file(s) control.
+Keyboard users retain the native file chooser. A single-file importer refuses
+a multi-file drop; disabled workflows ignore drops. File-type/size validation,
+read-only preparation, explicit import/upload commands and recovery stay with
+the existing workflow owners. Selection never starts a ledger write or receipt
+upload. Maps lookup buttons retain an 8px gap below their input.

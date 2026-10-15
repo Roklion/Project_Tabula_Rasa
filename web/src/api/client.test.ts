@@ -73,3 +73,19 @@ it('maps proxy JSON and HTML errors to a safe API error without leaking a TypeEr
     expect(fetcher).toHaveBeenCalledTimes(2);
   }
 });
+
+
+it('sends large CSV selections in a body with CSRF and cancellation', async () => {
+  let request: Request | undefined;
+  const client = createApi(async input => {
+    request = input as Request;
+    return new Response('ID\nselected\n', { headers: { 'Content-Type': 'text/csv' } });
+  });
+  const ids = Array.from({ length: 400 }, (_, index) => `entry-${index}-${'x'.repeat(32)}`);
+  const controller = new AbortController();
+  await client.downloadSelectedLedgerCsv(session, ids, { kind: 'Expense' }, controller.signal);
+  expect(request?.method).toBe('POST');
+  expect(request?.url).not.toContain('?');
+  expect(request?.headers.get('X-CSRF-Token')).toBe(session.csrf_token);
+  expect(await request?.json()).toEqual({ entry_ids: ids, kind: 'Expense', account_ids: [], category_ids: [], tag_ids: [] });
+});

@@ -128,9 +128,9 @@ class ReceiptRepository(Protocol):
 
     def references(self, profile_key: str, transaction_id: str, *, fresh: bool = False) -> Sequence[DocumentReference]: ...
 
-    def link(self, profile_key: str, transaction_id: str, document: DocumentReference) -> None: ...
+    def link(self, profile_key: str, transaction_id: str, document: DocumentReference) -> Any: ...
 
-    def unlink(self, profile_key: str, transaction_id: str, storage_key: str) -> None: ...
+    def unlink(self, profile_key: str, transaction_id: str, storage_key: str) -> Any: ...
 
 
 def validate_receipt_upload(original_name: str, content: bytes) -> None:
@@ -300,23 +300,22 @@ class ReceiptService:
         document = self.document(document_id)
         return document, self.documents.fetch(self.profile_key, document.storage_key)
 
-    def link_document(self, transaction_id: str, document_id: str) -> None:
-        self.link(transaction_id, self.document(document_id))
+    def link_document(self, transaction_id: str, document_id: str) -> Any:
+        return self.link(transaction_id, self.document(document_id))
 
-    def unlink_document(self, transaction_id: str, document_id: str) -> None:
+    def unlink_document(self, transaction_id: str, document_id: str) -> Any:
         for document in self.references(transaction_id, fresh=True):
             if document.metadata.document_id == document_id:
-                self.unlink(transaction_id, document.storage_key)
-                return
+                return self.unlink(transaction_id, document.storage_key)
         raise DocumentNotFoundError("The receipt is no longer linked to this transaction.")
 
-    def link(self, transaction_id: str, document: DocumentReference) -> None:
+    def link(self, transaction_id: str, document: DocumentReference) -> Any:
         self._check_profile(document)
-        self.repository.link(self.profile_key, transaction_id, document)
+        return self.repository.link(self.profile_key, transaction_id, document)
 
-    def unlink(self, transaction_id: str, storage_key: str) -> None:
+    def unlink(self, transaction_id: str, storage_key: str) -> Any:
         # Unlink has no access to DocumentStore.delete; bytes remain recoverable.
-        self.repository.unlink(self.profile_key, transaction_id, storage_key)
+        return self.repository.unlink(self.profile_key, transaction_id, storage_key)
 
     def process_recovery(self, workflow: MutableMapping[str, Any]) -> None:
         transaction_id = str(workflow["transaction_id"])

@@ -25,6 +25,7 @@ it('retains an uncertain create draft and prevents another submission until the 
   const create = vi.spyOn(api, 'createMileage').mockRejectedValue(new ApiError('unavailable'));
   render(<RouterProvider router={createTestRouter(['/mileage/new'])} />);
   const purpose = await screen.findByLabelText('Business purpose');
+  expect(screen.queryByRole('checkbox', { name: 'I reviewed the recorded locations and mileage' })).not.toBeInTheDocument();
   await userEvent.type(purpose, 'Inspection draft');
   await userEvent.type(screen.getByLabelText('Business miles'), '12.4');
   await userEvent.type(screen.getByLabelText('Starting location'), 'Office');

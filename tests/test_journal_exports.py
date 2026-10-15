@@ -106,7 +106,7 @@ def test_prepare_csv_exports_preserves_transaction_contract_and_exports_every_jo
     assert transaction_columns == TRANSACTION_COLUMNS
     assert len(transactions) == 1
     assert transactions[0]["Type"] == "Expense"
-    assert transactions[0]["Amount"] == "12.5"
+    assert transactions[0]["Amount"] == "12.50"
 
     assert journal_columns == JOURNAL_COLUMNS
     assert len(postings) == 2
