@@ -37,7 +37,7 @@ There is no persistent private browser cache or client authorization fallback.
 Open **Workspace & members**. Owner/Admin members see current membership and
 invitation administration for their workspace. Roles apply to every active
 business in that workspace. Admins can grant Editor, Accountant and Read-only,
-demote themselves, and manage non-Owner/non-Admin members. Owners can manage
+demote or deactivate themselves, and manage non-Owner/non-Admin members. Owners can manage
 all roles. Grant ownership is a separate explicitly confirmed Owner action;
 Owner grants and removal/demotion require provider authentication within five
 minutes. The database rejects removing the last active Owner, including races.
@@ -59,7 +59,8 @@ Automated mail requires the separate sender/domain/provider checkpoint in
 The recipient signs in with the intended account and pastes the credential into
 **Respond to an invitation**, available in Workspace & members and Workspace
 setup required. Acceptance/decline requires verified provider login within five
-minutes. The session retains that login's verified email server-side; a browser
+minutes, with the same bounded 60-second future clock tolerance as verified
+OIDC login. The session retains that login's verified email server-side; a browser
 email or another session's later email change cannot substitute for it. Email
 comparison trims and ignores case without plus-tag or dot rewriting. Stable
 issuer/subject mapping remains the identity key; matching emails never link users.

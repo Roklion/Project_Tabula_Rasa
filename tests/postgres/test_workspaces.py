@@ -158,6 +158,31 @@ def test_membership_roles_last_owner_stale_and_scope_revocation(database):
     assert sessions.validate(raw).selected.organization_id == org
 
 
+def test_admin_self_deactivation_is_scoped_and_cannot_edit_peer_admin(database):
+    _, _, alice = context(database)
+    _, _, bob = context(database, 'bob')
+    service = WorkspaceService(PostgresWorkspaceRepository(database))
+    org = create(service, alice)['organization_id']
+    other = create(service, alice, 'Other')['organization_id']
+    repo = PostgresIdentityRepository(database)
+    for organization in (org, other):
+        repo.set_membership(organization, bob.user_id, 'admin')
+    _, _, peer = context(database, 'peer')
+    repo.set_membership(org, peer.user_id, 'admin')
+    members = {item['user_id']: item for item in service.members(alice, org)}
+    with pytest.raises(IdentityError, match='forbidden'):
+        service.change_member(bob, org, peer.user_id, 'admin', False, members[peer.user_id]['authorization_version'])
+    with pytest.raises(IdentityError, match='forbidden'):
+        service.change_member(bob, org, bob.user_id, 'owner', True, members[bob.user_id]['authorization_version'])
+    service.change_member(bob, org, bob.user_id, 'admin', False, members[bob.user_id]['authorization_version'])
+    assert [(row['organization_id'], row['role']) for row in repo.active_memberships(bob.user_id)] == [(other, 'admin')]
+    current = {item['user_id']: item for item in service.members(alice, org)}
+    assert current[bob.user_id]['state'] == 'inactive'
+    assert current[peer.user_id]['state'] == 'active'
+    with pytest.raises(IdentityError, match='forbidden'):
+        service.change_member(bob, org, bob.user_id, 'admin', True, current[bob.user_id]['authorization_version'])
+
+
 def test_workspace_http_setup_csrf_foreign_scope_and_secret_safe_errors(database, caplog):
     import logging
     caplog.set_level(logging.INFO, logger='tabula_rasa.http')
