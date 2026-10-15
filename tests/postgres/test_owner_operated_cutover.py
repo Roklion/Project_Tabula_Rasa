@@ -29,8 +29,11 @@ from tests.postgres.test_identity import verified
 SETTINGS = HttpSettings("production", "https://owner.example.test", "owner-verification", access_mode='named_user')
 
 
-def context(profile, *, write=True):
-    return RequestContext("synthetic-operator-" + profile, "synthetic-org-" + profile, profile,
+def context(database, profile, *, write=True):
+    repository = PostgresIdentityRepository(database)
+    user = repository.resolve_user(verified('owner-' + profile))
+    access = repository.allowed_entities(user.id)[0]
+    return RequestContext(user.id, access.organization_id, profile,
         frozenset({"bookkeeping:read", "bookkeeping:write"} if write else {"bookkeeping:read"}),
         "synthetic-session-" + profile, "synthetic-csrf-" + profile)
 
@@ -49,7 +52,12 @@ def owned_profiles(database):
         identity = verified('owner-' + profile)
         user = repo.resolve_user(identity)
         organization = repo.create_organization(user.id, profile)
-        repo.bind_entity(organization, profile)
+        from tests.postgres.test_legacy_claims import apply_claim, claim_for
+        from tabula_rasa.infrastructure.postgres.connections import PostgresConnections
+        apply_claim(database, claim_for(database, profile, organization, user))
+        PostgresConnections(database).stage(organization_id=organization, entity_id=profile,
+            profile_key=profile, scope_key='folder-' + profile,
+            secret_ref=('a' if profile == 'alpha' else 'b') * 32, expected_revision=0)
         credentials[profile] = sessions.issue(identity)
         if profile == 'alpha':
             reader = verified('reader-alpha')
@@ -93,7 +101,7 @@ def test_owner_authority_survives_production_restart_writes_reports_and_complete
             assert client.get("/health/ready").status_code == 200
             session = client.get("/api/v1/session").json()
             assert session["entity"]["id"] == "alpha" and not session["trusted_development"]
-            services = app.state.runtime.services(context("alpha"))
+            services = app.state.runtime.services(context(database, "alpha"))
             if restart == 0:
                 response = client.post("/api/v1/entities/alpha/accounts",
                     headers={"Origin": SETTINGS.public_origin, "X-CSRF-Token": session["csrf_token"]},
@@ -116,7 +124,7 @@ def test_owner_authority_survives_production_restart_writes_reports_and_complete
             assert client.get("/api/v1/entities/beta/accounts").status_code == 403
             login(client, credentials, 'beta')
             assert client.get("/api/v1/session").json()["entity"]["id"] == "beta"
-            beta = app.state.runtime.services(context("beta"))
+            beta = app.state.runtime.services(context(database, "beta"))
             assert not any(row["id"] == "owner-expense" for row in beta.transactions.list(fresh=True))
             assert beta.receipts.document_scope == "folder-beta"
             assert beta.reporting.period_report(beta.reporting.read_ledger()).totals["net"] == pytest.approx(45.1)
@@ -160,6 +168,10 @@ def test_invalid_owner_target_or_authority_refuses_production_startup(database, 
         if failure == "unprepared" and profile == "alpha":
             continue
         controller.prepare(plan, mode="rehearsal", evidence=REHEARSAL_EVIDENCE)
+        from tests.postgres.test_legacy_claims import apply_claim, claim_for
+        user = PostgresIdentityRepository(database).resolve_user(verified('owner-' + profile))
+        organization = PostgresIdentityRepository(database).create_organization(user.id, profile)
+        apply_claim(database, claim_for(database, profile, organization, user))
         if failure != "prepared" or profile != "alpha":
             controller.activate(plan.snapshot.binding)
     if failure == "profile":

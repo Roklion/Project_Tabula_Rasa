@@ -275,6 +275,18 @@ expose a raw traceback for this configuration failure.
 
 ## Commercial shell
 
+**Current behavior — tenant Google connections (#318/#319):** Named Owners see
+a Google Drive connection section within Data & backup for the selected
+business. It shows safe status and explicit confirmed Connect/Reconnect/
+Disconnect actions, requires fresh login, and explains operator provisioning
+and separate Google consent revocation. No provider tokens, secret references,
+folder locators or credential-entry fields are displayed. Unavailable/stale
+commands remain visible failures and are not automatically retried.
+Read-only, Editor, Accountant and Admin do not see connection management.
+Existing local Account settings remains under its loopback flag/password gate,
+with unlock tied to the current application-password configuration; commercial
+membership and claimed profile IDs do not unlock that interface.
+
 **Current behavior** for the #311/#312 opt-in named-user foundation:
 
 - Pending identity displays a loading state before any private feature is
