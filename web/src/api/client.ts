@@ -55,6 +55,10 @@ export function createApi(fetcher: typeof fetch = (...args) => fetch(...args)) {
   const mutationParams = (session: Session, id: string) => ({ params: { path: path(session, id) }, headers: headers(session.csrf_token) });
   const createParams = (session: Session) => ({ ...listParams(session), headers: headers(session.csrf_token) });
   return {
+    connectionStatus: (s: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
+      '/api/v1/entities/{entity_id}/connections/google-drive', listParams(s, signal)))),
+    changeConnection: (s: Session, body: Schemas['ConnectionChange']) => safe(async () => unwrap(await client.POST(
+      '/api/v1/entities/{entity_id}/connections/google-drive', { ...createParams(s), body }))),
     session: (signal?: AbortSignal) => safe(async () => unwrap(await client.GET('/api/v1/session', { signal, headers: headers() }))),
     logout: (s?: Pick<SessionState, 'csrf_token'>) => safe(async () => {
       const context = s ?? unwrap(await client.GET('/api/v1/auth/logout-context', {

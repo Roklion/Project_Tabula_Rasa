@@ -2,8 +2,8 @@
 
 from alembic import op
 
-revision = '0009_workspace_lifecycle'
-down_revision = '0008_owner_lock_scope'
+revision = '0010_workspace_lifecycle'
+down_revision = '0009_external_connections'
 branch_labels = None
 depends_on = None
 

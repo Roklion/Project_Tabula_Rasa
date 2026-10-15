@@ -110,7 +110,7 @@ pool/worker restart. Session inspection then discovers the first available entit
 
 ## Migration and validation
 
-Apply forward revision `0009_workspace_lifecycle` using the existing explicit
+Apply forward revision `0010_workspace_lifecycle` using the existing explicit
 deployment migration command. It adds invitation/idempotency tables and the
 server-only verified session email; existing sessions may keep bookkeeping access
 but must sign in again for invitation acceptance/ownership changes. It does not

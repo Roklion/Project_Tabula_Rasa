@@ -5,6 +5,7 @@ import { UnsavedChanges } from '../../components/UnsavedChanges';
 import { TransactionImportsPage } from './TransactionImportsPage';
 import { MileageImport } from './MileageImport';
 import { FinancialCsvExports } from '../exports/FinancialCsvExports';
+import { ConnectionsPanel } from '../documents/ConnectionsPanel';
 
 export function DataBackupPage() {
   const session = useEntity();
@@ -12,6 +13,7 @@ export function DataBackupPage() {
   const [mileageDirty, setMileageDirty] = useState(false);
   return <><PageHeader title="Data & backup" description={<>Imports and downloads for {session.entity.name}.</>} />
     <FinancialCsvExports embedded />
+    {session.capabilities.includes('connections:manage') && !session.trusted_development && <ConnectionsPanel />}
     <UnsavedChanges dirty={transactionDirty || mileageDirty} />
     {['bookkeeping:read', 'bookkeeping:write', 'bookkeeping:import'].every(capability => session.capabilities.includes(capability)) ? <>
       <TransactionImportsPage onDirtyChange={setTransactionDirty} />

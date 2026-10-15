@@ -36,13 +36,14 @@ def translate_database_errors():
 class PostgresRuntime:
     """One pool; compose a fresh service graph after resolving each request."""
 
-    def __init__(self, database, resolver, *, service_factory, maps=None, identity=None,
+    def __init__(self, database, resolver, *, service_factory, maps=None, identity=None, connections=None,
                  workspace_bootstrap=True):
         self.database = database
         self.resolve_context = resolver
         self.service_factory = service_factory
         self.maps = maps
         self.identity = identity
+        self.connections = connections
         from tabula_rasa.application.workspaces import WorkspaceService
         from tabula_rasa.infrastructure.postgres.workspaces import PostgresWorkspaceRepository
         self.workspaces = (WorkspaceService(PostgresWorkspaceRepository(database), bootstrap_enabled=workspace_bootstrap)
@@ -98,6 +99,7 @@ def open_runtime(settings):
             PostgresReceiptRepository(database, document_store.entity_id,
                 store_kind="google_drive", store_scope_key=document_store.scope_key).validate_binding()
         identity = None
+        connections = None
         resolver = (
             TrustedDevelopmentContext(settings.trusted_entity_id, secrets.token_urlsafe(32),
                                       hosted=settings.hosted_alpha,
@@ -113,7 +115,15 @@ def open_runtime(settings):
             sessions.configure()
             identity = NamedIdentity(settings, sessions, OidcProvider(oidc))
             resolver = identity
+            from tabula_rasa.infrastructure.connection_secrets import ConnectionSecrets
+            from .connections import TenantConnections
+            connections = TenantConnections(database, settings.environment,
+                ConnectionSecrets.from_environment(dict(os.environ)))
         def services(context):
+            if connections is not None:
+                store = connections.document_store(context)
+                return create_postgres_services(database, context.entity_id,
+                    document_store=store, document_store_kind='google_drive' if store is not None else None)
             if document_store is None:
                 return create_postgres_services(database, context.entity_id)
             if context.entity_id != document_store.entity_id or not context.trusted_development:
@@ -123,7 +133,7 @@ def open_runtime(settings):
 
         from .maps import environment_maps
         runtime = PostgresRuntime(database, resolver, service_factory=services,
-                                  maps=environment_maps(dict(os.environ)), identity=identity)
+                                  maps=environment_maps(dict(os.environ)), identity=identity, connections=connections)
         if settings.trusted_entity_id:
             # Only explicit seed tooling creates synthetic entities.
             for context in resolver.contexts:
@@ -138,7 +148,8 @@ def open_runtime(settings):
     raise RuntimeError("HTTP runtime startup failed. Check configuration and dependency health.")
 
 
-def open_migrated_runtime(settings, *, resolve_context, entity_profiles, profile_secrets, database_settings=None):
+def open_migrated_runtime(settings, *, resolve_context, entity_profiles, profile_secrets, database_settings=None,
+                          connection_manager=None):
     """Bind the shared application to accepted profiles, with normal authorization.
 
     The deployment supplies its existing authenticated context resolver and
@@ -162,13 +173,19 @@ def open_migrated_runtime(settings, *, resolve_context, entity_profiles, profile
             if (resolve_context.sessions.environment != settings.environment
                     or database_identity(resolve_context.sessions.database) != database_identity(database)):
                 raise RuntimeError('Identity and ledger database bindings must agree.')
-        services = MigratedProfileServices(database, entity_profiles=entity_profiles, secrets=profile_secrets)
+        if commercial:
+            from tabula_rasa.infrastructure.connection_secrets import ConnectionSecrets
+            from .connections import TenantConnections
+            connection_manager = connection_manager or TenantConnections(database, settings.environment,
+                ConnectionSecrets.from_environment(dict(os.environ)))
+        services = MigratedProfileServices(database, entity_profiles=entity_profiles, secrets=profile_secrets,
+                                           connections=connection_manager)
         services.validate()
         from .maps import load_mileage_maps
         runtime = PostgresRuntime(database, resolve_context, service_factory=services,
                                   maps=load_mileage_maps(profile_secrets),
                                   identity=resolve_context if isinstance(resolve_context, NamedIdentity) else None,
-                                  workspace_bootstrap=False)
+                                  connections=connection_manager, workspace_bootstrap=False)
         if not runtime.ready():
             raise RuntimeError("The migrated database is not ready.")
         return runtime

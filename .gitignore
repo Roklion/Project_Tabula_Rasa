@@ -19,6 +19,8 @@ tabula-rasa-heathcote-advisory-*.json
 *.key
 *.p12
 *.pfx
+*.grant
+tabula-rasa-connection-input-*.json
 
 # Ledger data and exports
 ledger.db
