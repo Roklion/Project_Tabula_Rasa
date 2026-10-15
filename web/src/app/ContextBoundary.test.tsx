@@ -250,6 +250,7 @@ it('replaces private scope when validation recovers to another authorized busine
 });
 
 it('offers outage logout with only the retained CSRF token after clearing private scope', async () => {
+  const listeners = vi.spyOn(window, 'addEventListener');
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
   vi.spyOn(api, 'session').mockResolvedValueOnce({ ...session, trusted_development: false })
     .mockRejectedValue(new ApiError('unavailable'));
@@ -262,6 +263,7 @@ it('offers outage logout with only the retained CSRF token after clearing privat
   }
   render(<ContextBoundary><Feature /></ContextBoundary>);
   await screen.findByLabelText('Outage draft');
+  await waitFor(() => expect(listeners).toHaveBeenCalledWith('focus', expect.any(Function)));
   cache!.setQueryData(['private'], 'Private ledger');
   fireEvent(window, new Event('focus'));
   const signOut = await screen.findByRole('button', { name: 'Sign out' });
