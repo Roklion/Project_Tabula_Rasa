@@ -75,7 +75,8 @@ def test_existing_two_profile_claim_preserves_every_ledger_id_acceptance_and_res
                 client.cookies.set(auth.session_cookie, raw)
                 assert client.get('/api/v1/session').json()['entity']['id'] == claim.entity_id
                 assert client.get('/api/v1/entities').json()['items'] == [
-                    {'id': claim.entity_id, 'name': 'Synthetic ' + claim.profile_key}]
+                    {'id': claim.entity_id, 'name': 'Synthetic ' + claim.profile_key,
+                     'organization_id': claim.organization_id, 'organization_name': claim.profile_key, 'role': 'owner'}]
                 foreign = next(item.entity_id for item in claims if item.entity_id != claim.entity_id)
                 assert client.get('/api/v1/entities/' + foreign + '/accounts').status_code == 403
                 assert client.get('/api/v1/entities/' + foreign + '/documents/known/content').status_code == 403

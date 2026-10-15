@@ -22,7 +22,7 @@ def identity_operation(database, *, read_only=False):
 
 
 ENTITY_ACCESS_SQL = '''SELECT e.entity_id, e.organization_id, b.name, m.role,
-    m.authorization_version FROM organization_entities e
+    m.authorization_version, o.name AS organization_name FROM organization_entities e
     JOIN business_entities b ON b.id=e.entity_id
     JOIN organizations o ON o.id=e.organization_id AND o.state='active'
     JOIN memberships m ON m.organization_id=o.id AND m.user_id=:user AND m.state='active'

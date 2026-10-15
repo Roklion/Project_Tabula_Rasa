@@ -36,13 +36,18 @@ def translate_database_errors():
 class PostgresRuntime:
     """One pool; compose a fresh service graph after resolving each request."""
 
-    def __init__(self, database, resolver, *, service_factory, maps=None, identity=None, connections=None):
+    def __init__(self, database, resolver, *, service_factory, maps=None, identity=None, connections=None,
+                 workspace_bootstrap=True):
         self.database = database
         self.resolve_context = resolver
         self.service_factory = service_factory
         self.maps = maps
         self.identity = identity
         self.connections = connections
+        from tabula_rasa.application.workspaces import WorkspaceService
+        from tabula_rasa.infrastructure.postgres.workspaces import PostgresWorkspaceRepository
+        self.workspaces = (WorkspaceService(PostgresWorkspaceRepository(database), bootstrap_enabled=workspace_bootstrap)
+                           if identity is not None else None)
 
     def services(self, context) -> ApplicationServices:
         with translate_database_errors():
@@ -180,7 +185,7 @@ def open_migrated_runtime(settings, *, resolve_context, entity_profiles, profile
         runtime = PostgresRuntime(database, resolve_context, service_factory=services,
                                   maps=load_mileage_maps(profile_secrets),
                                   identity=resolve_context if isinstance(resolve_context, NamedIdentity) else None,
-                                  connections=connection_manager)
+                                  connections=connection_manager, workspace_bootstrap=False)
         if not runtime.ready():
             raise RuntimeError("The migrated database is not ready.")
         return runtime

@@ -140,6 +140,8 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
         return Version(release=request.app.state.settings.release_id)
 
     app.include_router(session.router)
+    from .routes import workspaces
+    app.include_router(workspaces.router)
     app.include_router(auth.router)
     app.include_router(accounts.router)
     app.include_router(references.categories)

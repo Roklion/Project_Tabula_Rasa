@@ -1,7 +1,7 @@
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_serializer
 
 
 class DTO(BaseModel):
@@ -25,6 +25,10 @@ class ErrorCode(StrEnum):
     UNAVAILABLE = "unavailable"
     UNEXPECTED = "unexpected"
     METHOD_NOT_ALLOWED = "method_not_allowed"
+    REAUTHENTICATION_REQUIRED = 'reauthentication_required'
+    INVITATION_INVALID = 'invitation_invalid'
+    INVITATION_USED = 'invitation_used'
+    INVITATION_EXPIRED = 'invitation_expired'
 
 
 class FieldError(DTO):
@@ -55,6 +59,13 @@ class Version(DTO):
 class EntityInfo(DTO):
     id: str
     name: str
+    organization_id: str | None = None
+    organization_name: str | None = None
+    role: str | None = None
+
+    @model_serializer(mode='wrap')
+    def omit_absent_workspace_claims(self, handler):
+        return {key: value for key, value in handler(self).items() if value is not None}
 
 
 class EntityList(DTO):

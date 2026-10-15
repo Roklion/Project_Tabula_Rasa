@@ -26,11 +26,18 @@ export function ErrorNotice({ error, onReview, operation = 'write' }: { error: u
   const conflict = ['stale', 'conflict', 'duplicate', 'concurrent_write'].includes(failure.code);
   const validation = ['validation', 'reference', 'invariant', 'required', 'baseline_required', 'baseline_invalid'].includes(failure.code);
   const identity = ['unauthorized', 'forbidden'].includes(failure.code);
+  const invitationMessages: Record<string, string> = {
+    reauthentication_required: 'Sign in again to continue. Re-enter any invitation credential after login.',
+    invitation_invalid: 'This invitation is unavailable for this account. Check the invited email with your administrator.',
+    invitation_used: 'This invitation was already redeemed, declined or revoked. Ask your administrator for a new one.',
+    invitation_expired: 'This invitation expired. Ask your administrator for a new one.',
+  };
   return <div role="alert" className={'notice ' + (conflict ? 'warning' : 'error')}>
-    <p>{messages[conflict ? 'conflict' : validation ? 'validation' : identity ? 'identity' : operation === 'read' ? 'read' : 'unexpected']}</p>
+    <p>{invitationMessages[failure.code] ?? messages[conflict ? 'conflict' : validation ? 'validation' : identity ? 'identity' : operation === 'read' ? 'read' : 'unexpected']}</p>
     {failure.fields.length > 0 && <ul>{failure.fields.map(field =>
       <li key={field.field}>{field.field}: Check this value.</li>)}</ul>}
     {failure.requestId && <p className="muted">Request reference: {failure.requestId}</p>}
+    {failure.code === 'reauthentication_required' && <a href="/api/v1/auth/login">Sign in again</a>}
     {onReview && <button type="button" onClick={event => { event.currentTarget.focus(); onReview(); }}>{conflict ? 'Review latest record' : 'Reload'}</button>}
   </div>;
 }

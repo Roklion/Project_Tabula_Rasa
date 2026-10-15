@@ -4,6 +4,18 @@ import { ApiError, createApi } from './client';
 import { session } from '../test/fixtures';
 
 describe('typed client', () => {
+  it('rechecks authority after a membership command loses access and does not retry', async () => {
+    const notify = vi.spyOn(window, 'dispatchEvent');
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ error: { code: 'forbidden', message: 'safe' }, request_id: 'reference' }), { status: 403 }));
+    const client = createApi(fetcher as typeof fetch);
+    await expect(client.changeMember(session, 'member', { role: 'read_only', active: false, authorization_version: 1 }))
+      .rejects.toMatchObject({ code: 'forbidden', requestId: 'reference' });
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'tabula:identity-check' }));
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    notify.mockRestore();
+    const successful = createApi(vi.fn(async () => new Response(null, { status: 204 })) as typeof fetch);
+    await expect(successful.revokeInvitation(session, 'invitation')).resolves.toBeUndefined();
+  });
   it('bootstraps only logout CSRF on reload and still reports unconfirmed revocation', async () => {
     const requests: Request[] = [];
     const client = createApi((async (request: Request) => {

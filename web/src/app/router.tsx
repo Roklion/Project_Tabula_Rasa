@@ -1,6 +1,5 @@
 import { createBrowserRouter, createMemoryRouter } from 'react-router-dom';
-import { ContextBoundary } from './ContextBoundary';
-import { Shell } from './Shell';
+import { AuthorizedShell } from './AuthorizedShell';
 import { navigation } from './navigation';
 import { Accounts, PlannedPage, MissingPage, RouteError } from '../features/foundation/Pages';
 import { ReferencesPage } from '../features/concurrency/ReferenceEditors';
@@ -16,15 +15,17 @@ import { AssetsPage, AssetDetail, NewAsset } from '../features/secondary/AssetsP
 import { MixedUsePage, MixedUseDetail, NewMixedUse, CopyMixedUse } from '../features/secondary/MixedUsePage';
 import { RecurringPage, RecurringDetail, NewRecurring } from '../features/secondary/RecurringPage';
 import { PageHeader } from '../components/VisualPrimitives';
+import { WorkspacePage } from '../features/identity/WorkspacePage';
 import { ExpenseToRecurring } from '../features/secondary/ExpenseToRecurring';
 import { DataBackupPage } from '../features/imports/DataBackupPage';
 
 const routes = [{
-  element: <ContextBoundary><Shell /></ContextBoundary>,
+  element: <AuthorizedShell />,
   errorElement: <RouteError />,
   children: [
     { index: true, element: <ReportsPage dashboard /> },
     { path: 'accounts', element: <Accounts /> },
+    { path: 'workspace', element: <WorkspacePage /> },
     { path: 'transactions', element: <LedgerPage /> },
     { path: 'reports', element: <ReportsPage /> },
     { path: 'data', element: <DataBackupPage /> },

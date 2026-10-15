@@ -107,5 +107,7 @@ it('preserves staged files when navigation is cancelled and clears them on autho
   await userEvent.selectOptions(screen.getByLabelText('Select business'), 'beta');
   await userEvent.click(screen.getByRole('button', { name: 'Discard draft and switch' }));
   await waitFor(() => expect(screen.queryByRole('region', { name: 'Tabula Rasa source rows' })).not.toBeInTheDocument());
-  expect(screen.getByRole('button', { name: 'Import rows' })).toBeDisabled();
+  expect(await screen.findByRole('button', { name: 'Import rows' })).toBeDisabled();
+  expect(screen.getByLabelText('Transaction CSV file')).toHaveValue('');
+  expect(screen.queryByRole('region', { name: 'Tabula Rasa source rows' })).not.toBeInTheDocument();
 });

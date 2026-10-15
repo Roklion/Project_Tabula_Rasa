@@ -41,6 +41,7 @@ class EntityAccess:
     name: str
     role: str
     authorization_version: int
+    organization_name: str = ''
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,7 @@ class AuthenticatedSession:
     authenticated_at: datetime
     absolute_expires_at: datetime
     selected: EntityAccess | None
+    verified_email: str | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True)

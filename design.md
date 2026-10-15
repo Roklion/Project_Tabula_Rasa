@@ -311,8 +311,20 @@ membership and claimed profile IDs do not unlock that interface.
   read. Network failure remains visible and does not claim cookie clearing.
   Read-only and setup users can inspect identity and sign out without ledger
   write permission. [Named-user authentication](docs/NAMED_USER_AUTH.md) owns the
-  operator settings, session policy and remaining release gates. Organization
-  onboarding and commercial switching UI remain subsequent epic slices.
+  operator settings, session policy and remaining release gates.
+- Named users can switch among server-authorized workspace / business choices.
+  Workspace and role labels use server claims. Confirmed switching discards
+  private drafts/uploads/queries and receipt URLs, returns to Dashboard and
+  signals other tabs to reload authority. An uncertain switch unmounts private
+  content and offers a safe reload/sign-out state.
+- Workspace & members exposes Owner/Admin invitation and member administration,
+  with current-role restrictions, loaded membership versions and last-owner
+  protection. Ownership grants require a separate confirmation and recent login.
+  Recipient-bound invitation credentials appear once for private distribution;
+  authenticated acceptance/decline is also available without a selected business.
+  [Workspace lifecycle](docs/WORKSPACE_LIFECYCLE.md) owns the exact security and
+  retry contract. #317 retains full first-use browser onboarding; #316 supplies
+  its transactional backend without adding a separate profile configuration UI.
 
 **Current behavior** for the #277/#278/#279/#280/#281/#282/#283/#286 technical-alpha application:
 
@@ -338,7 +350,7 @@ membership and claimed profile IDs do not unlock that interface.
   guarded removal without an invented inactive flag. Parent names are visible.
 - The server-configured local business selector requires an explicit keep or
   discard-and-switch choice, is disabled during mutations and remounts queries
-  and drafts after a confirmed context change. Failed switches preserve the current
+  and drafts on the current page after a confirmed context change. Failed switches preserve the current
   scope, private cache and draft while showing a selection error. Independent clients select
   independently. Functional selection never proves membership authorization.
 - Transactions offers separate guarded navigation to Add transaction and Add

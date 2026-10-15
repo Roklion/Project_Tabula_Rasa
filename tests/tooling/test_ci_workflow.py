@@ -79,6 +79,7 @@ def test_ci_preserves_complete_python_and_windows_coverage() -> None:
         'tests/postgres/test_browser_alpha.py',
         'tests/postgres/test_browser_workflow_ports.py',
         'tests/postgres/test_identity_browser.py',
+        'tests/postgres/test_workspace_browser.py',
         '--junitxml=browser-results.xml']
     assert native["env"]["TABULA_RASA_REQUIRE_BROWSER_TESTS"] == "1"
     installs = [step['run'] for step in browser['steps'] if 'playwright install' in step.get('run', '')]

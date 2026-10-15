@@ -118,14 +118,15 @@ class PostgresSessionRepository:
                 {'env': self.environment, 'now': now})
             connection.execute(text('''INSERT INTO identity_sessions(credential_hash,environment,environment_epoch,user_id,
                 binding_id,user_epoch,csrf_token,cache_id,created_at,authenticated_at,idle_expires_at,absolute_expires_at,
-                organization_id,entity_id) VALUES (:hash,:env,:epoch,:user,:binding,:user_epoch,:csrf,:cache,:now,:auth,
-                :idle,:absolute,:org,:entity)'''),
+                organization_id,entity_id,verified_email) VALUES (:hash,:env,:epoch,:user,:binding,:user_epoch,:csrf,:cache,:now,:auth,
+                :idle,:absolute,:org,:entity,:email)'''),
                 {'hash': credential_hash(raw), 'env': self.environment, 'epoch': epoch, 'user': user.id,
                  'binding': binding, 'user_epoch': user.session_epoch, 'csrf': csrf, 'cache': cache, 'now': now,
                  'auth': identity.authenticated_at, 'idle': now + timedelta(minutes=30), 'absolute': now + timedelta(hours=12),
-                 'org': selected.organization_id if selected else None, 'entity': selected.entity_id if selected else None})
+                 'org': selected.organization_id if selected else None, 'entity': selected.entity_id if selected else None,
+                 'email': identity.email})
         return raw, AuthenticatedSession(user.id, cache, csrf, identity.authenticated_at,
-                                         now + timedelta(hours=12), selected)
+                                         now + timedelta(hours=12), selected, identity.email)
 
     def validate(self, raw, *, foreground=False):
         now = self.clock()
@@ -150,7 +151,7 @@ class PostgresSessionRepository:
                 connection.execute(text('UPDATE identity_sessions SET idle_expires_at=:expiry WHERE credential_hash=:hash'),
                     {'expiry': min(now + timedelta(minutes=30), row['absolute_expires_at']), 'hash': row['credential_hash']})
             return AuthenticatedSession(row['user_id'], row['cache_id'], row['csrf_token'], row['authenticated_at'],
-                                        row['absolute_expires_at'], selected)
+                                        row['absolute_expires_at'], selected, row['verified_email'])
 
     def revoke(self, raw):
         with identity_operation(self.database) as connection:

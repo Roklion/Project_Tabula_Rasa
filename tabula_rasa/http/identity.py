@@ -44,7 +44,9 @@ class NamedIdentity:
             return SetupSessionInfo(**common)
         selected = session.selected
         return SessionInfo(**common, organization_id=selected.organization_id,
-                           entity=EntityInfo(id=selected.entity_id, name=selected.name),
+                           entity=EntityInfo(id=selected.entity_id, name=selected.name,
+                               organization_id=selected.organization_id, organization_name=selected.organization_name,
+                               role=selected.role),
                            capabilities=sorted(capabilities(selected.role)))
 
     def set_cookie(self, response, name, value, max_age):

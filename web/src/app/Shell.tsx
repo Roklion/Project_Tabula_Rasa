@@ -34,7 +34,9 @@ export function Shell() {
       <div className={styles.brand}>Project <br />Tabula Rasa</div>
       <div className={styles.context}><span className="muted">Business</span>
         <strong>{session.entity.name}</strong>
-        {session.trusted_development && <EntitySelector activeId={session.entity.id} />}
+        {session.entity.organization_name && <span>Workspace: {session.entity.organization_name}</span>}
+        {session.entity.role && <span>Role: {session.entity.role.replace('_', ' ')}</span>}
+        <EntitySelector activeId={session.entity.id} />
         {session.trusted_development && <span className={styles.badge}>Technical alpha · development</span>}
       </div>
       <button className={styles.menu} type="button" aria-expanded={open} aria-controls="primary-navigation"
@@ -43,6 +45,7 @@ export function Shell() {
         {navigation.map(([path, name]) => <Link key={path} to={path} aria-current={location.pathname === path || path !== '/' && matchesRoute(location.pathname, path) ? 'page'
           : path === '/transactions' && isEntryRoute(location.pathname) ? 'true' : undefined}>{name}</Link>)}
       </nav>
+      {!session.trusted_development && <Link to="/workspace">Workspace & members</Link>}
       <p className={styles.footer}>Bookkeeping with clarity.</p>
       {!session.trusted_development && <button onClick={auth.logout}>Sign out</button>}
     </aside>

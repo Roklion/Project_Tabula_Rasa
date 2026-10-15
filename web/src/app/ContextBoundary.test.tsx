@@ -13,7 +13,7 @@ import { AuthContext } from './authContext';
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 function authChannel() {
-  const channels: { onmessage?: (event: { data: string }) => void; close: ReturnType<typeof vi.fn> }[] = [];
+  const channels: { onmessage?: (event: { data: string }) => void; close: ReturnType<typeof vi.fn>; postMessage: ReturnType<typeof vi.fn> }[] = [];
   vi.stubGlobal('BroadcastChannel', class {
     onmessage?: (event: { data: string }) => void;
     close = vi.fn();
@@ -103,6 +103,52 @@ it('preserves the private scope after a failed switch and replaces it only after
   expect(select).toHaveBeenCalledTimes(2);
 });
 
+it('unmounts named private data while a switch is pending and after an uncertain response', async () => {
+  const named = { ...session, trusted_development: false };
+  vi.spyOn(api, 'session').mockResolvedValue(named);
+  vi.spyOn(api, 'entities').mockResolvedValue({ items: [session.entity] });
+  let reject!: (error: unknown) => void;
+  vi.spyOn(api, 'selectEntity').mockReturnValue(new Promise((_, fail) => { reject = fail; }));
+  let cache: QueryClient | undefined;
+  function Feature() {
+    const selection = useContext(EntitySelectionContext)!;
+    cache = useQueryClient();
+    return <><input aria-label="Named draft" defaultValue="Private alpha" />
+      <button onClick={() => void selection.select('beta')}>Switch named business</button></>;
+  }
+  render(<ContextBoundary><Feature /></ContextBoundary>);
+  await screen.findByLabelText('Named draft');
+  cache!.setQueryData(['private'], 'Private alpha receipt');
+  fireEvent.click(screen.getByRole('button', { name: 'Switch named business' }));
+  expect(screen.queryByLabelText('Named draft')).not.toBeInTheDocument();
+  await waitFor(() => expect(cache!.getQueryCache().getAll()).toHaveLength(0));
+  await act(async () => reject(new ApiError('unavailable')));
+  expect(screen.getByRole('alert')).toBeVisible();
+  expect(screen.queryByLabelText('Named draft')).not.toBeInTheDocument();
+});
+
+it('discards private drafts on a cross-tab scope signal and ignores a late switch error after logout', async () => {
+  const channels = authChannel();
+  vi.spyOn(api, 'session').mockResolvedValue({ ...session, trusted_development: false });
+  vi.spyOn(api, 'entities').mockResolvedValue({ items: [session.entity] });
+  let reject!: (error: unknown) => void;
+  vi.spyOn(api, 'selectEntity').mockReturnValue(new Promise((_, fail) => { reject = fail; }));
+  function Feature() {
+    const selection = useContext(EntitySelectionContext)!;
+    return <><input aria-label="Peer draft" defaultValue="" />
+      <button onClick={() => void selection.select('beta')}>Switch peer business</button></>;
+  }
+  render(<ContextBoundary><Feature /></ContextBoundary>);
+  fireEvent.change(await screen.findByLabelText('Peer draft'), { target: { value: 'Old draft' } });
+  act(() => channels[0].onmessage?.({ data: 'scope-changed' }));
+  expect(await screen.findByLabelText('Peer draft')).toHaveValue('');
+  fireEvent.click(screen.getByRole('button', { name: 'Switch peer business' }));
+  act(() => channels[0].onmessage?.({ data: 'signed-out' }));
+  await act(async () => reject(new ApiError('unavailable')));
+  expect(screen.getByRole('link', { name: 'Sign in' })).toBeVisible();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
 it('does not compose private UI for needs-setup or failed initial identity', async () => {
   const identity = { state: 'needs_setup' as const, actor_id: 'alice', organization_id: null,
     entity: null, capabilities: [], cache_scope: 'new', csrf_token: 'csrf', trusted_development: false as const };
@@ -135,6 +181,21 @@ it('clears private cache and drafts after authoritative session failure on focus
   await waitFor(() => expect(cache!.getQueryCache().getAll()).toHaveLength(0));
 });
 
+it('refreshes permitted choices when another workspace is revoked without changing the selected scope', async () => {
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  vi.spyOn(api, 'session').mockResolvedValue({ ...session, trusted_development: false });
+  vi.spyOn(api, 'entities').mockResolvedValueOnce({ items: [session.entity, { id: 'beta', name: 'Beta' }] })
+    .mockResolvedValue({ items: [session.entity] });
+  function Choices() {
+    const selection = useContext(EntitySelectionContext)!;
+    return <p>Permitted choices: {selection.items.map(item => item.name).join(', ')}</p>;
+  }
+  render(<ContextBoundary><Choices /></ContextBoundary>);
+  await screen.findByText('Permitted choices: Alpha, Beta');
+  fireEvent(window, new Event('focus'));
+  expect(await screen.findByText('Permitted choices: Alpha')).toBeVisible();
+});
+
 it('unmounts private UI even when server-side logout cannot be confirmed', async () => {
   vi.spyOn(api, 'session').mockResolvedValue({ ...session, trusted_development: false });
   vi.spyOn(api, 'entities').mockResolvedValue({ items: [session.entity] });
@@ -151,6 +212,7 @@ it('unmounts private UI even when server-side logout cannot be confirmed', async
 });
 
 it('replaces private scope when validation recovers to another authorized business', async () => {
+  const listeners = vi.spyOn(window, 'addEventListener');
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
   vi.spyOn(api, 'session').mockResolvedValueOnce({ ...session, trusted_development: false })
     .mockResolvedValue({ ...session, organization_id: 'other-org',
@@ -164,6 +226,7 @@ it('replaces private scope when validation recovers to another authorized busine
   }
   render(<ContextBoundary><Feature /></ContextBoundary>);
   fireEvent.change(await screen.findByLabelText('Recovery draft'), { target: { value: 'Alpha draft' } });
+  await waitFor(() => expect(listeners).toHaveBeenCalledWith('focus', expect.any(Function)));
   caches[0].setQueryData(['private'], 'Alpha cached data');
   fireEvent(window, new Event('focus'));
   await waitFor(() => expect(caches).toHaveLength(2));
@@ -206,4 +269,33 @@ it('offers logout bootstrap on an initial outage without composing private UI', 
   expect(logout).toHaveBeenCalledWith(undefined);
   expect(screen.queryByText('Private ledger')).not.toBeInTheDocument();
   expect(entities).not.toHaveBeenCalled();
+});
+
+
+it.each([true, false])('broadcasts successful scope changes only for named users (trusted=%s)', async trusted => {
+  const channels = authChannel();
+  const initial = { ...session, trusted_development: trusted };
+  const beta = { ...initial, entity: { id: 'beta', name: 'Beta' }, cache_scope: 'beta-scope' };
+  vi.spyOn(api, 'session').mockResolvedValue(initial);
+  vi.spyOn(api, 'entities').mockResolvedValue({ items: [initial.entity, beta.entity] });
+  vi.spyOn(api, 'selectEntity').mockResolvedValue(beta);
+  const resetRoute = vi.fn();
+  function Feature() {
+    const selection = useContext(EntitySelectionContext)!;
+    const active = useEntity();
+    return <><p>Active business: {active.entity.id}</p><input aria-label="Switch draft" defaultValue="" />
+      <button onClick={() => void selection.select('beta')}>Switch business fixture</button></>;
+  }
+  render(<ContextBoundary onScopeChange={resetRoute}><Feature /></ContextBoundary>);
+  fireEvent.change(await screen.findByLabelText('Switch draft'), { target: { value: 'Alpha private draft' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Switch business fixture' }));
+  await screen.findByText('Active business: beta');
+  expect(screen.getByLabelText('Switch draft')).toHaveValue('');
+  if (trusted) {
+    expect(channels[0].postMessage).not.toHaveBeenCalled();
+    expect(resetRoute).not.toHaveBeenCalled();
+  } else {
+    expect(channels[0].postMessage).toHaveBeenCalledWith('scope-changed');
+    await waitFor(() => expect(resetRoute).toHaveBeenCalledOnce());
+  }
 });

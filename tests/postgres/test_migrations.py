@@ -9,7 +9,7 @@ from tabula_rasa.infrastructure.postgres.runtime import DatabaseError
 def test_zero_to_head_repeated_upgrade_and_explicit_downgrade(empty_database):
     assert empty_database.health() == {"connected": True, "revision": None}
     upgrade(empty_database)
-    assert empty_database.health()["revision"] == head_revision() == "0009_external_connections"
+    assert empty_database.health()["revision"] == head_revision() == "0010_workspace_lifecycle"
     with empty_database.transaction() as connection:
         entity(connection)
     upgrade(empty_database)
@@ -22,11 +22,32 @@ def test_zero_to_head_repeated_upgrade_and_explicit_downgrade(empty_database):
     assert empty_database.health()["revision"] == head_revision()
 
 
+def test_workspace_upgrade_extends_published_connections_revision(empty_database):
+    from alembic import command
+    from tabula_rasa.infrastructure.postgres.migrations import migration_config
+
+    with empty_database.engine.begin() as connection:
+        command.upgrade(migration_config(connection), '0009_external_connections')
+    with empty_database.transaction() as connection:
+        entity(connection)
+        original = dict(connection.execute(text('SELECT * FROM business_entities')).mappings().one())
+        assert 'external_connections' in inspect(connection).get_table_names()
+        assert 'workspace_bootstraps' not in inspect(connection).get_table_names()
+    upgrade(empty_database)
+    with empty_database.transaction(read_only=True) as connection:
+        assert current_revision(connection) == '0010_workspace_lifecycle'
+        assert dict(connection.execute(text('SELECT * FROM business_entities')).mappings().one()) == original
+        assert {'external_connections', 'legacy_entity_claims', 'workspace_bootstraps',
+                'workspace_invitations'} <= set(inspect(connection).get_table_names())
+        assert 'verified_email' in {column['name'] for column in inspect(connection).get_columns('identity_sessions')}
+
+
 def test_catalog_is_canonical_and_every_relationship_is_entity_qualified(database):
     with database.engine.connect() as connection:
         inspector = inspect(connection)
         control = {'identity_users', 'identity_bindings', 'organizations', 'memberships',
                    'organization_entities', 'identity_environments', 'identity_login_transactions', 'identity_sessions',
+                   'workspace_invitations', 'workspace_bootstraps',
                    'external_connections', 'legacy_entity_claims'}
         all_tables = set(inspector.get_table_names()) - {"alembic_version"}
         assert control <= all_tables
