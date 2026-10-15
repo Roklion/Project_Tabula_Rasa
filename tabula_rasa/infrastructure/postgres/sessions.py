@@ -57,7 +57,7 @@ class PostgresSessionRepository:
         return epoch
 
     def begin_login(self, return_path, previous=None):
-        if return_path not in {'/', '/onboarding'}:
+        if return_path not in {'/', '/onboarding', '/invitations'}:
             raise IdentityError('forbidden')
         raw = secrets.token_urlsafe(32)
         transaction = LoginTransaction(secrets.token_urlsafe(32), secrets.token_urlsafe(32), secrets.token_urlsafe(48), return_path)

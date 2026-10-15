@@ -6,7 +6,8 @@ outside the portable bookkeeping inventory. Revisions
 and durable authentication tables, also outside this inventory. Revision
 `0008_owner_lock_scope` changes only identity trigger scope, and
 `0009_workspace_lifecycle` adds only control-plane lifecycle records; neither
-changes the bookkeeping inventory.
+changes the bookkeeping inventory. `0010_onboarding_routes` only extends the
+login return-path constraint; the same v1 inventory remains complete.
 Existing v1 exports from
 `0004_mileage_order` remain valid; the exporter reports the observed supported
 revision and validates the same exact collection/field coverage. Migrated
@@ -81,7 +82,7 @@ completeness, relationships and accounting meaning beyond JSON Schema.
 | Manifest field | Meaning |
 | --- | --- |
 | `format`, `format_version` | `tabula-rasa-bookkeeping`, integer `1`; independent of Sheets/archive format 13 |
-| `database_schema_version` | Observed supported PostgreSQL revision (`0004_mileage_order` through `0009_workspace_lifecycle`; all have the same v1 bookkeeping inventory, excluding identity/session/lifecycle records) |
+| `database_schema_version` | Observed supported PostgreSQL revision (`0004_mileage_order` through `0010_onboarding_routes`; all have the same v1 bookkeeping inventory, excluding identity/session/lifecycle records) |
 | `entity_id` | Explicit selected business entity; also present on every entity-local record |
 | `snapshot_at` | Database transaction-start instant in UTC; all reads use that transaction's coherent snapshot |
 | `counts` | Count for every included canonical collection, including zero counts |

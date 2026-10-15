@@ -21,7 +21,7 @@ const messages = {
   unexpected: 'The request could not be completed. Your draft is preserved. Check the latest record before trying a save again.',
 };
 
-export function ErrorNotice({ error, onReview, operation = 'write' }: { error: unknown; onReview?: () => void; operation?: 'read' | 'write' }) {
+export function ErrorNotice({ error, onReview, operation = 'write', reauthenticationPath }: { error: unknown; onReview?: () => void; operation?: 'read' | 'write'; reauthenticationPath?: '/invitations' }) {
   const failure = error instanceof ApiError ? error : new ApiError('unexpected');
   const conflict = ['stale', 'conflict', 'duplicate', 'concurrent_write'].includes(failure.code);
   const validation = ['validation', 'reference', 'invariant', 'required', 'baseline_required', 'baseline_invalid'].includes(failure.code);
@@ -37,7 +37,7 @@ export function ErrorNotice({ error, onReview, operation = 'write' }: { error: u
     {failure.fields.length > 0 && <ul>{failure.fields.map(field =>
       <li key={field.field}>{field.field}: Check this value.</li>)}</ul>}
     {failure.requestId && <p className="muted">Request reference: {failure.requestId}</p>}
-    {failure.code === 'reauthentication_required' && <a href="/api/v1/auth/login">Sign in again</a>}
+    {failure.code === 'reauthentication_required' && <a href={reauthenticationPath ? '/api/v1/auth/login?return_path=' + reauthenticationPath : '/api/v1/auth/login'}>Sign in again</a>}
     {onReview && <button type="button" onClick={event => { event.currentTarget.focus(); onReview(); }}>{conflict ? 'Review latest record' : 'Reload'}</button>}
   </div>;
 }

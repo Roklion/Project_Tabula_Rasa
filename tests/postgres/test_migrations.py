@@ -9,7 +9,7 @@ from tabula_rasa.infrastructure.postgres.runtime import DatabaseError
 def test_zero_to_head_repeated_upgrade_and_explicit_downgrade(empty_database):
     assert empty_database.health() == {"connected": True, "revision": None}
     upgrade(empty_database)
-    assert empty_database.health()["revision"] == head_revision() == "0009_workspace_lifecycle"
+    assert empty_database.health()["revision"] == head_revision() == "0010_onboarding_routes"
     with empty_database.transaction() as connection:
         entity(connection)
     upgrade(empty_database)
@@ -20,6 +20,26 @@ def test_zero_to_head_repeated_upgrade_and_explicit_downgrade(empty_database):
     with pytest.raises(ValueError, match="forward"):
         downgrade(empty_database, "base", allow_destructive=True)
     assert empty_database.health()["revision"] == head_revision()
+
+
+def test_onboarding_forward_upgrade_preserves_pending_login_and_existing_ledger(empty_database):
+    from alembic import command
+    from tabula_rasa.infrastructure.postgres.migrations import migration_config
+    from tabula_rasa.infrastructure.postgres.sessions import PostgresSessionRepository
+
+    with empty_database.engine.begin() as connection:
+        command.upgrade(migration_config(connection), '0009_workspace_lifecycle')
+    sessions = PostgresSessionRepository(empty_database, 'test', 'a' * 64)
+    sessions.configure()
+    raw, pending = sessions.begin_login('/onboarding')
+    with empty_database.transaction() as connection:
+        entity(connection)
+    upgrade(empty_database)
+    assert sessions.consume_login(raw, pending.state) == pending
+    invite_raw, invite = sessions.begin_login('/invitations')
+    assert sessions.consume_login(invite_raw, invite.state) == invite
+    with empty_database.transaction(read_only=True) as connection:
+        assert connection.scalar(text('SELECT count(*) FROM business_entities')) == 1
 
 
 def test_catalog_is_canonical_and_every_relationship_is_entity_qualified(database):

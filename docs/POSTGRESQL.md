@@ -19,7 +19,8 @@ authentication state without copying or rebaselining ledger records. Revision
 preserving membership and last-active-owner invariants. These revisions are
 extended by `0009_workspace_lifecycle`, which adds recipient-bound invitations,
 bootstrap idempotency receipts and server-verified session email while retaining
-the bookkeeping inventory. See [Workspace lifecycle](WORKSPACE_LIFECYCLE.md).
+the bookkeeping inventory. `0010_onboarding_routes` permits the explicit
+invitation login return route without changing ledger records. See [Workspace lifecycle](WORKSPACE_LIFECYCLE.md).
 Identity revisions are
 forward-only: recover with an approved compatible procedure instead of a
 destructive identity downgrade. See [Named-user authentication](NAMED_USER_AUTH.md).

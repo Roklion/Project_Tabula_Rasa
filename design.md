@@ -517,6 +517,36 @@ the commercial browser.
 The Streamlit-specific shell requirements above continue to govern the internal
 edition.
 
+## Commercial first-use setup
+
+**Current behavior** for #317 on the #222 named-user runtime:
+
+- Sign-in explains provider account creation and invited-account login. Users
+  without an active business choose start fresh, join an invitation, or existing
+  Sheets migration. Existing members go directly to their authorized ledger.
+- Fresh setup collects workspace and business names, then reviews the one
+  supported standard bookkeeping default. Back preserves names. Creating opens
+  Dashboard with account review, first transaction and ledger next actions.
+  Additional business creation is Owner-only in Workspace & members and shares
+  the same form and server bootstrap owner.
+- Progress and failures use shared status/alert components. Explicit retries
+  retain the request ID and submitted payload; refresh checks the durable
+  server receipt. Only opaque user/workspace-scoped request IDs enter tab session
+  storage. Names, credentials, drafts and ledger contents are never restored
+  from browser storage. Business selection remains server-authorized.
+- `/invitations` routes new and existing members to the shared acceptance form,
+  including after sign-in, without provisioning a second organization. The
+  private credential is pasted after login and never included in a link.
+- Invitations are optional and available through the supported private delivery
+  flow; external connections are optional and deferred to #318. Existing live
+  migration requires the explicit operator #258/#303 process. First-use setup
+  does not import or claim existing Sheets books.
+- Shared tokens, controls, labels and touch targets support narrow screens and
+  keyboard operation. This local implementation does not grant external-beta or
+  hosted acceptance under #320/#321/#224.
+
+[Workspace lifecycle](docs/WORKSPACE_LIFECYCLE.md) owns setup recovery and deployment.
+
 ## Page headers, workflow groups, and messages
 
 **Current behavior — existing workflow ports (#357/#358/#362/#364):** Data &

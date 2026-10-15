@@ -7,9 +7,112 @@ from sqlalchemy import text
 from tabula_rasa.infrastructure.postgres.sessions import PostgresSessionRepository
 from tabula_rasa.infrastructure.postgres.composition import create_postgres_services
 from tests.postgres.test_identity import verified
-from tests.postgres.test_identity_browser import named_server as named_server
+from tests.postgres.test_identity_browser import named_server as named_server, configure_login
 from tests.postgres.browser_quality_support import assert_accessible
 from tests.test_oidc import oidc as oidc
+
+
+@pytest.mark.parametrize('width', [1440, 390, 320])
+def test_first_ledger_retry_refresh_repeat_visit_and_two_entity_switch(named_server, width):
+    origin, repo, _, _, _, _, claims, info = named_server
+    claims['sub'] = info['sub'] = 'new-owner'
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            context = browser.new_context(viewport={'width': width, 'height': 1000})
+            configure_login(context, origin, claims)
+            page = context.new_page()
+            page.goto(origin)
+            page.get_by_role('link', name='Sign in', exact=True).click()
+            expect(page.get_by_role('button', name='Start fresh', exact=True)).to_be_visible()
+            actor = context.request.get(origin + '/api/v1/session').json()['actor_id']
+            page.get_by_role('button', name='Start fresh', exact=True).click()
+            page.get_by_label('Workspace name').fill('Fresh workspace')
+            page.get_by_label('Business name').fill('First business')
+            page.get_by_role('button', name='Review defaults').click()
+            page.get_by_role('button', name='Back', exact=True).click()
+            expect(page.get_by_label('Business name')).to_have_value('First business')
+            page.get_by_role('button', name='Review defaults').click()
+            assert_accessible(page)
+            endpoint = '**/api/v1/workspaces/bootstrap'
+            page.route(endpoint, lambda route: route.fulfill(status=503, content_type='application/json',
+                body='{"error":{"code":"unavailable"},"request_id":"synthetic-failure"}'))
+            page.get_by_role('button', name='Create ledger', exact=True).click()
+            expect(page.get_by_role('alert')).to_be_visible()
+            receipt = page.evaluate('Object.values(sessionStorage)[0]')
+            page.reload()
+            page.get_by_role('button', name='Start fresh', exact=True).click()
+            expect(page.get_by_text('Setup was interrupted.', exact=False)).to_be_visible()
+            page.get_by_label('Workspace name').fill('Fresh workspace')
+            page.get_by_label('Business name').fill('First business')
+            page.get_by_role('button', name='Review defaults').click()
+            # Commit on the real API, then lose only its response.
+            def lost_response(route):
+                response = route.fetch()
+                assert response.status == 200
+                route.fulfill(status=503, content_type='application/json',
+                    body='{"error":{"code":"unavailable"},"request_id":"synthetic-lost-response"}')
+            page.unroute(endpoint)
+            page.route(endpoint, lost_response)
+            page.get_by_role('button', name='Create ledger', exact=True).click()
+            expect(page.get_by_role('heading', name='Your ledger is ready')).to_be_visible()
+            assert context.request.get(origin + '/api/v1/workspaces/bootstrap/' + receipt).json()['state'] == 'ready'
+            with repo.database.transaction(read_only=True) as connection:
+                assert connection.scalar(text('SELECT count(*) FROM workspace_bootstraps WHERE user_id=:user'), {'user': actor}) == 1
+            page.reload()
+            expect(page.get_by_role('heading', name='Your ledger is ready')).to_be_visible()
+            expect(page.get_by_role('button', name='Start fresh', exact=True)).to_have_count(0)
+            page.get_by_role('link', name='Review accounts', exact=True).click()
+            expect(page.get_by_role('heading', name='Accounts', exact=True)).to_be_visible()
+            assert context.request.get(origin + '/api/v1/entities/alpha/accounts').status == 403
+            page.goto(origin + '/workspace')
+            page.get_by_label('Business name').fill('Second business')
+            page.get_by_role('button', name='Review defaults').click()
+            page.get_by_role('button', name='Create ledger', exact=True).click()
+            expect(page.get_by_role('heading', name='Your ledger is ready')).to_be_visible()
+            choices = context.request.get(origin + '/api/v1/entities').json()['items']
+            assert len(choices) == 2
+            first = next(item['id'] for item in choices if item['name'] == 'First business')
+            page.get_by_label('Select business').select_option(first)
+            page.get_by_role('button', name='Discard draft and switch').click()
+            expect(page.get_by_role('heading', name='Your ledger is ready')).to_be_visible()
+            assert context.request.get(origin + '/api/v1/session').json()['entity']['id'] == first
+            assert_accessible(page)
+            assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+        finally:
+            browser.close()
+
+
+def test_onboarding_invitee_joins_existing_workspace_without_new_ownership(named_server):
+    from tabula_rasa.application.workspaces import WorkspaceService
+    from tabula_rasa.infrastructure.postgres.workspaces import PostgresWorkspaceRepository
+
+    origin, repo, _, _, org, _, _, _ = named_server
+    with repo.database.transaction(read_only=True) as connection:
+        configuration_hash = connection.scalar(text("SELECT configuration_hash FROM identity_environments WHERE environment='test'"))
+    sessions = PostgresSessionRepository(repo.database, 'test', configuration_hash)
+    _, owner = sessions.issue(verified())
+    raw, invitee = sessions.issue(verified('new-invitee'))
+    service = WorkspaceService(PostgresWorkspaceRepository(repo.database))
+    invitation = service.invite(owner, org, 'shared@example.test', 'editor')
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            context = browser.new_context()
+            context.add_cookies([{'name': 'tabula_dev_session', 'value': raw, 'url': origin, 'httpOnly': True, 'sameSite': 'Lax'}])
+            page = context.new_page()
+            page.goto(origin + '/invitations')
+            expect(page.get_by_role('button', name='Start fresh', exact=True)).to_have_count(0)
+            page.get_by_label('Invitation credential', exact=True).fill(invitation.credential)
+            page.get_by_role('button', name='Accept invitation').click()
+            expect(page.get_by_role('heading', name='Your ledger is ready')).to_be_visible()
+            page.reload()
+            assert context.request.get(origin + '/api/v1/session').json()['entity']['role'] == 'editor'
+            with repo.database.transaction(read_only=True) as connection:
+                assert connection.scalar(text('SELECT count(*) FROM workspace_bootstraps WHERE user_id=:user'), {'user': invitee.user_id}) == 0
+                assert connection.scalar(text('SELECT count(*) FROM memberships WHERE user_id=:user'), {'user': invitee.user_id}) == 1
+        finally:
+            browser.close()
 
 
 @pytest.mark.parametrize('width', [1440, 390])

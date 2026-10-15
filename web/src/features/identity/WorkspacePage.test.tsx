@@ -3,7 +3,8 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { api, ApiError, type ErrorCode } from '../../api/client';
 import { session } from '../../test/fixtures';
 import { ScopeBoundary } from '../../app/ScopeBoundary';
-import { InvitationAcceptance, WorkspacePage } from './WorkspacePage';
+import { WorkspacePage } from './WorkspacePage';
+import { InvitationAcceptance } from './InvitationAcceptance';
 
 afterEach(() => vi.restoreAllMocks());
 

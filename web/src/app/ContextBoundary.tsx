@@ -5,7 +5,8 @@ import { ScopeBoundary } from './ScopeBoundary';
 import { EntitySelectionContext } from './entitySelectionContext';
 import { AuthContext } from './authContext';
 import { ActionButton, PageHeader } from '../components/VisualPrimitives';
-import { InvitationAcceptance } from '../features/identity/WorkspacePage';
+import { InvitationAcceptance } from '../features/identity/InvitationAcceptance';
+import { Onboarding } from '../features/identity/Onboarding';
 
 const authorityKey = (session: SessionState) => JSON.stringify([session.actor_id, session.cache_scope,
   session.organization_id, session.entity?.id, session.capabilities]);
@@ -133,15 +134,16 @@ export function ContextBoundary({ children, onScopeChange }: { children: ReactNo
     return <main className="standalone"><section className="surface"><PageHeader title="Project Tabula Rasa" description="You are signed out. Sign in to continue." />
       {state.error !== undefined && <ErrorNotice error={state.error} />}
       {window.location.pathname === '/signed-out' && <p>Sign-in did not complete. You can try again.</p>}
-      <div className="actions"><a className="button" href="/api/v1/auth/login">Sign in</a></div></section></main>;
+      <p>New here? Create your account with the secure sign-in provider, then set up your workspace. Invited members should sign in with their invited account.</p>
+      <div className="actions"><a className="button" href={window.location.pathname === '/invitations' ? '/api/v1/auth/login?return_path=/invitations' : '/api/v1/auth/login'}>Sign in</a></div></section></main>;
   if (state.error) return <main className="standalone"><section className="surface"><PageHeader title="Project Tabula Rasa" />
     <ErrorNotice error={state.error} operation="read" onReview={() => { setState({}); setGeneration(value => value + 1); }} />
     <div className="actions"><ActionButton onClick={() => void logout()}>Sign out</ActionButton></div>
   </section></main>;
   if (!state.session) return <main className="standalone"><LoadingState label="Loading business context…" /></main>;
-  if (state.session.state === 'needs_setup') return <main className="standalone"><section className="surface"><PageHeader title="Workspace setup required"
-    description="You are signed in, but no active business is selected. Ask your organization owner to arrange access." />
-    <InvitationAcceptance session={state.session} />
+  if (state.session.state === 'needs_setup' || window.location.pathname === '/invitations') return <main className="standalone"><section className="surface">
+    {state.session.state === 'needs_setup' ? <Onboarding key={state.session.actor_id} session={state.session} />
+      : <><PageHeader title="Join a workspace" /><InvitationAcceptance key={state.session.actor_id} session={state.session} /><div className="actions"><a className="button" href="/">Return to your dashboard</a></div></>}
     <div className="actions"><ActionButton onClick={() => void logout()}>Sign out</ActionButton></div></section></main>;
   async function select(id: string) {
     if (!state.session || state.session.state === 'needs_setup') return;
