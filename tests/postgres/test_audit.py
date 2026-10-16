@@ -217,6 +217,69 @@ def test_posting_namespaces_keep_distinct_baselines_and_events(empty_database, p
     assert reader(database, 'beta').verify()['mismatches'] == 0
 
 
+@pytest.mark.parametrize('pre_activation', [True, False])
+def test_migration_checkpoint_and_mapping_history_tracks_full_keys(empty_database, pre_activation, monkeypatch):
+    from tabula_rasa.infrastructure.postgres.audit import AUDITED_KEYS
+    from tabula_rasa.infrastructure.postgres.migration import PostgresMigrationRunner
+    from tests.test_sheets_migration_source import plan_for, values_with_records
+
+    database = empty_database
+    if pre_activation:
+        with database.engine.begin() as connection:
+            command.upgrade(migration_config(connection), '0011_control_plane_join')
+    else:
+        upgrade(database)
+    plans = [plan_for(values_with_records(journal=True), profile=scope, entity=scope, workbook=f'workbook-{scope}')
+             for scope in ('alpha', 'beta')]
+    runner = PostgresMigrationRunner(database)
+    # Model loading with the prior checkout before deploying the audit revision.
+    with monkeypatch.context() as previous_checkout:
+        if pre_activation:
+            previous_checkout.setattr('tabula_rasa.infrastructure.postgres.migration.head_revision',
+                                      lambda: '0011_control_plane_join')
+        for plan in plans:
+            runner.execute(plan, dry_run=False)
+    if pre_activation:
+        upgrade(database)
+    for scope in ('alpha', 'beta'):
+        for table in ('migration_units', 'migration_id_mappings'):
+            with reader(database, scope).operation() as connection:
+                columns = ','.join(f"'{key}',{key}" for key in AUDITED_KEYS[table])
+                expected = connection.execute(text(
+                    f'SELECT jsonb_build_object({columns}) FROM {table} WHERE entity_id=:scope'
+                ), {'scope': scope}).scalars().all()
+                if pre_activation:
+                    captured = connection.execute(text('''SELECT target_key FROM audit_baseline
+                        WHERE entity_id=:scope AND target_type=:table'''),
+                        {'scope': scope, 'table': table}).scalars().all()
+                else:
+                    captured = [event['target_key'] for event in reader(database, scope).query(target_type=table, action='create')]
+            assert expected and len(captured) == len(expected)
+            assert all(key in captured for key in expected)
+        assert reader(database, scope).verify()['mismatches'] == 0
+    before = reader(database).query()
+    # Failed checkpoint mutations produce no history and no changed evidence.
+    with pytest.raises(DatabaseError):
+        with database.transaction() as connection:
+            connection.execute(text("UPDATE migration_units SET status='invalid' WHERE entity_id='alpha'"))
+    assert reader(database).query() == before
+    beta_before = reader(database, 'beta').query()
+    with database.transaction() as connection:
+        connection.execute(text("UPDATE migration_units SET status='pending',loaded_at=NULL WHERE entity_id='alpha'"))
+        connection.execute(text("UPDATE migration_id_mappings SET mapping_reason='corrected' WHERE entity_id='alpha'"))
+    assert reader(database).query(target_type='migration_units', action='update')
+    assert reader(database).query(target_type='migration_id_mappings', action='update')
+    assert reader(database).verify()['mismatches'] == 0
+    assert reader(database, 'beta').query() == beta_before
+    # The verifier detects unsupported administrator tampering of each evidence table.
+    with database.engine.begin() as connection:
+        connection.execute(text("SET LOCAL session_replication_role='replica'"))
+        connection.execute(text("UPDATE migration_units SET unit_kind='tampered' WHERE entity_id='alpha'"))
+        connection.execute(text("UPDATE migration_id_mappings SET mapping_reason='tampered' WHERE entity_id='alpha'"))
+    assert reader(database).verify()['mismatches'] > 0
+    assert reader(database, 'beta').verify()['mismatches'] == 0
+
+
 def test_activation_drains_inflight_writer_before_baseline_snapshot(empty_database):
     database = empty_database
     with database.engine.begin() as connection:

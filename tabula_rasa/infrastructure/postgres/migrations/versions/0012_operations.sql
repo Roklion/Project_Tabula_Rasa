@@ -5,7 +5,7 @@ LOCK TABLE accounts, categories, payees, tags, entries, postings,
     mixed_use_sources, recurring_schedules, fixed_assets, mileage_records,
     documents, import_batches, migration_runs, entry_tags, mixed_use_tags,
     schedule_tags, asset_tags, mileage_tags, document_links, recurring_occurrences,
-    asset_period_overrides, depreciation_events, import_records
+    asset_period_overrides, depreciation_events, import_records, migration_units, migration_id_mappings
     IN SHARE ROW EXCLUSIVE MODE;
 
 CREATE TABLE audit_activation (
@@ -177,7 +177,9 @@ BEGIN
         ['mileage_tags','mileage_id,tag_id'],['document_links','document_id'],
         ['recurring_occurrences','schedule_id,scheduled_date'],
         ['asset_period_overrides','asset_id,sequence'],['depreciation_events','asset_id,sequence'],
-        ['import_records','batch_id,source_position']
+        ['import_records','batch_id,source_position'],
+        ['migration_units','run_id,unit_key'],
+        ['migration_id_mappings','run_id,source_record_kind,source_id']
     ] LOOP
         table_name := definition[1]; keys := string_to_array(definition[2],',');
         SELECT string_agg(format('%L,to_jsonb(t)->%L',k,k),',') INTO key_sql FROM unnest(keys) k;

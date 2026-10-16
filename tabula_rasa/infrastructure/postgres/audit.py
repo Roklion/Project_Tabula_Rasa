@@ -64,6 +64,8 @@ AUDITED_KEYS = {
     'recurring_occurrences': ('schedule_id', 'scheduled_date'),
     'asset_period_overrides': ('asset_id', 'sequence'), 'depreciation_events': ('asset_id', 'sequence'),
     'import_records': ('batch_id', 'source_position'),
+    'migration_units': ('run_id', 'unit_key'),
+    'migration_id_mappings': ('run_id', 'source_record_kind', 'source_id'),
 }
 
 

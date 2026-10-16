@@ -196,7 +196,7 @@ Captured tables cover transaction/journal roots and postings; mileage; account,
 category, payee and tag changes; relationship repoints during reference merges;
 mixed-use records; recurring definitions/occurrences; assets/overrides/depreciation;
 document metadata and receipt link/unlink; import batches/records and migration-run
-administration. Free-text names, memos, references, addresses, filenames, provider
+administration, unit checkpoints and ID mappings. Free-text names, memos, references, addresses, filenames, provider
 locators, private bytes and credentials are excluded. Receipts remain external;
 unlink events do not delete bytes. Implemented corrections use existing updates
 and new immutable history. Future close/unlock/restore workflows must join this
