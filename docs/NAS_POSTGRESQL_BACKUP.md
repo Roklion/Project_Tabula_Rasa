@@ -102,7 +102,11 @@ operator artifact, never an ordinary tenant/profile download.
    alternate operator, and prove decryption before scheduling. The backup task
    needs no decryption key. Record the recipient-file digest and custody/access
    evidence privately. Changing recipients affects future generations only;
-   keep every identity required by retained generations.
+   keep every identity required by retained generations. Each capture encrypts
+   with a private per-run copy of the public recipient bytes and records the
+   digest of those same bytes, so rotating the configured file during encryption
+   cannot mislabel the generation's key custody. A failed run may retain this
+   public-only copy with its other quarantined evidence.
 
 The source role/ownership/grants, required extensions and provider-managed
 roles need an independent recovery inventory. `pg_dump` captures database-local
@@ -156,8 +160,8 @@ central alert integration with #332; no general job framework is introduced.
 The runner computes Sunday/Wednesday 22:00 in `America/New_York` from timezone
 data, independently of container local time. UTC capture times are recorded in
 manifests. It attempts the most recent due slot once, including a missed slot
-up to **24 hours** late. It never replays a backlog. The attempt is persisted
-before any remote call; failure/interruption consumes that slot. Further
+up to **24 hours** late. It never replays a backlog. The attempt and its first-run
+namespace parents are persisted before any remote call; failure/interruption consumes that slot. Further
 attempts require `run` by an operator after diagnosis or the next due slot.
 The local `.lock` directory excludes overlapping invocations of the same
 environment/database. It has no automatic expiry. A kill/power loss may leave

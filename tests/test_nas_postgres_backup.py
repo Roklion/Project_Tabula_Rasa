@@ -350,7 +350,7 @@ def test_publication_entries_are_synced_before_durable_success(configured, clien
             # The generation's manifest is persisted before the rename;
             # both rename parents and all new namespace entries are persisted
             # before status can advertise this generation as successful.
-            assert synced[-5:] == [root / "complete", root / "incomplete", root, root.parent, config["storage"]]
+            assert synced[-3:] == [root / "complete", root / "incomplete", root]
             assert generation.name in {p.name for p in synced if p.parent == root / "incomplete"}
         original_write(path, value)
     monkeypatch.setattr(nas, "sync_directory", record)
@@ -377,3 +377,53 @@ def test_publication_sync_failure_preserves_last_success(configured, clients, mo
     assert state["result"] == "failed" and state["last_success"] == previous
     assert len(list((root / "complete").iterdir())) == 2
     nas.verify_generation(config, previous)
+
+
+def test_first_attempt_namespace_is_durable_before_remote_calls(configured, clients, monkeypatch):
+    config = load(configured)
+    root = nas.namespace(config)
+    assert not root.exists()
+    synced = []
+    original_run = nas.subprocess.run
+    def run(args, **kwargs):
+        assert synced[:3] == [root, root.parent, config["storage"]]
+        state = nas.read_state(root)
+        assert state["attempted_slot"] == nas.stamp(NOW) and state["result"] == "running"
+        return original_run(args, **kwargs)
+    monkeypatch.setattr(nas, "sync_directory", synced.append)
+    monkeypatch.setattr(nas.subprocess, "run", run)
+    assert nas.backup(config, scheduled=True)["status"] == "complete"
+
+
+def test_namespace_sync_failure_cannot_start_remote_work(configured, clients, monkeypatch):
+    config = load(configured)
+    def fail(directory):
+        if directory == config["storage"]:
+            raise OSError(SENTINEL)
+    monkeypatch.setattr(nas, "sync_directory", fail)
+    with pytest.raises(OSError):
+        nas.backup(config, scheduled=True)
+    assert not clients
+    assert nas.read_state(nas.namespace(config))["result"] == "running"
+
+
+def test_recipient_rotation_cannot_mislabel_encryption_custody(configured, clients, monkeypatch):
+    config = load(configured)
+    original_bytes = config["recipients_file"].read_bytes()
+    original_run = nas.subprocess.run
+    used = []
+    def rotate(args, **kwargs):
+        if args[0] == "age" and "--recipients-file" in args:
+            copy = Path(args[args.index("--recipients-file") + 1])
+            assert copy != config["recipients_file"]
+            config["recipients_file"].write_bytes(b"age1rotated-public-recipient")
+            used.append(copy.read_bytes())
+        return original_run(args, **kwargs)
+    monkeypatch.setattr(nas.subprocess, "run", rotate)
+    result = nas.backup(config)
+    manifest = nas.verify_generation(config, result["generation"])
+    assert used == [original_bytes]
+    assert manifest["recipients_sha256"] == hashlib.sha256(original_bytes).hexdigest()
+    assert manifest["recipients_sha256"] != nas.digest(config["recipients_file"])
+    complete = nas.namespace(config) / "complete" / result["generation"]
+    assert not (complete / "recipients.txt").exists()

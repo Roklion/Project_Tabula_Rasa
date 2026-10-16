@@ -283,6 +283,10 @@ def backup(config, *, scheduled=False):
                 return {"status": "no_attempt", "health": health(config, now)["status"]}
         state.update(result="running", attempted_slot=stamp(slot), started_at=stamp(now))
         write_json(root / "status.json", state)
+        # The first attempt creates environment/database namespace entries.
+        # Persist those parents before any remote call can consume this slot.
+        sync_directory(root.parent)
+        sync_directory(config["storage"])
         generation = now.strftime("%Y%m%dT%H%M%S%fZ") + "-" + uuid.uuid4().hex
         partial = root / "incomplete" / generation
         try:
@@ -297,7 +301,12 @@ def backup(config, *, scheduled=False):
             # Traverse/decompress every archive item, not only its table of contents.
             command(["pg_restore", "--file", os.devnull, str(plain)], env, "integrity")
             archive = partial / "database.dump.age"
-            command(["age", "--recipients-file", str(config["recipients_file"]),
+            # Rotation changes only future captures: age and the manifest use
+            # the same private per-run copy of the public recipient bytes.
+            recipients = config["recipients_file"].read_bytes()
+            recipient_copy = partial / "recipients.txt"
+            recipient_copy.write_bytes(recipients)
+            command(["age", "--recipients-file", str(recipient_copy),
                      "--output", str(archive), str(plain)], env, "encryption")
             if archive.stat().st_size == 0:
                 raise BackupError("encryption")
@@ -305,7 +314,8 @@ def backup(config, *, scheduled=False):
                         "source_sha256": config["source_sha256"], "capture_started_at": stamp(now),
                         **metadata,
                         "archive_sha256": digest(archive), "archive_bytes": archive.stat().st_size,
-                        "recipients_sha256": digest(config["recipients_file"])}
+                        "recipients_sha256": hashlib.sha256(recipients).hexdigest()}
+            recipient_copy.unlink()
             plain.unlink()  # Only this invocation's transient plaintext, never a retained generation.
             with archive.open("r+b") as stream:
                 os.fsync(stream.fileno())
@@ -316,7 +326,7 @@ def backup(config, *, scheduled=False):
             partial.rename(complete / generation)
             # Persist publication and newly created namespace entries before
             # publishing a durable last-success pointer. Errors remain failures.
-            for directory in (complete, partial.parent, root, root.parent, config["storage"]):
+            for directory in (complete, partial.parent, root):
                 sync_directory(directory)
             state.update(result="complete", last_success=generation, completed_at=manifest["completed_at"])
             write_json(root / "status.json", state)
