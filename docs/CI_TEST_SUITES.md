@@ -11,7 +11,7 @@ retirement, and #339 owns environment/data cleanup. No supported workflow is ret
 
 | Family | Owner and isolation | Budget |
 | --- | --- | --- |
-| Python unit/application, supported Sheets/Streamlit/OAuth/profile/backup/recovery contracts, tooling and Python lint | `python-suite`: complete discovery without filters; synthetic providers/temporary files | 30 min |
+| Python unit/application, supported Sheets/Streamlit/OAuth/profile/backup/recovery contracts, NAS client/TLS/encryption/isolated-restore smoke, tooling and Python lint | `python-suite`: complete discovery without filters; synthetic providers/temporary files | 30 min |
 | PostgreSQL accounting/repository/API, authorization/session/entity isolation, concurrency/idempotency and migration contracts | Same Python job; disposable PostgreSQL 18.6 and per-test databases | Included above |
 | Windows environment bootstrap | `windows-tooling`: PowerShell/Python 3.12 | 15 min |
 | Frontend unit/fast checks, OpenAPI/client drift, TypeScript/build, HTTP/Git preview contracts and deployment-image inspection | `frontend-contract`: Node 24/Python 3.12; no database/browser installation | 15 min |
@@ -148,6 +148,10 @@ extra parallel setup can increase total runner time even while reducing the
 serial bottleneck.
 
 The later review head also integrates main `3d1d628` (PR #374 security acceptance).
+The subsequent base integration also retains main `3331ad4` (PR #375): the
+NAS client image and synthetic TLS/encryption/restore drill stay required in
+the Python job, with execution ownership guarded by CI policy tests. No real
+NAS service, credentials, retained backup generation or scheduling is touched.
 The prior green result and timings remain associated with `ce6d515`; fresh
 current-candidate CI is required after this integration and timing-report fix.
 Equivalent-input hosted comparison and repeated reliability measurements remain

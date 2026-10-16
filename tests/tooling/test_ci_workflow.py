@@ -49,6 +49,11 @@ def test_ci_preserves_complete_python_and_windows_coverage() -> None:
     commands = [step["run"] for step in python["steps"] if "run" in step]
     assert "python -m pip install -r requirements-dev.txt" in commands
     assert "ruff check ." in commands
+    assert "docker build -f deploy/nas/Dockerfile -t tabula-nas-backup:test ." in commands
+    nas = next(step for step in python["steps"] if step.get("name") ==
+               "Verify synthetic NAS TLS backup and isolated restore")
+    assert "tests/tooling/nas_backup_smoke.py" in nas["run"]
+    assert "tabula-nas-backup:test /smoke.py" in nas["run"]
     pytest_commands = [shlex.split(command) for command in commands
                        if command.startswith("python -m pytest")]
     assert len(pytest_commands) == 1

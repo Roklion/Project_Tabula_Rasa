@@ -1,0 +1,4 @@
+# This dedicated build must never send local secrets, ledgers or archives.
+**
+!scripts/
+!scripts/nas_postgres_backup.py
