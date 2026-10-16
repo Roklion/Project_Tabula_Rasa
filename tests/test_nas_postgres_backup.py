@@ -427,3 +427,16 @@ def test_recipient_rotation_cannot_mislabel_encryption_custody(configured, clien
     assert manifest["recipients_sha256"] != nas.digest(config["recipients_file"])
     complete = nas.namespace(config) / "complete" / result["generation"]
     assert not (complete / "recipients.txt").exists()
+
+
+def test_guard_persists_lock_removal_before_return(configured, monkeypatch):
+    root = nas.namespace(load(configured))
+    root.mkdir(parents=True)
+    synced = []
+    def sync(directory):
+        assert directory == root and not (root / ".lock").exists()
+        synced.append(directory)
+    monkeypatch.setattr(nas, "sync_directory", sync)
+    with nas.guard(root):
+        assert (root / ".lock").exists()
+    assert synced == [root]

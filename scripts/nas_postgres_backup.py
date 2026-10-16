@@ -219,6 +219,7 @@ def guard(root):
         yield
     finally:
         lock.rmdir()
+        sync_directory(root)
 
 
 def read_state(root):
