@@ -5,6 +5,7 @@ import { session } from '../../test/fixtures';
 import { ScopeBoundary } from '../../app/ScopeBoundary';
 import { WorkspacePage } from './WorkspacePage';
 import { InvitationAcceptance } from './InvitationAcceptance';
+import * as authSignals from '../../app/authSignals';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -14,6 +15,7 @@ it.each([
   ['invitation_expired', 'This invitation expired. Ask your administrator for a new one.'],
   ['invitation_invalid', 'This invitation is unavailable for this account. Check the invited email with your administrator.'],
 ])('clears the submitted invitation credential and explains %s', async (code, message) => {
+  const notify = vi.spyOn(authSignals, 'notifyPeerScopeChange');
   const respond = vi.spyOn(api, 'respondInvitation').mockRejectedValue(new ApiError(code as ErrorCode));
   render(<InvitationAcceptance session={session} />);
   fireEvent.change(screen.getByLabelText('Invitation credential'), { target: { value: 'synthetic-credential' } });
@@ -21,16 +23,19 @@ it.each([
   expect(await screen.findByText(message)).toBeVisible();
   expect(screen.getByLabelText('Invitation credential')).toHaveValue('');
   expect(respond).toHaveBeenCalledWith(session, 'synthetic-credential', true);
+  expect(notify).not.toHaveBeenCalled();
   if (code === 'reauthentication_required') expect(screen.getByRole('link', { name: 'Sign in again' })).toBeVisible();
 });
 
 it('allows an authenticated decline without retaining the credential', async () => {
+  const notify = vi.spyOn(authSignals, 'notifyPeerScopeChange');
   vi.spyOn(api, 'respondInvitation').mockResolvedValue({ state: 'declined' });
   render(<InvitationAcceptance session={session} />);
   fireEvent.change(screen.getByLabelText('Invitation credential'), { target: { value: 'synthetic-credential' } });
   fireEvent.click(screen.getByRole('button', { name: 'Decline invitation' }));
   expect(await screen.findByText('Invitation declined.')).toBeVisible();
   expect(screen.getByLabelText('Invitation credential')).toHaveValue('');
+  expect(notify).not.toHaveBeenCalled();
 });
 
 it('clears a previous decline notice before another invitation response', async () => {

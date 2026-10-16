@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api, type SessionState } from '../../api/client';
 import { ErrorNotice, Field, SuccessNotice } from '../../components/States';
 import { ActionButton } from '../../components/VisualPrimitives';
+import { notifyPeerScopeChange } from '../../app/authSignals';
 
 export function InvitationAcceptance({ session }: { session: SessionState }) {
   const [credential, setCredential] = useState('');
@@ -13,7 +14,7 @@ export function InvitationAcceptance({ session }: { session: SessionState }) {
     setCredential(''); setPending(true); setError(undefined); setDeclined(false);
     try {
       await api.respondInvitation(session, submitted, accept);
-      if (accept) window.location.replace('/');
+      if (accept) { notifyPeerScopeChange(); window.location.replace('/'); }
       else setDeclined(true);
     } catch (failure) { setError(failure); }
     finally { setPending(false); }

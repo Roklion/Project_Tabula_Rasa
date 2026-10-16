@@ -136,6 +136,8 @@ Privately distributed invitations are supported now: share the app's
 `/invitations` route separately from the credential. That route returns to
 acceptance after login for both new and existing members, without creating an
 organization. Credentials must be pasted after login and never enter URLs.
+Confirmed acceptance uses the same peer scope-change signal as fresh setup, so
+other tabs clear stale setup or ledger views and reload their authorized business.
 Connections remain optional through Data & backup (#318); invites are optional and can
 be sent later. Existing live Sheets migration remains the explicit #258/#303
 operator process, with no browser import or authority switch during setup.

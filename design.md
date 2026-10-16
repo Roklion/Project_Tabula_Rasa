@@ -597,6 +597,7 @@ edition.
 - `/invitations` routes new and existing members to the shared acceptance form,
   including after sign-in, without provisioning a second organization. The
   private credential is pasted after login and never included in a link.
+  Confirmed acceptance also signals peer tabs to clear stale setup or ledger scope.
 - Invitations are optional and available through the supported private delivery
   flow; external connections are optional through Data & backup (#318). Existing live
   migration requires the explicit operator #258/#303 process. First-use setup

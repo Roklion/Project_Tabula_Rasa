@@ -3,6 +3,7 @@ import { api, ApiError, type Schemas, type SessionState } from '../../api/client
 import { ErrorNotice, Field, LoadingState } from '../../components/States';
 import { ActionButton, PageHeader } from '../../components/VisualPrimitives';
 import { InvitationAcceptance } from './InvitationAcceptance';
+import { notifyPeerScopeChange } from '../../app/authSignals';
 
 /** Persist only an opaque receipt key. Authority always comes from the session/API. */
 function receiptKey(session: SessionState, organization?: string) {
@@ -33,12 +34,7 @@ export function LedgerSetup({ session, organization }: { session: SessionState; 
     if (current.entity.id !== result.entity_id) await api.selectEntity(current, result.entity_id);
     if (!mounted.current) return;
     sessionStorage.removeItem(key);
-    // Reuse ContextBoundary's data-free signal so peer tabs replace stale scope.
-    if (typeof BroadcastChannel !== 'undefined') {
-      const channel = new BroadcastChannel('tabula-auth');
-      channel.postMessage('scope-changed');
-      channel.close();
-    }
+    notifyPeerScopeChange();
     window.location.replace('/');
   }
 
