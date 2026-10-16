@@ -22,6 +22,7 @@ def test_first_ledger_retry_refresh_repeat_visit_and_two_entity_switch(named_ser
             context = browser.new_context(viewport={'width': width, 'height': 1000})
             configure_login(context, origin, claims)
             page = context.new_page()
+            page.add_init_script("Object.defineProperty(document, 'visibilityState', {get: () => 'hidden'})")
             page.goto(origin)
             page.get_by_role('link', name='Sign in', exact=True).click()
             expect(page.get_by_role('button', name='Start fresh', exact=True)).to_be_visible()
@@ -34,11 +35,19 @@ def test_first_ledger_retry_refresh_repeat_visit_and_two_entity_switch(named_ser
             expect(page.get_by_label('Business name')).to_have_value('First business')
             page.get_by_role('button', name='Review defaults').click()
             assert_accessible(page)
+            peer = context.new_page()
+            # Disable focus/periodic authority checks: only the broadcast may refresh this peer.
+            peer.add_init_script("Object.defineProperty(document, 'visibilityState', {get: () => 'hidden'})")
+            peer.goto(origin)
+            peer.get_by_role('button', name='Start fresh', exact=True).click()
+            peer.get_by_label('Business name').fill('Unsubmitted peer draft')
+            page.bring_to_front()
             endpoint = '**/api/v1/workspaces/bootstrap'
             page.route(endpoint, lambda route: route.fulfill(status=503, content_type='application/json',
                 body='{"error":{"code":"unavailable"},"request_id":"synthetic-failure"}'))
             page.get_by_role('button', name='Create ledger', exact=True).click()
             expect(page.get_by_role('alert')).to_be_visible()
+            expect(peer.get_by_label('Business name')).to_have_value('Unsubmitted peer draft')
             receipt = page.evaluate('Object.values(sessionStorage)[0]')
             page.reload()
             page.get_by_role('button', name='Start fresh', exact=True).click()
@@ -56,6 +65,8 @@ def test_first_ledger_retry_refresh_repeat_visit_and_two_entity_switch(named_ser
             page.route(endpoint, lost_response)
             page.get_by_role('button', name='Create ledger', exact=True).click()
             expect(page.get_by_role('heading', name='Your ledger is ready')).to_be_visible()
+            expect(peer.get_by_role('heading', name='Your ledger is ready')).to_be_visible()
+            expect(peer.get_by_label('Business name')).to_have_count(0)
             assert context.request.get(origin + '/api/v1/workspaces/bootstrap/' + receipt).json()['state'] == 'ready'
             with repo.database.transaction(read_only=True) as connection:
                 assert connection.scalar(text('SELECT count(*) FROM workspace_bootstraps WHERE user_id=:user'), {'user': actor}) == 1
@@ -65,11 +76,17 @@ def test_first_ledger_retry_refresh_repeat_visit_and_two_entity_switch(named_ser
             page.get_by_role('link', name='Review accounts', exact=True).click()
             expect(page.get_by_role('heading', name='Accounts', exact=True)).to_be_visible()
             assert context.request.get(origin + '/api/v1/entities/alpha/accounts').status == 403
+            peer.goto(origin + '/workspace')
+            peer.get_by_label('Business name').fill('Another unsubmitted peer draft')
+            page.bring_to_front()
             page.goto(origin + '/workspace')
             page.get_by_label('Business name').fill('Second business')
             page.get_by_role('button', name='Review defaults').click()
             page.get_by_role('button', name='Create ledger', exact=True).click()
             expect(page.get_by_role('heading', name='Your ledger is ready')).to_be_visible()
+            expect(peer.get_by_role('heading', name='Your ledger is ready')).to_be_visible()
+            expect(peer.get_by_label('Select business')).to_have_value(
+                context.request.get(origin + '/api/v1/session').json()['entity']['id'])
             choices = context.request.get(origin + '/api/v1/entities').json()['items']
             assert len(choices) == 2
             first = next(item['id'] for item in choices if item['name'] == 'First business')

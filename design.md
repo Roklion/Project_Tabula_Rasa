@@ -586,6 +586,7 @@ edition.
 - Fresh setup collects workspace and business names, then reviews the one
   supported standard bookkeeping default. Back preserves names. Creating opens
   Dashboard with account review, first transaction and ledger next actions.
+  Confirmed setup selection signals peer tabs to clear stale scope and reload authority.
   Additional business creation is Owner-only in Workspace & members and shares
   the same form and server bootstrap owner.
 - Progress and failures use shared status/alert components. Explicit retries

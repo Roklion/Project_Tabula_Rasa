@@ -117,7 +117,8 @@ Sign in (or register with the configured hosted identity provider), then choose
 Fresh setup collects workspace/business names and offers the currently supported
 standard basic bookkeeping defaults. Back preserves names before submission.
 Create ledger uses the existing atomic bootstrap, then selects the authorized
-business and opens Dashboard with account, first-transaction and ledger actions.
+business, notifies peer tabs to discard stale scope through the existing data-free
+scope-change signal, and opens Dashboard with account, first-transaction and ledger actions.
 Repeat visits open the existing ledger; they do not create another workspace.
 Owners can add another business in Workspace & members using the same setup flow.
 

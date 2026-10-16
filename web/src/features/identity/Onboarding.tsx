@@ -33,6 +33,12 @@ export function LedgerSetup({ session, organization }: { session: SessionState; 
     if (current.entity.id !== result.entity_id) await api.selectEntity(current, result.entity_id);
     if (!mounted.current) return;
     sessionStorage.removeItem(key);
+    // Reuse ContextBoundary's data-free signal so peer tabs replace stale scope.
+    if (typeof BroadcastChannel !== 'undefined') {
+      const channel = new BroadcastChannel('tabula-auth');
+      channel.postMessage('scope-changed');
+      channel.close();
+    }
     window.location.replace('/');
   }
 
