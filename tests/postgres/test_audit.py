@@ -18,7 +18,7 @@ from tabula_rasa.infrastructure.postgres.runtime import DatabaseError
 from tests.postgres.core_support import seed_core, expense, journal_lines
 from tests.postgres.test_mileage_repository import trip, source
 from tests.postgres.test_import_repository import csv, qb
-from tests.postgres._support import account, entity
+from tests.postgres._support import account, category, entity, simple_entry
 
 CAPABILITIES = frozenset({'platform:operate', 'audit:inspect'})
 
@@ -165,6 +165,56 @@ def test_activation_marks_existing_history_and_verifier_detects_unsupported_sql(
         connection.execute(text("SET LOCAL session_replication_role='replica'"))
         connection.execute(text("UPDATE entries SET description='unsupported edit' WHERE id='old'"))
     assert reader(database).verify()['mismatches'] == 1
+
+
+@pytest.mark.parametrize('pre_activation', [True, False])
+def test_posting_namespaces_keep_distinct_baselines_and_events(empty_database, pre_activation):
+    database = empty_database
+    if pre_activation:
+        with database.engine.begin() as connection:
+            command.upgrade(migration_config(connection), '0011_control_plane_join')
+    else:
+        upgrade(database)
+    with database.transaction() as connection:
+        for scope in ('alpha', 'beta'):
+            entity(connection, scope)
+            account(connection, scope)
+            category(connection, scope)
+            simple_entry(connection, scope)
+            connection.execute(text("""INSERT INTO entries(entity_id,id,incarnation_id,txn_date,projection_kind)
+                VALUES (:scope,'journal','journal','2026-10-05','journal')"""), {'scope': scope})
+            connection.execute(text("""INSERT INTO postings(entity_id,id,entry_id,projection_kind,position,side,amount,account_id)
+                VALUES (:scope,'income:1','journal','journal',1,'Debit',2,'cash'),
+                       (:scope,'income:2','journal','journal',2,'Credit',2,'cash')"""), {'scope': scope})
+    if pre_activation:
+        upgrade(database)
+    expected = {(kind, f'income:{position}') for kind in ('simple', 'journal') for position in (1, 2)}
+    for scope in ('alpha', 'beta'):
+        if pre_activation:
+            with reader(database, scope).operation() as connection:
+                keys = connection.execute(text("""SELECT target_key FROM audit_baseline
+                    WHERE entity_id=:scope AND target_type='postings'"""), {'scope': scope}).scalars().all()
+        else:
+            keys = [event['target_key'] for event in reader(database, scope).query(target_type='postings')]
+        assert {(key['projection_kind'], key['id']) for key in keys} == expected
+        assert len(keys) == 4
+        assert reader(database, scope).verify()['mismatches'] == 0
+    beta_before = reader(database, 'beta').query()
+    with database.transaction() as connection:
+        connection.execute(text("""UPDATE postings SET amount=3
+            WHERE entity_id='alpha' AND projection_kind='journal'"""))
+    changed = reader(database).query(target_type='postings', action='update')
+    assert len(changed) == 2
+    assert {event['target_key']['projection_kind'] for event in changed} == {'journal'}
+    assert all(event['after_summary']['amount'] == 3 for event in changed)
+    assert reader(database).verify()['mismatches'] == 0
+    with pytest.raises(DatabaseError):
+        with database.transaction() as connection:
+            connection.execute(text("""UPDATE postings SET amount=0
+                WHERE entity_id='alpha' AND projection_kind='journal'"""))
+    assert reader(database).query(target_type='postings', action='update') == changed
+    assert reader(database, 'beta').query() == beta_before
+    assert reader(database, 'beta').verify()['mismatches'] == 0
 
 
 def test_activation_drains_inflight_writer_before_baseline_snapshot(empty_database):

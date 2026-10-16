@@ -169,7 +169,7 @@ DECLARE definition text[]; table_name text; keys text[]; key_sql text;
 BEGIN
     FOREACH definition SLICE 1 IN ARRAY ARRAY[
         ['accounts','id'],['categories','id'],['payees','id'],['tags','id'],
-        ['entries','id'],['postings','id'],['mixed_use_sources','id'],
+        ['entries','id'],['postings','projection_kind,id'],['mixed_use_sources','id'],
         ['recurring_schedules','id'],['fixed_assets','id'],['mileage_records','id'],
         ['documents','id'],['import_batches','id'],['migration_runs','id'],
         ['entry_tags','entry_id,tag_id'],['mixed_use_tags','source_id,tag_id'],

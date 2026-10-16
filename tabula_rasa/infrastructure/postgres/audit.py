@@ -54,9 +54,10 @@ def configure_audit(connection, context, operation_id):
 
 # Key inventories match the audited canonical tables, never caller SQL names.
 AUDITED_KEYS = {
-    **{name: ('id',) for name in ('accounts', 'categories', 'payees', 'tags', 'entries', 'postings',
+    **{name: ('id',) for name in ('accounts', 'categories', 'payees', 'tags', 'entries',
         'mixed_use_sources', 'recurring_schedules', 'fixed_assets', 'mileage_records',
         'documents', 'import_batches', 'migration_runs')},
+    'postings': ('projection_kind', 'id'),
     'entry_tags': ('entry_id', 'tag_id'), 'mixed_use_tags': ('source_id', 'tag_id'),
     'schedule_tags': ('schedule_id', 'tag_id'), 'asset_tags': ('asset_id', 'tag_id'),
     'mileage_tags': ('mileage_id', 'tag_id'), 'document_links': ('document_id',),
