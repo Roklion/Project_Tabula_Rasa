@@ -20,6 +20,7 @@ from tabula_rasa.infrastructure.postgres.sessions import PostgresSessionReposito
 from tests.postgres.test_identity import setup
 from tests.postgres.browser_quality_support import assert_accessible
 from tests.test_oidc import oidc as oidc
+from tests.test_application_documents import FakeDocumentStore
 
 
 @pytest.fixture
@@ -41,8 +42,10 @@ def named_server(database, oidc):
     sessions = PostgresSessionRepository(database, 'test', provider.settings.configuration_hash)
     sessions.configure()
     auth = NamedIdentity(settings, sessions, provider)
+    stores = {scope: FakeDocumentStore() for scope in ('alpha', 'beta')}
     runtime = PostgresRuntime(database, auth, identity=auth,
-        service_factory=lambda context: create_postgres_services(database, context.entity_id))
+        service_factory=lambda context: create_postgres_services(database, context.entity_id,
+            document_store=stores[context.entity_id], document_store_kind='fake'))
     runtime.close = lambda: None  # Pool owned by disposable fixture.
     app = create_app(settings=settings, runtime_factory=lambda _: runtime,
                      static_dir=dist)
@@ -63,6 +66,29 @@ def named_server(database, oidc):
         assert not thread.is_alive()
 
 
+def route_fake_login(context, origin, claims):
+    """Adapt only the external OIDC hop; real API/cookies/sessions stay in use."""
+    def authorize(route):
+        query = parse_qs(urlsplit(route.request.url).query)
+        assert query['code_challenge_method'] == ['S256']
+        claims['nonce'] = query['nonce'][0]
+        route.fulfill(status=302, headers={'location': origin + '/api/v1/auth/callback?' + urlencode(
+            {'state': query['state'][0], 'code': 'synthetic-code'})})
+
+    def login_redirect(route):
+        response = route.fetch(max_redirects=0)
+        assert response.status == 303
+        target = response.headers['location']
+        assert target.startswith('https://id.example.test/authorize?')
+        headers = {key: value for key, value in response.headers.items()
+                   if key not in {'location', 'content-length', 'content-type'}}
+        route.fulfill(status=200, headers=headers, content_type='text/html',
+            body='<script>location.replace(' + json.dumps(target) + ')</script>')
+
+    context.route('https://id.example.test/authorize**', authorize)
+    context.route('**/api/v1/auth/login', login_redirect)
+
+
 @pytest.mark.parametrize('width', [1440, 390])
 def test_named_sign_in_revocation_two_users_and_cross_tab_logout(named_server, width):
     origin, repo, alice, bob, a, _, claims, info = named_server
@@ -71,27 +97,8 @@ def test_named_sign_in_revocation_two_users_and_cross_tab_logout(named_server, w
         try:
             alice_browser = browser.new_context(viewport={'width': width, 'height': 1000})
             bob_browser = browser.new_context(viewport={'width': width, 'height': 1000})
-            def authorize(route):
-                query = parse_qs(urlsplit(route.request.url).query)
-                assert query['code_challenge_method'] == ['S256']
-                claims['nonce'] = query['nonce'][0]
-                route.fulfill(status=302, headers={'location': origin + '/api/v1/auth/callback?' + urlencode(
-                    {'state': query['state'][0], 'code': 'synthetic-code'})})
-            def login_redirect(route):
-                # Playwright routing cannot fake the later external hop of a
-                # redirect chain. Split only that test hop into a new navigation;
-                # assert the real server's 303/cookie response before adapting.
-                response = route.fetch(max_redirects=0)
-                assert response.status == 303
-                target = response.headers['location']
-                assert target.startswith('https://id.example.test/authorize?')
-                headers = {key: value for key, value in response.headers.items()
-                           if key not in {'location', 'content-length', 'content-type'}}
-                route.fulfill(status=200, headers=headers, content_type='text/html',
-                    body='<script>location.replace(' + json.dumps(target) + ')</script>')
             for context in (alice_browser, bob_browser):
-                context.route('https://id.example.test/authorize**', authorize)
-                context.route('**/api/v1/auth/login', login_redirect)
+                route_fake_login(context, origin, claims)
             first, second = alice_browser.new_page(), bob_browser.new_page()
             first.goto(origin)
             expect(first.get_by_role('link', name='Sign in', exact=True)).to_be_visible()
@@ -119,5 +126,83 @@ def test_named_sign_in_revocation_two_users_and_cross_tab_logout(named_server, w
             expect(peer.get_by_role('link', name='Sign in', exact=True)).to_be_visible()
             peer.reload()
             expect(peer.get_by_role('link', name='Sign in', exact=True)).to_be_visible()
+        finally:
+            browser.close()
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+def test_named_transaction_receipt_logout_then_other_user_has_no_residual_data(named_server, width):
+    origin, repo, alice, _, _, b, claims, info = named_server
+    # An overlapping membership lets Alice explicitly select another workspace;
+    # Bob still cannot read Alice's original workspace.
+    repo.set_membership(b, alice.id, 'read_only')
+    from tests.postgres._support import account, category
+    with repo.database.transaction() as connection:
+        for scope in ('alpha', 'beta'):
+            account(connection, scope, 'cash')
+            category(connection, scope, 'office', kind='Expense')
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            context = browser.new_context(viewport={'width': width, 'height': 1000})
+            route_fake_login(context, origin, claims)
+            page = context.new_page()
+            page.goto(origin)
+            page.get_by_role('link', name='Sign in', exact=True).click()
+            expect(page.get_by_role('button', name='Sign out', exact=True)).to_be_visible()
+            selector = page.get_by_label('Select business')
+            if selector.input_value() != 'alpha':
+                selector.select_option('alpha')
+                page.get_by_role('button', name='Discard draft and switch').click()
+                expect(page.get_by_text('Role: owner', exact=True)).to_be_visible()
+            page.get_by_label('Select business').select_option('beta')
+            page.get_by_role('button', name='Discard draft and switch').click()
+            expect(page.get_by_text('Role: read only', exact=True)).to_be_visible()
+            page.get_by_label('Select business').select_option('alpha')
+            page.get_by_role('button', name='Discard draft and switch').click()
+            expect(page.get_by_text('Role: owner', exact=True)).to_be_visible()
+            page.goto(origin + '/transactions/new')
+            page.get_by_label('Date', exact=True).fill('2026-10-06')
+            page.get_by_label('Amount', exact=True).fill('19.25')
+            page.get_by_label('From account', exact=True).select_option('cash')
+            page.get_by_label('Category', exact=True).select_option('office')
+            page.get_by_label('Description / memo', exact=True).fill('Alice private transaction')
+            with page.expect_response(lambda response: response.request.method == 'POST'
+                                      and response.url.endswith('/transactions')) as created:
+                page.get_by_role('button', name='Save transaction', exact=True).click()
+            assert created.value.status == 201
+            record = created.value.json()['id']
+            page.goto(origin + '/transactions/' + record + '/receipts')
+            page.get_by_label('Receipt files').set_input_files({
+                'name': 'alice-private.pdf', 'mimeType': 'application/pdf', 'buffer': b'%PDF synthetic Alice',
+            })
+            page.get_by_role('button', name='Attach selected receipts').click()
+            expect(page.get_by_role('status').filter(has_text='1 receipt attached.')).to_be_visible()
+            with page.expect_download() as download:
+                page.get_by_role('link', name='Download alice-private.pdf', exact=True).click()
+            assert Path(download.value.path()).read_bytes() == b'%PDF synthetic Alice'
+            linked = context.request.get(origin + '/api/v1/entities/alpha/transactions/' + record + '/receipts').json()['items']
+            document = linked[0]['id']
+            previous = context.request.get(origin + '/api/v1/session').json()
+            page.get_by_role('button', name='Sign out', exact=True).click()
+            expect(page.get_by_role('link', name='Sign in', exact=True)).to_be_visible()
+            expect(page.get_by_text('alice-private.pdf', exact=False)).to_have_count(0)
+            claims['sub'] = info['sub'] = 'bob'
+            page.get_by_role('link', name='Sign in', exact=True).click()
+            expect(page.get_by_role('button', name='Sign out', exact=True)).to_be_visible()
+            current = context.request.get(origin + '/api/v1/session').json()
+            assert current['actor_id'] != previous['actor_id']
+            assert current['cache_scope'] != previous['cache_scope']
+            assert current['entity']['id'] == 'beta'
+            for path in ('transactions', 'transactions/' + record + '/receipts', 'documents/' + document + '/content'):
+                assert context.request.get(origin + '/api/v1/entities/alpha/' + path).status == 403
+            page.goto(origin + '/transactions')
+            expect(page.get_by_role('heading', name='No matching entries', exact=True)).to_be_visible()
+            expect(page.get_by_text('Alice private transaction', exact=True)).to_have_count(0)
+            page.go_back(wait_until='networkidle')  # History cannot resurrect the previous user's receipt view.
+            expect(page.get_by_text('alice-private.pdf', exact=False)).to_have_count(0)
+            for storage in ('localStorage', 'sessionStorage'):
+                stored = page.evaluate(f'JSON.stringify(Object.entries({storage}))')
+                assert all(value not in stored for value in ('Alice private transaction', 'alice-private.pdf', document))
         finally:
             browser.close()

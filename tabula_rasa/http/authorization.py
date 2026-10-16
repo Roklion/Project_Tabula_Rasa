@@ -81,6 +81,23 @@ ROUTE_POLICIES = MappingProxyType({
 })
 
 
+# Only these exact application routes serve public, non-private content.
+# A new path outside /api must not silently bypass the central dependency.
+PUBLIC_ROUTES = MappingProxyType({
+    'liveness': ('/health/live', frozenset({'GET'})),
+    'readiness': ('/health/ready', frozenset({'GET'})),
+    'version': ('/version', frozenset({'GET'})),
+    'asset_register': ('/assets', frozenset({'GET', 'HEAD'})),
+    'browser_shell': ('/{path:path}', frozenset({'GET', 'HEAD'})),
+})
+
+
+def public_route(route):
+    return PUBLIC_ROUTES.get(getattr(route, 'operation_id', None)) == (
+        getattr(route, 'path', None), frozenset(getattr(route, 'methods', ())),
+    )
+
+
 def route_policy(request):
     route = request.scope.get('route')
     policy = ROUTE_POLICIES.get(getattr(route, 'operation_id', None))
@@ -94,11 +111,12 @@ def route_policy(request):
 
 def authorize_request(request: Request):
     """App-wide dependency executes before every private handler's binding."""
-    if not request.url.path.startswith('/api/'):
-        return
-    if getattr(request.scope.get('route'), 'path', None) == '/{path:path}':
+    route = request.scope.get('route')
+    if getattr(route, 'operation_id', None) == 'browser_shell' and request.url.path.split('/')[1] == 'api':
         # The public SPA catch-all must never serve or bind a reserved API URL.
         raise TransportError('not_found')
+    if public_route(route):
+        return
     from .context import require_named_resolver
     require_named_resolver(request)
     policy = route_policy(request)
@@ -120,12 +138,20 @@ def validate_routes(app):
     """Catch missing actions, guards, duplicate IDs and mismatched scopes at build."""
     seen = set()
     for route in iter_route_contexts(app.routes):
-        if not route.path or not (route.path == '/api' or route.path.startswith('/api/')):
-            continue
+        from starlette.routing import Mount
+        from .static import HashedAssets
+        original = route.original_route
+        if isinstance(original, Mount) and route.path == '/assets' and isinstance(original.app, HashedAssets):
+            continue  # Hashed build assets only; arbitrary mounted apps fail closed.
         if route.path in {'/api/docs', '/api/openapi.json'} and not isinstance(route.original_route, APIRoute):
             continue  # Existing middleware protects framework documentation.
         if not isinstance(route.original_route, APIRoute):
             raise RuntimeError('Private API routes must use the shared FastAPI authorization guard.')
+        if public_route(route):
+            if route.operation_id in seen:
+                raise RuntimeError('Duplicate public authorization guard exemption.')
+            seen.add(route.operation_id)
+            continue
         policy = ROUTE_POLICIES.get(route.operation_id)
         allowed_actions = {'entity': ACTION_CAPABILITIES, 'identity': {'read', 'session', 'logout'},
                            'public': {'login', 'callback'}}

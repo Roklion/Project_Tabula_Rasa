@@ -26,7 +26,9 @@ Set `TABULA_RASA_ACCESS_MODE=named_user`, `TABULA_RASA_ENVIRONMENT`,
   32 characters; change it to invalidate all sessions/login attempts for this
   environment (including signing-key/security-policy recovery).
 
-Never set `TABULA_RASA_TRUSTED_ENTITY_ID` or alpha Basic credentials in named
+Production requires explicit `TABULA_RASA_ACCESS_MODE=named_user`; missing,
+unknown or restricted-alpha mode fails configuration validation before runtime
+allocation. Never set `TABULA_RASA_TRUSTED_ENTITY_ID` or alpha Basic credentials in named
 mode. Production and named mode reject injected trusted-development contexts
 at the HTTP guard as well as rejecting synthetic configuration. Restricted
 alpha remains a separate explicit fixture mode; it grants no named membership.
