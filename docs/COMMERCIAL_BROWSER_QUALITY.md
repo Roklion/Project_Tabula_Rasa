@@ -30,7 +30,8 @@ npm --prefix web run lint
 npm --prefix web test
 npm --prefix web run test:e2e
 $env:TABULA_RASA_REQUIRE_BROWSER_TESTS = '1'
-python -m pytest tests/postgres/test_browser_baselines.py tests/postgres/test_browser_workflows.py tests/postgres/test_browser_quality.py tests/postgres/test_browser_mileage_documents.py tests/postgres/test_browser_secondary.py tests/postgres/test_browser_alpha.py --junitxml=browser-results.xml
+$native = Get-ChildItem tests/postgres/test*browser*.py | ForEach-Object { $_.FullName }
+python -m pytest @native -ra --durations=20 --junitxml=native-browser-results.xml
 ```
 
 The test endpoint must support creation/removal of disposable databases. Tests
@@ -42,12 +43,22 @@ including after assertion failures. Missing database configuration, compiled
 assets or required browser engines fails the required gate; ordinary Python runs
 may still skip native browser tests when their environment is not installed.
 
-Repository CI's **Browser and generated API contract** job installs all three
-engines and runs this gate after building the SPA. **Full test suite** requires
-that job to succeed on the current head/merge candidate. Failed runs retain
-Playwright traces/screenshots and native JUnit results as CI artifacts. The
-commercial release-image workflow consumes successful Repository CI on `main`.
-No external customer data, ledger files or customer credentials are required.
+Repository CI separates **Frontend, contracts and runtime image**, two required
+**Browser UI** shards, and **Native browser (HTTP + PostgreSQL)**. Node UI and
+native jobs each install all three engines; native builds its own SPA and uses
+its own disposable database. **Full test suite** requires every partition on the
+current head/merge candidate. Failed runs retain per-shard Playwright JUnit,
+traces/screenshots and native JUnit results. The commercial release-image
+workflow consumes successful Repository CI on `main`. No external customer data,
+ledger files or customer credentials are required.
+
+`npm --prefix web run test:e2e` remains the complete local Node check: run-once
+HTTP/Git contracts followed by all browser/device UI cases. Use `test:contracts`
+for browser-independent preview/digest changes, or `test:browser -- --shard=1/2`
+and `--shard=2/2` to reproduce CI UI partitions (run both for complete coverage).
+[Suite ownership and timing evidence](CI_TEST_SUITES.md) explains why the HTTP/Git
+contracts no longer run four times and why real API/database journeys remain
+independent required coverage.
 
 ## Bounded coverage matrix
 

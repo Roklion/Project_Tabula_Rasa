@@ -53,7 +53,7 @@ def test_ci_preserves_complete_python_and_windows_coverage() -> None:
                        if command.startswith("python -m pytest")]
     assert len(pytest_commands) == 1
     # No positional test selection, marker filter, keyword filter or deselection.
-    assert pytest_commands[0][3:] == ["-ra", "--junitxml=python-results.xml"]
+    assert pytest_commands[0][3:] == ["-ra", "--durations=20", "--junitxml=python-results.xml"]
 
     windows = jobs["windows-tooling"]
     assert windows["runs-on"].startswith("windows-")
@@ -65,27 +65,70 @@ def test_ci_preserves_complete_python_and_windows_coverage() -> None:
         "python -m pytest tests/tooling/test_codex_environment_setup.py "
     ) for step in windows["steps"])
 
-    # The browser job runs the compiled SPA against a disposable DB; it does
-    # not repeat the full Python suite or Python lint.
-    browser = jobs["browser"]
-    assert "postgres" in browser["services"]
-    assert not any(step.get("run", "").startswith("python -m pytest -ra") or
-                   "ruff check" in step.get("run", "") for step in browser["steps"])
-    native = next(step for step in browser["steps"] if step.get("name") == "Run native browser concurrency and core workflow tests")
-    assert shlex.split(native['run']) == ['python', '-m', 'pytest',
-        'tests/postgres/test_browser_baselines.py', 'tests/postgres/test_browser_workflows.py',
-        'tests/postgres/test_browser_quality.py', 'tests/postgres/test_browser_mileage_documents.py',
-        'tests/postgres/test_browser_secondary.py',
-        'tests/postgres/test_browser_alpha.py',
-        'tests/postgres/test_browser_workflow_ports.py',
-        'tests/postgres/test_identity_browser.py',
-        'tests/postgres/test_workspace_browser.py',
-        '--junitxml=browser-results.xml']
+    native_job = jobs["native-browser"]
+    assert "if" not in native_job
+    assert "postgres" in native_job["services"]
+    assert native_job["env"]["TABULA_RASA_TEST_DATABASE_URL"].startswith("postgresql+psycopg://")
+    native = next(step for step in native_job["steps"] if step.get("name") ==
+                  "Run native browser concurrency and core workflow tests")
+    command = shlex.split(native["run"])
+    assert command[:3] == ["python", "-m", "pytest"]
+    # Detect newly added native suites instead of silently skipping them in the
+    # complete Python job (which deliberately has no compiled SPA).
+    assert command[3:-3] == sorted(
+        path.relative_to(PROJECT_ROOT).as_posix()
+        for path in (PROJECT_ROOT / "tests/postgres").glob("test*browser*.py")
+    )
+    assert command[-3:] == ["-ra", "--durations=20", "--junitxml=native-browser-results.xml"]
     assert native["env"]["TABULA_RASA_REQUIRE_BROWSER_TESTS"] == "1"
-    installs = [step['run'] for step in browser['steps'] if 'playwright install' in step.get('run', '')]
-    assert len(installs) == 2
-    assert all('chromium firefox webkit' in command for command in installs)
-    assert browser["env"]["TABULA_RASA_TEST_DATABASE_URL"].startswith("postgresql+psycopg://")
+    commands = [step.get("run", "") for step in native_job["steps"]]
+    assert "npm --prefix web run build" in commands
+    assert "python -m playwright install --with-deps chromium firefox webkit" in commands
+    assert not any("test:e2e" in command or "test:browser" in command for command in commands)
+
+
+def test_browser_shards_preserve_every_project_without_blanket_retries() -> None:
+    browser = workflow()["jobs"]["browser"]
+    assert "if" not in browser and "services" not in browser
+    assert browser["strategy"] == {"fail-fast": "false", "matrix": {"shard": ["1", "2"]}}
+    commands = [step.get("run", "") for step in browser["steps"]]
+    assert "npm --prefix web run test:browser -- --shard=${{ matrix.shard }}/2" in commands
+    assert "npm --prefix web exec -- playwright install --with-deps chromium firefox webkit" in commands
+    assert not any("pytest" in command or "test:contracts" in command for command in commands)
+    config = (PROJECT_ROOT / "web/playwright.config.ts").read_text(encoding="utf-8")
+    assert "fullyParallel: true" in config  # shard by tests, not imbalanced files
+    for project in ["desktop", "mobile", "firefox", "webkit"]:
+        assert "name: '" + project + "'" in config
+    assert "retries:" not in config and "testIgnore:" not in config and "grep:" not in config
+    artifact = next(step for step in browser["steps"] if step.get("uses", "").startswith("actions/upload-artifact@"))
+    assert "matrix.shard" in artifact["with"]["name"]
+    assert artifact["if"] == "${{ always() }}"
+
+
+def test_frontend_contracts_run_once_and_runtime_image_remains_required() -> None:
+    frontend = workflow()["jobs"]["frontend-contract"]
+    assert "if" not in frontend
+    commands = [step.get("run", "") for step in frontend["steps"]]
+    for command in [
+        "python -m tabula_rasa.http.export_openapi --output contracts/http/openapi.json",
+        "npm --prefix web run api:generate",
+        "git diff --exit-code -- contracts/http/openapi.json web/src/api/schema.d.ts",
+        "npm --prefix web run build", "npm --prefix web run lint", "npm --prefix web test",
+        "npm --prefix web run test:contracts",
+    ]:
+        assert command in commands
+    assert any("docker build --platform linux/amd64" in command and "docker run --rm" in command
+               for command in commands)
+    assert not any("playwright install" in command for command in commands)
+    config = (PROJECT_ROOT / "web/playwright.contracts.config.ts").read_text(encoding="utf-8")
+    assert "testDir: './contracts'" in config
+    assert "projects:" not in config and "webServer:" not in config
+    contracts = (PROJECT_ROOT / "web/contracts/visual-review.spec.ts").read_text(encoding="utf-8")
+    assert "({ page })" not in contracts
+    assert contracts.count("test('") == 5
+    browser = (PROJECT_ROOT / "web/e2e/visual-review.spec.ts").read_text(encoding="utf-8")
+    assert browser.count("test('") == 2
+    assert browser.count("async ({ page })") == 2
 
 
 def test_required_gate_waits_for_all_suites_even_when_a_dependency_fails() -> None:
@@ -95,6 +138,9 @@ def test_required_gate_waits_for_all_suites_even_when_a_dependency_fails() -> No
     assert gate["if"] == "${{ always() }}"
     assert set(gate["needs"]) == set(jobs) - {"full-suite"}
     assert "continue-on-error" not in gate
+    for job in jobs.values():
+        assert "continue-on-error" not in job
+        assert all("continue-on-error" not in step for step in job["steps"])
     step = gate["steps"][0]
     assert step["shell"] == "bash"
     assert set(step["env"].values()) == {
@@ -126,8 +172,8 @@ def test_required_gate_accepts_all_successful_suites() -> None:
     assert result.returncode == 0, result.stderr
 
 
-@pytest.mark.parametrize("job", ["PYTHON_RESULT", "WINDOWS_RESULT", "BROWSER_RESULT"])
-@pytest.mark.parametrize("conclusion", ["failure", "cancelled", "skipped", ""])
+@pytest.mark.parametrize("job", list(workflow()["jobs"]["full-suite"]["steps"][0]["env"]))
+@pytest.mark.parametrize("conclusion", ["failure", "cancelled", "skipped", "", "pending", "timed_out"])
 def test_required_gate_rejects_failed_or_incomplete_suite(job: str, conclusion: str) -> None:
     results = dict.fromkeys(workflow()["jobs"]["full-suite"]["steps"][0]["env"], "success")
     results[job] = conclusion
