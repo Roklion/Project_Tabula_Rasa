@@ -19,26 +19,31 @@ def seconds(start: str, end: str) -> float:
 
 
 def summarize(jobs: list[dict]) -> dict:
-    if not jobs or any(not job.get("completed_at") for job in jobs):
+    if not jobs or any(job.get("conclusion") is None for job in jobs):
         raise ValueError("Use one completed workflow attempt, including unsuccessful jobs.")
     if len({job["head_sha"] for job in jobs}) != 1 or len({job.get("run_attempt", 1) for job in jobs}) != 1:
         raise ValueError("Do not combine revisions or workflow attempts.")
     if len({job.get("run_id") for job in jobs}) != 1:
         raise ValueError("Do not combine workflow runs.")
+    durations = [seconds(job["started_at"], job["completed_at"])
+                 if job.get("started_at") and job.get("completed_at") else None
+                 for job in jobs]
+    timing_complete = all(duration is not None for duration in durations)
     return {
+        "timing_complete": timing_complete,
         "head_sha": jobs[0]["head_sha"],
         "attempt": jobs[0].get("run_attempt", 1),
         "elapsed_seconds": seconds(min(job["started_at"] for job in jobs),
-                                   max(job["completed_at"] for job in jobs)),
+                                   max(job["completed_at"] for job in jobs)) if timing_complete else None,
         # Unweighted occupied time, not billing (Windows, rounding and plans differ).
-        "runner_seconds": sum(seconds(job["started_at"], job["completed_at"]) for job in jobs),
+        "runner_seconds": sum(durations) if timing_complete else None,
         "jobs": [{
             "name": job["name"], "conclusion": job["conclusion"],
-            "seconds": seconds(job["started_at"], job["completed_at"]),
+            "seconds": duration,
             "steps": [{"name": step["name"], "conclusion": step["conclusion"],
                        "seconds": seconds(step["started_at"], step["completed_at"])}
                       for step in job["steps"] if step.get("started_at") and step.get("completed_at")],
-        } for job in jobs],
+        } for job, duration in zip(jobs, durations)],
     }
 
 

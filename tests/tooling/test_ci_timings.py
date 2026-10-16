@@ -16,13 +16,14 @@ def job(name="suite", **overrides):
 
 def test_parallel_jobs_do_not_sum_to_wall_time_or_hide_failure():
     report = summarize([job(), job("cancelled suite", conclusion="cancelled")])
+    assert report["timing_complete"] is True
     assert report["elapsed_seconds"] == 120
     assert report["runner_seconds"] == 240
     assert report["jobs"][1]["conclusion"] == "cancelled"
     assert report["jobs"][0]["steps"][0]["seconds"] == 10
 
 
-@pytest.mark.parametrize("jobs", [[], [job(completed_at=None)],
+@pytest.mark.parametrize("jobs", [[], [job(conclusion=None)],
                                   [job(), job(head_sha="b" * 40)],
                                   [job(), job(run_attempt=2)],
                                   [job(run_id=1), job(run_id=2)]])
@@ -46,3 +47,24 @@ def test_junit_median_averages_the_middle_pair(tmp_path: Path):
     path = tmp_path / "results.xml"
     path.write_text('<testsuite><testcase time="2"/><testcase time="4"/></testsuite>')
     assert junit_summary(path)["median_case_seconds"] == 3
+
+
+@pytest.mark.parametrize("conclusion", ["skipped", "cancelled", "failure"])
+@pytest.mark.parametrize("missing", ["started_at", "completed_at", "both"])
+def test_completed_jobs_with_unknown_intervals_retain_conclusions_without_false_costs(conclusion, missing):
+    other = job("not measured", conclusion=conclusion)
+    for field in (["started_at", "completed_at"] if missing == "both" else [missing]):
+        other[field] = None
+    report = summarize([job(), other])
+    assert report["timing_complete"] is False
+    assert report["elapsed_seconds"] is None
+    assert report["runner_seconds"] is None
+    assert report["jobs"][0]["seconds"] == 120
+    assert report["jobs"][1]["seconds"] is None
+    assert report["jobs"][1]["conclusion"] == conclusion
+
+
+def test_all_completed_skipped_jobs_without_timestamps_are_reported():
+    report = summarize([job(conclusion="skipped", started_at=None, completed_at=None)])
+    assert report["timing_complete"] is False
+    assert report["jobs"][0]["conclusion"] == "skipped"

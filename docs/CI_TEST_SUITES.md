@@ -176,7 +176,10 @@ python scripts/summarize_ci_timings.py --jobs docs/evidence/ci-376/baseline-jobs
 
 Use all pages of one completed attempt (currently fewer than 100 jobs). For a
 rerun use `/actions/runs/RUN_ID/attempts/ATTEMPT/jobs`; never mix attempts. The
-offline summary retains revision/conclusions and named phase costs. JUnit
+offline summary retains revision/conclusions and named phase costs. Completed
+jobs with unavailable timestamps retain their conclusions and null durations;
+`timing_complete: false` and null aggregate elapsed/runner costs prevent treating
+unknown intervals as measured zeroes. Still-running jobs are rejected. JUnit
 summaries retain aggregate counts/times only, never testcase names, properties,
 failure messages or stdout/stderr. Review evidence before retention. Raw synthetic
 CI JUnit/traces/screenshots have unique artifact names: `browser-ui-1`,
