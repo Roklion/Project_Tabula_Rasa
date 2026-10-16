@@ -109,6 +109,12 @@ including both desktop/mobile widths, along with 354 route inventory and
 authorization checks, the SPA build, repository Ruff and whitespace checks.
 These focused local results do not replace fresh CI for the remediation head.
 
+The follow-up browser probe records private text synchronously on `pageshow`
+and in DOM mutations after the second user signs in, preserving any exposure
+even when the DOM clears before a retrying assertion runs. Controlled transient
+insertion/removal and restored-page events both triggered the probe; all 19
+affected native cases and repository Ruff/whitespace checks passed again.
+
 The first hosted run (`38843378193`) passed Python/PostgreSQL, Windows and all
 160 browser E2E cases, then exhausted the combined browser job's 20-minute
 budget during the native browser suite. The job now has a bounded 30-minute

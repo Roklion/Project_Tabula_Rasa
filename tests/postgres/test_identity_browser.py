@@ -148,6 +148,20 @@ def test_named_transaction_receipt_logout_then_other_user_has_no_residual_data(n
         browser = playwright.chromium.launch()
         try:
             context = browser.new_context(viewport={'width': width, 'height': 1000})
+            # Installed in every document before app code, including Alice's
+            # original receipt document if Back restores it from the BFCache.
+            context.add_init_script("""(() => {
+                const privateText = text => ['Alice private transaction', 'alice-private.pdf']
+                    .some(value => (text || '').includes(value));
+                const record = records => {
+                    if (sessionStorage.getItem('security_probe_active') !== '1') return;
+                    if (privateText(document.body?.textContent) || records.some(change =>
+                        [...change.addedNodes, ...change.removedNodes].some(node => privateText(node.textContent))))
+                        sessionStorage.setItem('security_probe_exposure', '1');
+                };
+                addEventListener('pageshow', () => record([]));
+                new MutationObserver(record).observe(document, {subtree: true, childList: true, characterData: true});
+            })();""")
             route_fake_login(context, origin, claims)
             page = context.new_page()
             page.goto(origin)
@@ -202,6 +216,7 @@ def test_named_transaction_receipt_logout_then_other_user_has_no_residual_data(n
             assert current['actor_id'] != previous['actor_id']
             assert current['cache_scope'] != previous['cache_scope']
             assert current['entity']['id'] == 'beta'
+            page.evaluate("sessionStorage.setItem('security_probe_active', '1')")
             for path in ('transactions', 'transactions/' + record + '/receipts', 'documents/' + document + '/content'):
                 assert context.request.get(origin + '/api/v1/entities/alpha/' + path).status == 403
             page.goto(origin + '/transactions')
@@ -213,6 +228,7 @@ def test_named_transaction_receipt_logout_then_other_user_has_no_residual_data(n
             assert history_steps > 0
             for _ in range(history_steps):
                 page.go_back(wait_until='networkidle')
+                assert page.evaluate("sessionStorage.getItem('security_probe_exposure')") is None
                 expect(page.get_by_text('Alice private transaction', exact=True)).to_have_count(0)
                 expect(page.get_by_text('alice-private.pdf', exact=False)).to_have_count(0)
             expect(page).to_have_url(receipt_url)
