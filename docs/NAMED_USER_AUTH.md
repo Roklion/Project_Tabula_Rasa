@@ -35,6 +35,10 @@ alpha remains a separate explicit fixture mode; it grants no named membership.
 The migrated-runtime factory rejects a named identity resolver unless named-user
 mode is explicit, before allocating a database.
 Use separate provider clients, secrets and databases for each environment.
+Hosted startup requires an explicit access mode even for restricted alpha;
+only loopback development/test keeps the fixture default. The
+[authenticated hosted rollout checklist](AUTHENTICATED_ROLLOUT.md) owns exact
+operator configuration records, promotion smoke and pending #321 evidence.
 Register exactly `<public origin>/api/v1/auth/callback` without wildcard URLs.
 HTTP settings canonicalize scheme/hostname case and omit default ports before
 binding the Host guard, exact browser Origin/CSRF check and OIDC callback.

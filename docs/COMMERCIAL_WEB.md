@@ -183,8 +183,8 @@ publication or terminal-review prerequisite. See [Development](DEVELOPMENT.md#au
 | Environment | Runtime/data | Exposure and release |
 | --- | --- | --- |
 | Local | Vite + loopback Uvicorn + existing Docker PostgreSQL 18 | Synthetic fixture context; developer starts each process. |
-| Hosted development | Own Render image service + scoped Neon environment/roles | Synthetic data; validated `main` deploys; temporary alpha gate until #222. Record selected plan limitations. |
-| Retained staging | Separate Render image service + retained Neon environment/roles | Explicit commit/image promotion; synthetic acceptance data; restricted operator access until #222. This is the real persistent staging target, not local Compose or a per-test DB. |
+| Hosted development | Own Render image service + scoped Neon environment/roles | Synthetic data; validated `main` deploys; explicit restricted alpha or named mode. Record selected plan limitations. |
+| Retained staging | Separate Render image service + retained Neon environment/roles | Explicit commit/image promotion and access mode; synthetic acceptance data; named-provider transition follows #321. This is the real persistent staging target, not local Compose or a per-test DB. |
 | Intended production | Separate Render service + distinct Neon production branch/endpoint and scoped runtime/migration access | Promote the staging-tested image digest only after identity, cutover and operations/recovery gates. Reject trusted alpha context. |
 
 For the current pre-activation stage, the operator has selected Neon Free with
@@ -226,6 +226,7 @@ settings. They do not alter Streamlit settings.
 | Setting | Owner and visibility |
 | --- | --- |
 | `TABULA_RASA_ENVIRONMENT` | Server; `development`, `staging` or `production`. Trusted fixture mode explicitly prohibited in production. |
+| `TABULA_RASA_ACCESS_MODE` | Server and matching deployment environment variable; explicit `restricted_alpha` or `named_user` on hosted services. Only named mode permits owner/external use. |
 | `TABULA_RASA_PUBLIC_ORIGIN` | Server; exact canonical browser origin for Host/Origin/cookie policy; no wildcard. |
 | `TABULA_RASA_RELEASE_ID` | Build/deploy metadata; Git SHA or immutable release ID, safe in `/version` and logs. Image digest/schema head recorded with the release. |
 | `PORT` | Hosting process; Uvicorn binds the assigned container port. Local command explicitly selects 8000. |
@@ -279,17 +280,21 @@ do not substitute SQLite, temporary memory, another provider or production data.
    step stops the release. Application startup never migrates.
 4. Verify version, deep-link/static/API routing, browser -> API -> real
    PostgreSQL synthetic smoke and access restrictions. A post-deploy smoke
-   failure stops further promotion and redeploys the prior compatible digest.
+   failure stops further promotion. Restricted alpha redeploys the prior compatible
+   digest; named mode stops for reviewed operator recovery without automatic rollback.
    Promote the same image only after staging acceptance evidence is recorded.
-5. If application code fails, redeploy the prior schema-compatible digest.
+5. If application code fails, redeploy the prior schema-compatible digest after
+   verifying named-auth/configuration compatibility where applicable.
    Incompatible schema failures stop for the operator; no automatic downgrade,
    restore or accounting-data deletion. Recovery is #259/#223.
 
 The implemented temporary alpha HTTP Basic gate covers shell, data, document and schema
 routes over TLS. Minimal health probes are exempt for the platform; unsafe
 requests still require Origin/CSRF protection. A trusted fixture ID without the
-gate must make hosted startup fail closed. #222 replaces both the gate and
-fixture resolver before external beta/customer data. #279 records the precise
+gate must make hosted startup fail closed. #222's implemented named path replaces
+both the gate and fixture resolver before owner/external use. Follow
+[authenticated rollout](AUTHENTICATED_ROLLOUT.md) for manual configuration,
+pending hosted acceptance and named rollback. #279 records the precise
 proxy boundary: Uvicorn trusts no forwarded headers; configured Host and Origin
 remain authoritative. Spoofed forwarding/Host inputs are covered by tests.
 

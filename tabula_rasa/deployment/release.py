@@ -137,10 +137,19 @@ def wait_live(service, deploy, token, *, read=api, sleep=time.sleep):
 
 
 def promote(image, environ, *, read=api, metadata=image_metadata, verify=validated_main, smoke_check=None):
-    from .smoke import smoke
-    smoke_check = smoke_check or smoke
+    from .smoke import access_mode, named_smoke, smoke
     if environ.get("TABULA_RASA_ENVIRONMENT") not in {"development", "staging"}:
         raise ReleaseError("Only development/staging promotion is supported.")
+    mode = access_mode(environ)
+    if mode == 'named_user':
+        check = smoke_check or named_smoke
+        def check_release(revision):
+            check(environ['TABULA_RASA_PUBLIC_ORIGIN'], revision)
+    else:
+        check = smoke_check or smoke
+        def check_release(revision):
+            check(environ['TABULA_RASA_PUBLIC_ORIGIN'], environ['TABULA_RASA_ALPHA_USERNAME'],
+                  environ['TABULA_RASA_ALPHA_PASSWORD'], revision)
     repository = "ghcr.io/" + environ["GITHUB_REPOSITORY"].lower() + "/commercial"
     candidate = metadata(image, repository)
     verify(candidate["release"], environ)
@@ -173,16 +182,20 @@ def promote(image, environ, *, read=api, metadata=image_metadata, verify=validat
     confirmed = wait_live(service, deployed["id"], token, read=read)
     deployed_image(confirmed, image, candidate, repository)
     try:
-        smoke_check(origin, environ["TABULA_RASA_ALPHA_USERNAME"], environ["TABULA_RASA_ALPHA_PASSWORD"], candidate["release"])
+        check_release(candidate['release'])
     except Exception:
+        if mode == 'named_user':
+            # Matching ledger schema alone cannot prove old auth code/epoch
+            # compatibility. Never restore an alpha-era bypass automatically.
+            raise ReleaseError("Named smoke failed; restrict ingress and inspect. Use the reviewed named-mode rollback checklist.") from None
         if previous_image:
             rollback = read(f"/services/{service}/deploys", token, body={"imageUrl": previous_image})
             restored = wait_live(service, rollback["id"], token, read=read)
             deployed_image(restored, previous_image, previous, repository)
-            smoke_check(origin, environ["TABULA_RASA_ALPHA_USERNAME"], environ["TABULA_RASA_ALPHA_PASSWORD"], previous["release"])
+            check_release(previous['release'])
             raise ReleaseError("Smoke failed; prior compatible image restored and smoke verified.") from None
         raise ReleaseError("Initial smoke failed; no prior image exists. Restrict access and inspect.") from None
-    return {"image": image, **candidate, "status": "smoke_passed"}
+    return {"image": image, **candidate, "access_mode": mode, "status": "smoke_passed"}
 
 
 def main():
@@ -192,6 +205,8 @@ def main():
     args = parser.parse_args()
     try:
         environ = dict(os.environ)
+        from .smoke import access_mode
+        access_mode(environ, require_alpha_credentials=False)
         if args.command == "verify":
             metadata = image_metadata(args.image, "ghcr.io/" + environ["GITHUB_REPOSITORY"].lower() + "/commercial")
             validated_main(metadata["release"], environ)

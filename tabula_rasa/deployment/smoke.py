@@ -1,4 +1,63 @@
-"""Real browser -> gated API -> persistent synthetic PostgreSQL smoke; no writes."""
+"""Mode-specific deployment probes; named login acceptance is a separate rehearsal."""
+
+
+def access_mode(environ, *, require_alpha_credentials=True):
+    mode = environ.get('TABULA_RASA_ACCESS_MODE')
+    if mode not in {'restricted_alpha', 'named_user'}:
+        raise ValueError('Deployment requires an explicit supported access mode.')
+    if mode == 'named_user':
+        if any(environ.get('TABULA_RASA_' + key) for key in (
+                'TRUSTED_ENTITY_ID', 'ALPHA_USERNAME', 'ALPHA_PASSWORD', 'ALPHA_PASSWORD_HASH')):
+            raise ValueError('Named deployment rejects synthetic scope and alpha credentials.')
+    elif require_alpha_credentials and (not environ.get('TABULA_RASA_ALPHA_USERNAME')
+                                        or not environ.get('TABULA_RASA_ALPHA_PASSWORD')):
+        raise ValueError('Restricted-alpha smoke requires its independent credentials.')
+    return mode
+
+
+def named_probe(context, release):
+    """Anonymous HTTP boundary, including forged legacy credentials/selectors."""
+    if context.request.get('/health/ready').status != 200:
+        raise ValueError('Readiness failed.')
+    if context.request.get('/version').json() != {'release': release}:
+        raise ValueError('Release identity mismatch.')
+    for headers in ({}, {'Authorization': 'Basic c3ludGhldGljOnN5bnRoZXRpYw=='},
+                    {'Cookie': 'tabula_entity=alpha-synthetic; tabula_dev_session=synthetic',
+                     'X-Forwarded-For': '127.0.0.1'}):
+        for path in ('/api/v1/session', '/api/openapi.json',
+                     '/api/v1/entities/alpha-synthetic/accounts',
+                     '/api/v1/entities/alpha-synthetic/transactions',
+                     '/api/v1/entities/alpha-synthetic/documents',
+                     '/api/v1/entities/alpha-synthetic/exports/transactions.csv'):
+            response = context.request.get(path, headers=headers)
+            if (response.status != 401 or response.headers.get('www-authenticate', '').lower().startswith('basic')
+                    or response.headers.get('cache-control') != 'no-store'):
+                raise ValueError('Named deployment access restriction failed.')
+    for path in ('/api/v1/unknown', '/assets/missing.js'):
+        if context.request.get(path, headers={'Accept': 'text/html'}).status != 404:
+            raise ValueError('Routing failure.')
+
+
+def named_smoke(origin, release):
+    """No provider credentials, login transactions, session storage or private reads.
+
+    Readiness checks PostgreSQL. This verifies the public sign-in shell and
+    denied private API boundary, not successful provider login/membership.
+    """
+    from playwright.sync_api import expect, sync_playwright
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            with browser.new_context(base_url=origin) as context:
+                named_probe(context, release)
+                page = context.new_page()
+                page.goto('/accounts')
+                expect(page.get_by_role('link', name='Sign in', exact=True)).to_have_attribute(
+                    'href', '/api/v1/auth/login')
+                expect(page.get_by_role('button', name='Sign out', exact=True)).to_have_count(0)
+        finally:
+            browser.close()
 
 
 def smoke(origin, username, password, release):
@@ -47,7 +106,10 @@ if __name__ == "__main__":
         origin = os.environ["TABULA_RASA_PUBLIC_ORIGIN"]
         if not origin.startswith("https://"):
             raise ValueError
-        smoke(origin, os.environ["TABULA_RASA_ALPHA_USERNAME"], os.environ["TABULA_RASA_ALPHA_PASSWORD"], args.release)
+        if access_mode(os.environ) == 'named_user':
+            named_smoke(origin, args.release)
+        else:
+            smoke(origin, os.environ["TABULA_RASA_ALPHA_USERNAME"], os.environ["TABULA_RASA_ALPHA_PASSWORD"], args.release)
     except Exception:
-        raise SystemExit("Deployment browser smoke failed; inspect routing, access, release and synthetic fixture.") from None
+        raise SystemExit("Deployment browser smoke failed; inspect routing, access, release and selected mode.") from None
     print("Deployment browser smoke passed.")

@@ -75,12 +75,18 @@ class HttpSettings:
 
     @classmethod
     def from_environment(cls):
+        origin = os.environ.get("TABULA_RASA_PUBLIC_ORIGIN", "")
+        mode = os.environ.get("TABULA_RASA_ACCESS_MODE", "")
+        if not mode:
+            if urlsplit(origin).hostname not in {"127.0.0.1", "localhost", "::1", "testserver"}:
+                raise ValueError("Hosted HTTP requires an explicit access mode.")
+            mode = "restricted_alpha"
         return cls(
             os.environ.get("TABULA_RASA_ENVIRONMENT", ""),
-            os.environ.get("TABULA_RASA_PUBLIC_ORIGIN", ""),
+            origin,
             os.environ.get("TABULA_RASA_RELEASE_ID", "development"),
             os.environ.get("TABULA_RASA_TRUSTED_ENTITY_ID") or None,
             os.environ.get("TABULA_RASA_ALPHA_USERNAME", ""),
             os.environ.get("TABULA_RASA_ALPHA_PASSWORD_HASH", ""),
-            os.environ.get("TABULA_RASA_ACCESS_MODE", "restricted_alpha"),
+            mode,
         )
