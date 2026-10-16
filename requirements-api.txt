@@ -1,5 +1,7 @@
 # Commercial runtime dependencies; install with requirements-postgres.txt.
 fastapi==0.142.4
+# Keep the supported HTTPX TestClient transport used by the security gate.
+starlette==1.7.0
 pydantic==2.13.5
 uvicorn==0.54.0
 pandas==2.3.3

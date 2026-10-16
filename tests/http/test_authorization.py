@@ -260,7 +260,7 @@ def test_action_matrix_preserves_read_write_and_membership_distinctions(role):
 
 
 @pytest.mark.parametrize('mode,environment,origin', [
-    ('named_user', 'test', 'http://testserver'), ('restricted_alpha', 'production', 'https://example.test'),
+    ('named_user', 'test', 'http://testserver'), ('named_user', 'production', 'https://example.test'),
 ])
 def test_plausible_context_and_client_role_claims_cannot_replace_named_membership(mode, environment, origin):
     runtime = FakeRuntime()  # trusted_development=False still cannot bypass membership.

@@ -52,8 +52,14 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
         title="Tabula Rasa commercial API", version="1.0.0",
         lifespan=None if schema_only else lifespan,
         docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json",
+        swagger_ui_oauth2_redirect_url=None,
         dependencies=[Depends(authorize_request)],
     )
+    # Capture only FastAPI's generated endpoints before registering app routes.
+    app.state.framework_documentation_endpoints = {
+        route.path: route.endpoint for route in app.routes
+        if route.path in {app.docs_url, app.openapi_url}
+    }
     app.add_exception_handler(TransportError, handle_error)
     app.add_exception_handler(StorageError, handle_error)
     app.add_exception_handler(MileageValidationError, handle_error)
@@ -159,7 +165,7 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
     app.include_router(secondary.router)
     assets = Path(static_dir) if static_dir is not None else Path(__file__).resolve().parents[2] / "web" / "dist"
     if not schema_only and assets.is_dir():
-        @app.api_route('/assets', methods=['GET', 'HEAD'], include_in_schema=False)
+        @app.api_route('/assets', methods=['GET', 'HEAD'], include_in_schema=False, operation_id='asset_register')
         def asset_register(request: Request):
             if 'text/html' not in request.headers.get('accept', ''):
                 raise HTTPException(404)
@@ -167,7 +173,7 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
 
         app.mount("/assets", HashedAssets(directory=assets / "assets", asset_page_index=assets / 'index.html'), name="assets")
 
-        @app.api_route("/{path:path}", methods=["GET", "HEAD"], include_in_schema=False)
+        @app.api_route("/{path:path}", methods=["GET", "HEAD"], include_in_schema=False, operation_id='browser_shell')
         def browser(request: Request, path: str):
             if (path.split("/", 1)[0] in {"api", "health", "version", "assets"}
                     or "." in path or "text/html" not in request.headers.get("accept", "")):

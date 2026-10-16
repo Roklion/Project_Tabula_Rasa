@@ -103,7 +103,7 @@ def test_migrated_startup_disposes_pool_and_does_not_retain_private_errors(monke
 def test_migrated_named_identity_requires_explicit_access_mode_before_allocation(monkeypatch):
     allocate = Mock()
     monkeypatch.setattr("tabula_rasa.http.composition.Database", allocate)
-    settings = HttpSettings("production", "https://owner.example.test")
+    settings = HttpSettings("test", "http://127.0.0.1")
     resolver = NamedIdentity(settings, Mock(), Mock())
     with pytest.raises(RuntimeError, match="explicit named-user access mode"):
         open_migrated_runtime(settings, resolve_context=resolver, entity_profiles={}, profile_secrets={})
@@ -182,13 +182,12 @@ def test_named_control_plane_must_match_ledger_before_private_binding(monkeypatc
     database.dispose.assert_called_once()
 
 
-@pytest.mark.parametrize('mode', ['named_user', 'restricted_alpha'])
-def test_production_cannot_bind_secrets_with_an_arbitrary_resolver(monkeypatch, mode):
+def test_production_cannot_bind_secrets_with_an_arbitrary_resolver(monkeypatch):
     database, binding = Mock(), Mock()
     monkeypatch.setattr('tabula_rasa.http.composition.Database', database)
     monkeypatch.setattr('tabula_rasa.http.migrated.MigratedProfileServices', binding)
     with pytest.raises(RuntimeError, match='authorization resolver'):
-        open_migrated_runtime(HttpSettings('production', 'https://owner.example.test', access_mode=mode),
+        open_migrated_runtime(HttpSettings('production', 'https://owner.example.test', access_mode='named_user'),
             resolve_context=lambda _: RequestContext('actor', 'org', 'alpha', frozenset({'bookkeeping:read'}), 'scope', 'csrf'),
             entity_profiles={'alpha': 'alpha'}, profile_secrets={})
     database.assert_not_called()

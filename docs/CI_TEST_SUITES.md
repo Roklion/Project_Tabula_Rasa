@@ -133,8 +133,25 @@ Main's 30-minute headroom applied to the old combined browser job; the split
 UI/native partitions retain dedicated 20-minute budgets. Final integration
 validation and current-candidate hosted results are recorded in the PR.
 
-Hosted after measurements and current-candidate required CI remain pending
-publication. Do not mark #376's hosted acceptance complete from local evidence.
+The first partitioned hosted attempt [38932587506](https://github.com/Roklion/Project_Tabula_Rasa/actions/runs/38932587506)
+passed all six components and `Full test suite` on head `ce6d515`, checkout
+candidate `c8b7d4b` against base `ae9d9c5`. Checkout logs confirm that exact
+candidate. Earliest runner start to aggregate completion was 677 seconds;
+occupied runner intervals summed to 2,160 seconds. Component job durations were
+111 s frontend, 563 s native, 108 s Windows, 346/358 s UI shards and 671 s Python,
+plus 3 s aggregate. UI test steps took 267/288 s; native tests took 462 s.
+The UI shards completed within their budgets; Python was the longest component.
+This is one successful after sample on different inputs from the cancelled
+baseline, with more native/onboarding coverage, not an equivalent-revision
+speedup, billed-cost or reliability comparison. The baseline occupied 1,907 s;
+extra parallel setup can increase total runner time even while reducing the
+serial bottleneck.
+
+The later review head also integrates main `3d1d628` (PR #374 security acceptance).
+The prior green result and timings remain associated with `ce6d515`; fresh
+current-candidate CI is required after this integration and timing-report fix.
+Equivalent-input hosted comparison and repeated reliability measurements remain
+pending. Do not mark #376's hosted acceptance complete from local evidence.
 Compare equivalent source/test inputs on the same hosted OS/runner class and
 attempt, retaining the baseline workflow externally as needed. Disclose the ten
 restored native cases. Include failures/cancellations and collect several runs
