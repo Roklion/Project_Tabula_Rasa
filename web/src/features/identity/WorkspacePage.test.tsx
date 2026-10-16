@@ -33,6 +33,21 @@ it('allows an authenticated decline without retaining the credential', async () 
   expect(screen.getByLabelText('Invitation credential')).toHaveValue('');
 });
 
+it('clears a previous decline notice before another invitation response', async () => {
+  vi.spyOn(api, 'respondInvitation').mockResolvedValueOnce({ state: 'declined' })
+    .mockRejectedValueOnce(new ApiError('invitation_invalid'));
+  render(<InvitationAcceptance session={session} />);
+  fireEvent.change(screen.getByLabelText('Invitation credential'), { target: { value: 'first-credential' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Decline invitation' }));
+  expect(await screen.findByText('Invitation declined.')).toBeVisible();
+  fireEvent.change(screen.getByLabelText('Invitation credential'), { target: { value: 'next-credential' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Accept invitation' }));
+  expect(screen.queryByText('Invitation declined.')).not.toBeInTheDocument();
+  expect(await screen.findByRole('alert')).toBeVisible();
+  expect(screen.queryByText('Invitation declined.')).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Invitation credential')).toHaveValue('');
+});
+
 it('read-only workspace UI offers invitation acceptance without fetching administration', () => {
   const members = vi.spyOn(api, 'members');
   const invitations = vi.spyOn(api, 'invitations');

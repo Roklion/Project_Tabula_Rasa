@@ -10,7 +10,7 @@ export function InvitationAcceptance({ session }: { session: SessionState }) {
   const [declined, setDeclined] = useState(false);
   async function respond(accept: boolean) {
     const submitted = credential;
-    setCredential(''); setPending(true); setError(undefined);
+    setCredential(''); setPending(true); setError(undefined); setDeclined(false);
     try {
       await api.respondInvitation(session, submitted, accept);
       if (accept) window.location.replace('/');
