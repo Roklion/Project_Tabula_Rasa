@@ -115,6 +115,11 @@ even when the DOM clears before a retrying assertion runs. Controlled transient
 insertion/removal and restored-page events both triggered the probe; all 19
 affected native cases and repository Ruff/whitespace checks passed again.
 
+The route audit's documentation exemption accepts only concrete Starlette HTTP
+routes at the framework documentation/OpenAPI paths. Mounted applications at
+either path are rejected, including child routes that would otherwise evade
+the exact-path documentation authentication middleware.
+
 The first hosted run (`38843378193`) passed Python/PostgreSQL, Windows and all
 160 browser E2E cases, then exhausted the combined browser job's 20-minute
 budget during the native browser suite. The job now has a bounded 30-minute

@@ -138,12 +138,12 @@ def validate_routes(app):
     """Catch missing actions, guards, duplicate IDs and mismatched scopes at build."""
     seen = set()
     for route in iter_route_contexts(app.routes):
-        from starlette.routing import Mount
+        from starlette.routing import Mount, Route
         from .static import HashedAssets
         original = route.original_route
         if isinstance(original, Mount) and route.path == '/assets' and isinstance(original.app, HashedAssets):
             continue  # Hashed build assets only; arbitrary mounted apps fail closed.
-        if route.path in {'/api/docs', '/api/openapi.json'} and not isinstance(route.original_route, APIRoute):
+        if route.path in {'/api/docs', '/api/openapi.json'} and type(original) is Route:
             continue  # Existing middleware protects framework documentation.
         if not isinstance(route.original_route, APIRoute):
             raise RuntimeError('Private API routes must use the shared FastAPI authorization guard.')

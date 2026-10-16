@@ -42,9 +42,10 @@ def test_unregistered_route_denies_even_outside_api_prefix(path, method, tmp_pat
     runtime.services.assert_not_called()
 
 
-def test_private_subapplication_and_missing_central_dependency_fail_audit():
+@pytest.mark.parametrize('path', ['/internal', '/api/docs', '/api/openapi.json'])
+def test_private_subapplication_and_missing_central_dependency_fail_audit(path):
     app = create_app(schema_only=True)
-    app.mount('/internal', FastAPI())
+    app.mount(path, FastAPI())
     with pytest.raises(RuntimeError, match='authorization guard'):
         validate_routes(app)
     app = FastAPI()
