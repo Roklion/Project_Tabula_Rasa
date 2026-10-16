@@ -110,6 +110,8 @@ and commercial-foundation workflows. Its stable merge-gate check name is
   discovered by `pytest.ini`, and supplies disposable PostgreSQL 18.6 through
   `TABULA_RASA_TEST_DATABASE_URL`. Missing/inaccessible PostgreSQL must not be
   used to make this gate green. There are no marker filters or deselections.
+  It also builds the client-only NAS backup image and runs its isolated synthetic
+  TLS/encryption/restore drill; see [NAS backup operations](NAS_POSTGRESQL_BACKUP.md#developer-validation).
 - **Windows environment setup** runs the Windows-only
   `tests/tooling/test_codex_environment_setup.py` on Windows with PowerShell and
   Python 3.12. Those tests' existing platform skips on Linux are covered here,

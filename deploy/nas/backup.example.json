@@ -1,0 +1,10 @@
+{
+  "environment": "production",
+  "source_sha256": "REPLACE_WITH_SHA256_OF_LOWERCASE_HOST_COLON_PORT_SLASH_DATABASE",
+  "storage": "/backup",
+  "storage_marker": "REPLACE_WITH_32_HEX_CHAR_STORAGE_ID",
+  "service_file": "/secrets/pg_service.conf",
+  "passfile": "/secrets/pgpass",
+  "recipients_file": "/secrets/recipients.txt",
+  "minimum_free_bytes": 1073741824
+}

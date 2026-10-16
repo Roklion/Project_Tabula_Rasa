@@ -26,8 +26,10 @@ final commercial cutover. The [#299 owner-operated procedure](BOOKKEEPING_CUTOVE
 supports lasting use of the shared production application under explicit current
 recovery limitations without requiring those commercial sign-offs or a provider
 purchase. [#294](https://github.com/Roklion/Project_Tabula_Rasa/issues/294) owns NAS
-backup automation and isolated restore verification. Its planned protection
-cannot be claimed before it works; if the owner requires it before live writes,
+backup automation and isolated restore verification. The standalone
+[NAS backup tooling and operator runbook](NAS_POSTGRESQL_BACKUP.md) are implemented;
+actual device enablement and retained-archive drill evidence remain required.
+NAS protection cannot be claimed before it works; if the owner requires it before live writes,
 complete it before that deployment. #299's technical closure is independent.
 Database metadata/dumps do not establish receipt-byte or full-service recovery;
 #223 retains that responsibility. Commercial evidence gates remain intact.
