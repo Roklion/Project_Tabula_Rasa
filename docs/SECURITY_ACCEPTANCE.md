@@ -119,6 +119,9 @@ The route audit's documentation exemption accepts only concrete Starlette HTTP
 routes at the framework documentation/OpenAPI paths. Mounted applications at
 either path are rejected, including child routes that would otherwise evade
 the exact-path documentation authentication middleware.
+The factory captures the generated endpoint identities before registering
+application routes; only those endpoints with GET/HEAD methods qualify.
+Arbitrary added handlers and replaced endpoint identities are rejected.
 
 The first hosted run (`38843378193`) passed Python/PostgreSQL, Windows and all
 160 browser E2E cases, then exhausted the combined browser job's 20-minute
@@ -127,9 +130,17 @@ budget for setup, E2E, image inspection and native browser acceptance. Every
 existing case and the required aggregate gate remain enabled; the updated head
 requires a fresh passing run.
 
+Integration evidence, 2026-10-16: merged `origin/main` at `ae9d9c5`, including
+**#317 / PR #372** guided onboarding. The shared signed-OIDC login fixture now
+serves both onboarding and security journeys. All 594 affected HTTP/native
+identity, session, workspace, migration, recovery and export tests passed,
+along with all 10 compiled identity/workspace browser cases, 103 frontend tests,
+the SPA build, repository Ruff and whitespace checks. This covers combined
+first-ledger, invitation, failure/resume and prior-user receipt/history paths;
+fresh current-head CI remains required, and hosted acceptance stays downstream.
+
 | Unresolved acceptance | Exact downstream owner / required evidence |
 | --- | --- |
-| Guided first-ledger onboarding absent from this base | **#317 / PR #372** (`codex/issue-317-onboarding`, inspected at `4e290bb`): after integration run its onboarding success/failure/retry/resume tests plus this matrix on the combined head. Preserve its migration/return-route and scoped resume contract. This branch does not copy its UI/migrations or declare it merged. |
 | Actual ZITADEL MFA, recovery mail/factors, outage, hosted login/logout/switch/revoke and named-mode rollback | **#321**, using [the operator-authorized provider setup](COMMERCIAL_IDENTITY.md). Live credentials/accounts are not required or authorized by these tests. |
 | Actor/action security events, retention/sink/alerts and hosted correlation | **#332** under **#223**: extend the safe hooks, then verify delivered telemetry with synthetic denied/revoked requests. Local request/event redaction is covered; operational completeness remains open. |
 | Managed document grant/byte durability and restore evidence | **#337/#338** under **#223**: verify the selected adapter, qualified grants, byte recovery and restoration. Fake-byte success is not this evidence. |

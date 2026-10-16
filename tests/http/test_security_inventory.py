@@ -55,6 +55,24 @@ def test_private_subapplication_and_missing_central_dependency_fail_audit(path):
         validate_routes(app)
 
 
+@pytest.mark.parametrize('path', ['/api/docs', '/api/openapi.json'])
+@pytest.mark.parametrize('method', ['GET', 'POST'])
+def test_arbitrary_http_handler_at_framework_docs_path_fails_audit(path, method):
+    app = create_app(schema_only=True)
+    app.add_route(path, lambda request: {}, methods=[method])
+    with pytest.raises(RuntimeError, match='authorization guard'):
+        validate_routes(app)
+
+
+@pytest.mark.parametrize('path', ['/api/docs', '/api/openapi.json'])
+def test_replaced_framework_docs_endpoint_fails_audit(path):
+    app = create_app(schema_only=True)
+    route = next(route for route in app.routes if route.path == path)
+    route.endpoint = lambda request: {}
+    with pytest.raises(RuntimeError, match='authorization guard'):
+        validate_routes(app)
+
+
 @pytest.mark.parametrize('mode', [None, 'restricted_alpha', 'typo'])
 def test_production_environment_requires_explicit_named_mode(monkeypatch, mode):
     monkeypatch.setenv('TABULA_RASA_ENVIRONMENT', 'production')

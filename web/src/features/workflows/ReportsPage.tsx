@@ -32,6 +32,12 @@ export function ReportsPage({ dashboard = false }: { dashboard?: boolean }) {
   const balanced = difference != null && /^-?0(?:\.0+)?$/.test(difference);
   return <><PageHeader title={dashboard ? 'Dashboard' : 'Reports'} description={<>Bookkeeping summary for {session.entity.name}.</>}
     actions={dashboard && <><Link to="/transactions" className="button">View ledger</Link><Link to="/accounts" className="button action-secondary">Set up accounts</Link></>} />
+    {dashboard && !session.trusted_development && <section aria-label="Ledger next actions"><h2>Your ledger is ready</h2>
+      <p>Review your accounts and opening balances, then open your ledger. An empty ledger is ready to use.</p>
+      <div className="actions"><Link className="button" to="/accounts">Review accounts</Link>
+        {session.capabilities.includes('bookkeeping:write') && <Link className="button" to="/transactions/new">Add a transaction</Link>}
+        <Link className="button" to="/transactions">Open ledger</Link><Link className="button" to="/workspace">Workspace &amp; collaborators</Link></div>
+    </section>}
     <section className="surface periodControls" aria-label="Report period"><SectionHeader title="Report period"
       description="From and To include both dates. The balance sheet uses To as its as-of date; current account balances always cover all dates." />
       <div className="formGrid"><DateRangeFields prefix="report" start={filters.start} end={filters.end} endLabel="To / balance sheet as of"

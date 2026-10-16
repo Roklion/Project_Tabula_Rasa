@@ -143,7 +143,9 @@ def validate_routes(app):
         original = route.original_route
         if isinstance(original, Mount) and route.path == '/assets' and isinstance(original.app, HashedAssets):
             continue  # Hashed build assets only; arbitrary mounted apps fail closed.
-        if route.path in {'/api/docs', '/api/openapi.json'} and type(original) is Route:
+        framework_endpoint = getattr(app.state, 'framework_documentation_endpoints', {}).get(route.path)
+        if (type(original) is Route and framework_endpoint is not None
+                and original.endpoint is framework_endpoint and original.methods == {'GET', 'HEAD'}):
             continue  # Existing middleware protects framework documentation.
         if not isinstance(route.original_route, APIRoute):
             raise RuntimeError('Private API routes must use the shared FastAPI authorization guard.')

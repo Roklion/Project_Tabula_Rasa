@@ -66,16 +66,18 @@ def named_server(database, oidc):
         assert not thread.is_alive()
 
 
-def route_fake_login(context, origin, claims):
-    """Adapt only the external OIDC hop; real API/cookies/sessions stay in use."""
+def configure_login(context, origin, claims):
+    """Use signed fake OIDC, adapting only Playwright's external redirect hop."""
     def authorize(route):
         query = parse_qs(urlsplit(route.request.url).query)
         assert query['code_challenge_method'] == ['S256']
         claims['nonce'] = query['nonce'][0]
         route.fulfill(status=302, headers={'location': origin + '/api/v1/auth/callback?' + urlencode(
             {'state': query['state'][0], 'code': 'synthetic-code'})})
-
     def login_redirect(route):
+        # Playwright routing cannot fake the later external hop of a
+        # redirect chain. Split only that test hop into a new navigation;
+        # assert the real server's 303/cookie response before adapting.
         response = route.fetch(max_redirects=0)
         assert response.status == 303
         target = response.headers['location']
@@ -84,9 +86,8 @@ def route_fake_login(context, origin, claims):
                    if key not in {'location', 'content-length', 'content-type'}}
         route.fulfill(status=200, headers=headers, content_type='text/html',
             body='<script>location.replace(' + json.dumps(target) + ')</script>')
-
     context.route('https://id.example.test/authorize**', authorize)
-    context.route('**/api/v1/auth/login', login_redirect)
+    context.route('**/api/v1/auth/login**', login_redirect)
 
 
 @pytest.mark.parametrize('width', [1440, 390])
@@ -98,7 +99,7 @@ def test_named_sign_in_revocation_two_users_and_cross_tab_logout(named_server, w
             alice_browser = browser.new_context(viewport={'width': width, 'height': 1000})
             bob_browser = browser.new_context(viewport={'width': width, 'height': 1000})
             for context in (alice_browser, bob_browser):
-                route_fake_login(context, origin, claims)
+                configure_login(context, origin, claims)
             first, second = alice_browser.new_page(), bob_browser.new_page()
             first.goto(origin)
             expect(first.get_by_role('link', name='Sign in', exact=True)).to_be_visible()
@@ -162,7 +163,7 @@ def test_named_transaction_receipt_logout_then_other_user_has_no_residual_data(n
                 addEventListener('pageshow', () => record([]));
                 new MutationObserver(record).observe(document, {subtree: true, childList: true, characterData: true});
             })();""")
-            route_fake_login(context, origin, claims)
+            configure_login(context, origin, claims)
             page = context.new_page()
             page.goto(origin)
             page.get_by_role('link', name='Sign in', exact=True).click()
