@@ -100,6 +100,13 @@ is claimed. The HTTP test transport emits a deprecation notice for HTTPX; it
 passes with the declared dependencies. Future transport migration can be handled
 separately from tenant authorization.
 
+The first hosted run (`38843378193`) passed Python/PostgreSQL, Windows and all
+160 browser E2E cases, then exhausted the combined browser job's 20-minute
+budget during the native browser suite. The job now has a bounded 30-minute
+budget for setup, E2E, image inspection and native browser acceptance. Every
+existing case and the required aggregate gate remain enabled; the updated head
+requires a fresh passing run.
+
 | Unresolved acceptance | Exact downstream owner / required evidence |
 | --- | --- |
 | Guided first-ledger onboarding absent from this base | **#317 / PR #372** (`codex/issue-317-onboarding`, inspected at `4e290bb`): after integration run its onboarding success/failure/retry/resume tests plus this matrix on the combined head. Preserve its migration/return-route and scoped resume contract. This branch does not copy its UI/migrations or declare it merged. |
