@@ -75,7 +75,7 @@ def test_browser_recurring_and_mixed_source_lifecycle(database, commercial, comm
             expect(page.get_by_role('status').filter(has_text='Record created.')).to_be_visible()
             page.get_by_role('button', name='Back to records', exact=True).click()
             before = snapshot(database)
-            page.get_by_role('link', name='View Browser subscription', exact=True).click()
+            page.get_by_role('link', name='Manage Browser subscription', exact=True).click()
             expect(page.get_by_role('cell', name='initial', exact=True)).to_be_visible()
             assert snapshot(database) == before
             page.get_by_role('button', name='Pause schedule', exact=True).click()
@@ -83,7 +83,7 @@ def test_browser_recurring_and_mixed_source_lifecycle(database, commercial, comm
             expect(page.get_by_role('status').filter(has_text='Schedule pause completed.')).to_be_visible()
             assert alpha.recurring.get(schedule_id)['status'] == 'paused'
             page.get_by_role('button', name='Back to records', exact=True).click()
-            page.get_by_role('link', name='View Browser subscription', exact=True).click()
+            page.get_by_role('link', name='Manage Browser subscription', exact=True).click()
             page.get_by_role('button', name='Resume schedule', exact=True).click()
             page.get_by_role('button', name='Confirm resume schedule', exact=True).click()
             expect(page.get_by_role('status').filter(has_text='Schedule resume completed.')).to_be_visible()
@@ -109,7 +109,7 @@ def test_browser_recurring_and_mixed_source_lifecycle(database, commercial, comm
             source_id = created_source.value.json()['id']
             expect(page.get_by_role('status').filter(has_text='Record created.')).to_be_visible()
             page.get_by_role('button', name='Back to records', exact=True).click()
-            page.get_by_role('link', name='View ' + created_source.value.json()['txn_date'] + ' · Browser allocation', exact=True).click()
+            page.get_by_role('link', name='Manage ' + created_source.value.json()['txn_date'] + ' · Browser allocation', exact=True).click()
             page.get_by_label('Total expense', exact=True).fill('200.00')
             page.get_by_role('button', name='Save changes', exact=True).click()
             expect(page.get_by_role('status').filter(has_text='Changes saved.')).to_be_visible()
@@ -122,7 +122,7 @@ def test_browser_recurring_and_mixed_source_lifecycle(database, commercial, comm
             expect(projection.get_by_role('button')).to_have_count(0)
             expect(projection.get_by_role('link')).to_have_count(1)
             projection.get_by_role('link', name='Manage mixed-use expense', exact=True).click()
-            page.get_by_role('link', name='View ' + created_source.value.json()['txn_date'] + ' · Browser allocation', exact=True).click()
+            page.get_by_role('link', name='Manage ' + created_source.value.json()['txn_date'] + ' · Browser allocation', exact=True).click()
             page.get_by_role('button', name='Delete', exact=True).click()
             page.get_by_role('button', name='Confirm delete', exact=True).click()
             expect(page.get_by_role('heading', name='No records to edit', exact=True)).to_be_visible()
@@ -264,7 +264,7 @@ def test_browser_asset_posting_confirmation_saved_history_and_repeat_prevention(
             asset_id = created.value.json()['id']
             expect(page.get_by_role('status').filter(has_text='Record created.')).to_be_visible()
             page.get_by_role('button', name='Back to records', exact=True).click()
-            page.get_by_role('link', name='View Browser equipment', exact=True).click()
+            page.get_by_role('link', name='Manage Browser equipment', exact=True).click()
             expect(page.get_by_role('cell', name='Pending', exact=True)).to_have_count(4)
             page.get_by_label('Post depreciation through', exact=True).fill('2026-06-30')
             before = snapshot(database)
@@ -281,7 +281,7 @@ def test_browser_asset_posting_confirmation_saved_history_and_repeat_prevention(
             capture(page, f'assets-{width}-{engine}')
             assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
             page.get_by_role('button', name='Back to records', exact=True).click()
-            page.get_by_role('link', name='View Browser equipment', exact=True).click()
+            page.get_by_role('link', name='Manage Browser equipment', exact=True).click()
             expect(page.get_by_label('Cost basis', exact=True)).to_be_disabled()
             expect(page.get_by_label('Accumulated depreciation account', exact=True)).to_be_disabled()
             expect(page.get_by_role('button', name='Delete', exact=True)).to_have_count(0)
@@ -293,7 +293,7 @@ def test_browser_asset_posting_confirmation_saved_history_and_repeat_prevention(
             page.goto(commercial_server + '/transactions')
             expect(page.get_by_role('link', name='Manage in Assets', exact=True)).to_have_count(2)
             page.get_by_role('link', name='Manage in Assets', exact=True).first.click()
-            expect(page.get_by_role('link', name='View Browser equipment', exact=True)).to_be_visible()
+            expect(page.get_by_role('link', name='Manage Browser equipment', exact=True)).to_be_visible()
         finally:
             browser.close()
 

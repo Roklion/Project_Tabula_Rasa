@@ -1,54 +1,50 @@
 import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { execFileSync } from 'node:child_process';
-import { readdir, writeFile } from 'node:fs/promises';
+import { captureEvidence, retainEvidence } from './visual-evidence';
 
-const session = {
-  actor_id: 'synthetic', organization_id: 'synthetic', entity: { id: 'alpha', name: 'Alpha demonstration' },
-  capabilities: ['bookkeeping:read', 'bookkeeping:write'], cache_scope: 'core-alpha', csrf_token: 'synthetic', trusted_development: true,
-};
-const longName = 'Operating account with a deliberately long synthetic label for field and table wrapping';
-const account = { id: 'account', name: longName, type: 'Bank', classification: 'Asset', opening_balance: '0.00', parent_id: null, active: true, baseline: 'synthetic' };
-const report = {
-  profit_loss: { income: '1250.00', expenses: '1400.25', net: '-150.25' },
-  balance_sheet: { assets: [{ id: 'account', name: longName, direct_balance: '999999999999.99', rollup_balance: '999999999999.99' }],
-    liabilities: [], equity: [], current_earnings: '-150.25', total_assets: '999999999999.99', total_liabilities: '0.00', total_equity: '999999999999.99', difference: '0.00' },
-  account_balances: [{ id: 'account', name: longName, classification: 'Asset', active: true, balance: '999999999999.99' }],
-};
-const ordinary = { id: 'ordinary', record_id: 'ordinary', entry_type: 'transaction', txn_date: '2026-10-07', kind: 'Expense', account: longName,
-  to_account: '', category: 'Office', payee: 'Synthetic supplier', amount: '19.25', tags: ['Long synthetic tag for responsive selection'],
-  description: 'Synthetic ordinary entry', reference: 'demo-reference', receipt_count: 1, source_type: '', postings: [] };
-const journal = { ...ordinary, id: 'journal:entry', record_id: 'entry', entry_type: 'journal', txn_date: '2026-10-06', kind: 'Journal',
-  account: 'Multiple accounts / 2 postings', amount: '40.00', category: '', payee: '', tags: [], description: 'Complete synthetic journal', receipt_count: 0,
-  postings: [{ target: longName, side: 'Debit', amount: '40.00', payee: '', description: 'Needle posting' },
-    { target: 'Equity', side: 'Credit', amount: '40.00', payee: '', description: 'Sibling retained' }] };
-const owned = { ...ordinary, id: 'mixed', record_id: 'mixed', source_type: 'mixed_use_expense', description: 'Source-owned synthetic expense', amount: '0.00' };
+import { session, longName, report, coreResponse } from './core-fixture';
 
 test.beforeEach(async ({ page }) => {
-  await page.route('**/api/v1/**', route => {
-    const url = new URL(route.request().url());
-    const path = url.pathname;
-    const items = [ordinary, journal, owned].filter(row =>
-      (!url.searchParams.get('start') || row.txn_date >= url.searchParams.get('start')!)
-      && (!url.searchParams.get('end') || row.txn_date <= url.searchParams.get('end')!)
-      && (!url.searchParams.get('kind') || url.searchParams.get('kind') === 'All' || row.kind === url.searchParams.get('kind'))
-      && (!url.searchParams.has('tag_ids') || row.tags.some(tag => tag === ordinary.tags[0])));
-
-    const json = path.endsWith('/session') ? session : path === '/api/v1/entities' ? { items: [session.entity] }
-      : path.endsWith('/reports/summary') ? report : path.endsWith('/ledger') ? { items }
-        : { items: path.endsWith('/accounts') ? [account] : path.endsWith('/tags') ? [{ id: 'tag', name: ordinary.tags[0], active: true, baseline: 'synthetic' }] : [] };
-    return route.fulfill({ json });
-  });
+  await page.route('**/api/v1/**', route => route.fulfill({ json: coreResponse(new URL(route.request().url())) }));
 });
 
-test.afterEach(async ({ page }) => {
-  await writeFile(test.info().outputPath('revision.json'), JSON.stringify({
-    revision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
-    worktreeChanges: execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim(),
-    project: test.info().project.name, finalViewport: page.viewportSize(),
-    screenshots: (await readdir(test.info().outputPath('.'))).filter(name => name.endsWith('.png')),
-    data: 'Synthetic intercepted transport; no live services.',
-  }, null, 2));
+test.afterEach(async () => { await retainEvidence(test.info()); });
+
+test('integrated financial surfaces reflow at effective 200 and 400 percent widths', async ({ page }) => {
+  test.setTimeout(90_000);
+  // Browser zoom changes the effective CSS viewport. These dimensions exercise
+  // layout reflow only; actual browser zoom and device use remain manual checks.
+  for (const [width, reflow] of [[720, '1440px desktop at 200% equivalent CSS width'], [320, '1280px desktop at 400% equivalent CSS width']] as const) {
+    await page.setViewportSize({ width, height: 844 });
+    for (const [surface, path] of [['reports', '/reports'], ['ledger', '/transactions']] as const) {
+      await page.goto(path);
+      await expect(page.getByRole('cell', { name: surface === 'ledger' ? '19.25' : '999999999999.99', exact: true }).first()).toBeVisible();
+      await page.getByRole('button', { name: 'Menu', exact: true }).focus();
+      await page.keyboard.press('Enter');
+      const current = page.getByRole('navigation', { name: 'Main navigation' }).locator('[aria-current]');
+      await expect(current).toHaveCount(1);
+      await expect(current).toHaveCSS('border-inline-start-style', 'solid');
+      await captureEvidence(page, test.info(), `${surface}-menu-reflow-${width}.png`, reflow);
+      await page.getByRole('button', { name: 'Menu', exact: true }).press('Enter');
+      const from = page.getByLabel('From', { exact: true });
+      await from.focus();
+      await expect(from).toBeFocused();
+      await expect(from).toHaveCSS('outline-style', 'solid');
+      if (surface === 'ledger') {
+        const accounts = page.getByLabel('Accounts', { exact: true });
+        await accounts.focus(); await page.keyboard.press('Home');
+        await expect(accounts).toHaveValues(['account:account']);
+        await expect(page.getByText('Selected: ' + longName, { exact: true })).toBeVisible();
+        const region = page.getByRole('region', { name: 'Ledger', exact: true });
+        await region.focus(); await page.keyboard.press('ArrowRight');
+        await expect.poll(() => region.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
+        await region.evaluate(element => { element.scrollLeft = 0; });
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+      expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze()).violations).toEqual([]);
+      await captureEvidence(page, test.info(), `${surface}-reflow-${width}.png`, reflow);
+    }
+  }
 });
 
 test('core visual evidence with negative, zero, populated and long synthetic values', async ({ page }) => {
@@ -66,13 +62,22 @@ test('core visual evidence with negative, zero, populated and long synthetic val
       if (surface === 'ledger') {
         const region = page.getByRole('region', { name: 'Ledger', exact: true });
         await expect(region.getByRole('rowheader', { name: 'Expense', exact: true })).toHaveCSS('font-weight', '400');
+        await expect(region.getByRole('rowheader', { name: 'Expense · Mixed-use', exact: true }).locator('.recordBadge')).toHaveText(['Expense', 'Mixed-use']);
         await expect(region.getByRole('columnheader', { name: 'Debit', exact: true })).toHaveCSS('text-align', 'right');
+        const actions = region.getByRole('link', { name: /^Receipts for/ });
+        const actionLeft = (await actions.boundingBox())!.x;
         await region.focus();
         await page.keyboard.press('ArrowRight');
         await expect.poll(() => region.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
+        if (width >= 1000) {
+          await expect(actions.locator('..').locator('..')).toHaveCSS('position', 'sticky');
+          expect(Math.abs((await actions.boundingBox())!.x - actionLeft)).toBeLessThanOrEqual(1);
+          const bounds = await region.boundingBox();
+          expect((await actions.boundingBox())!.x).toBeLessThan(bounds!.x + bounds!.width);
+        }
         await region.evaluate(element => { element.scrollLeft = 0; });
       }
-      await page.screenshot({ path: test.info().outputPath(`${surface}-${width}.png`), fullPage: true });
+      await captureEvidence(page, test.info(), `${surface}-${width}.png`);
     }
   }
 });
@@ -104,7 +109,7 @@ test('workflow route links preserve dirty cancellation, opener focus and success
   await expect(page.getByRole('heading', { name: 'Reports', exact: true })).toBeVisible();
   await expect(page.getByRole('main')).toBeFocused();
   await expect(page.getByRole('button', { name: 'Menu', exact: true })).toHaveAttribute('aria-expanded', 'false');
-  for (const [route, label] of [['/journals', 'Journals'], ['/mixed-use', 'Mixed-use expenses'], ['/recurring', 'Recurring expenses'], ['/payees', 'Payees'], ['/tags', 'Tags']] as const) {
+  for (const [route, label] of [['/journals', 'Journals'], ['/mixed-use', 'Mixed-use expenses'], ['/recurring', 'Recurring expenses']] as const) {
     await page.goto(route);
     await expect(page.getByRole('navigation', { name: 'Entries', exact: true }).getByRole('link', { name: label, exact: true })).toHaveAttribute('aria-current', 'page');
     await page.getByRole('button', { name: 'Menu', exact: true }).click();
@@ -112,7 +117,7 @@ test('workflow route links preserve dirty cancellation, opener focus and success
     await expect(current).toHaveAttribute('aria-current', 'true');
     await expect(current).toHaveCSS('border-inline-start-style', 'solid');
   }
-  await page.screenshot({ path: test.info().outputPath('workflow-menu-390.png'), fullPage: true });
+  await captureEvidence(page, test.info(), 'workflow-menu-390.png');
   await page.goto('/Journals/new');
   await expect(page.getByRole('navigation', { name: 'Entries', exact: true }).getByRole('link', { name: 'Journals', exact: true })).toHaveAttribute('aria-current', 'page');
   await page.goto('/mileage/new');
@@ -155,7 +160,7 @@ test('ledger filters retain transport scope, reset defaults, complete-entry sear
   const params = new URL((await tagged).url()).searchParams;
   await expect(filters.getByText('Selected: ' + longName, { exact: true })).toBeVisible();
   await expect(page.getByRole('status').filter({ hasText: /matching entries$/ })).toHaveText('0 matching entries');
-  await page.screenshot({ path: test.info().outputPath('ledger-selected-filters.png'), fullPage: true });
+  await captureEvidence(page, test.info(), 'ledger-selected-filters.png');
   expect(params.get('start')).toBe('2026-10-01'); expect(params.get('end')).toBe('2026-10-31');
   expect(params.get('kind')).toBe('Journal'); expect(params.getAll('account_ids')).toEqual(['account']);
   await page.getByLabel('Search transactions').fill('no matching synthetic record');
@@ -204,18 +209,18 @@ test('reports distinguish loading, zero, unavailable values and failed reads', a
   await page.goto('/reports');
   await expect(page.getByRole('status')).toHaveText('Loading reports…');
   await expect(page.locator('dd')).toHaveCount(0);
-  await page.screenshot({ path: test.info().outputPath('reports-loading.png'), fullPage: true });
+  await captureEvidence(page, test.info(), 'reports-loading.png');
   release();
   await expect(page.getByRole('status')).toHaveText('Assets = Liabilities + Equity.');
   await expect(page.getByText('No accounts in Assets.', { exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Profit and loss', exact: true }).locator('dd')).toHaveText(['0.00', '0.00', '0.00']);
-  await page.screenshot({ path: test.info().outputPath('reports-zero.png'), fullPage: true });
+  await captureEvidence(page, test.info(), 'reports-zero.png');
   await page.route('**/reports/summary*', route => route.fulfill({ json: { ...report,
     profit_loss: { ...report.profit_loss, net: null }, balance_sheet: { ...report.balance_sheet, difference: null } } }));
   await page.reload();
   await expect(page.getByRole('region', { name: 'Profit and loss', exact: true }).locator('dd').last()).toHaveText('—');
   await expect(page.getByRole('status')).toHaveText('Accounting-equation status is unavailable.');
-  await page.screenshot({ path: test.info().outputPath('reports-unavailable.png'), fullPage: true });
+  await captureEvidence(page, test.info(), 'reports-unavailable.png');
   await page.route('**/reports/summary*', route => route.fulfill({ status: 503, json: { error: { code: 'unavailable' }, request_id: 'synthetic-failure' } }));
   await page.reload();
   await expect(page.getByRole('alert')).toContainText('synthetic-failure');
@@ -223,7 +228,7 @@ test('reports distinguish loading, zero, unavailable values and failed reads', a
   await expect(page.getByRole('alert')).not.toContainText('draft');
   await expect(page.locator('dd')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Reload' })).toBeVisible();
-  await page.screenshot({ path: test.info().outputPath('reports-error.png'), fullPage: true });
+  await captureEvidence(page, test.info(), 'reports-error.png');
   await page.route('**/ledger*', route => route.fulfill({ status: 503, json: { error: { code: 'unavailable' } } }));
   await page.goto('/transactions');
   await expect(page.getByRole('alert')).toContainText('data could not be loaded');

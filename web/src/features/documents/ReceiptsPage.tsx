@@ -1,10 +1,11 @@
+import { FilePicker } from '../../components/FilePicker';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, ApiError, type Schemas } from '../../api/client';
 import { resourceKey } from '../../api/query';
 import { useEntity } from '../../app/context';
-import { EmptyState, ErrorNotice, Field, LoadingState, SuccessNotice } from '../../components/States';
+import { EmptyState, ErrorNotice, LoadingState, SuccessNotice } from '../../components/States';
 import { UnsavedChanges } from '../../components/UnsavedChanges';
 import { useProtectedMutation } from '../concurrency/mutations';
 import { downloadBlob } from '../../components/downloadBlob';
@@ -211,8 +212,8 @@ function ReceiptWorkflow({ recordId, initialSource }: { recordId: string; initia
       </ConfirmationDialog>}
     </section>
     {writable && <section className="surface editor"><SectionHeader title="Attach receipts" description={`PDF, PNG, JPG, JPEG, WEBP or HEIC; up to 20 MB per file, 200 MB per batch and 100 receipts per ${mixed ? 'source' : 'transaction'}.`} />
-      <Field id="receipt-files" label="Receipt files"><input id="receipt-files" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.heic" disabled={blocked || unresolved.length > 0}
-        onChange={event => { filesSelected(Array.from(event.target.files ?? [])); event.target.value = ''; }} /></Field>
+      <FilePicker id="receipt-files" label="Receipt files" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.heic" disabled={blocked || unresolved.length > 0}
+        resetAfterSelection onFiles={filesSelected} />
       {!!pending.length && <ul className="receiptQueue" aria-label="Selected receipts">{pending.map(item => <li key={item.id}><p>{item.file.name}: {item.linked ? 'Attached' : item.document ? 'Uploaded; link pending' : 'Upload pending'}</p>
         {item.error !== undefined && <ErrorNotice error={item.error} />}</li>)}</ul>}
       <div className="actions formActions"><ActionButton tone="primary" pending={busy || operation.isPending} disabled={blocked || !unresolved.length} onClick={() => void operation.mutateAsync(transfer)}>{pending.some(item => item.error !== undefined) ? 'Retry unresolved receipts' : 'Attach selected receipts'}</ActionButton>

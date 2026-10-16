@@ -23,7 +23,8 @@ receipt requests and revokes object URLs. Success loads the new scope and
 returns navigation to Dashboard, dropping record-specific URLs. An uncertain
 or denied switch shows a safe error with Reload/Sign out and retains no private
 view. Restricted synthetic-alpha selection retains its existing failure/draft
-behavior. Other tabs receive a data-free scope-change signal and reload authority.
+behavior and keeps the current page after a confirmed switch. Other named-user
+tabs receive a data-free scope-change signal and reload authority.
 
 Visible named tabs also check on focus/pageshow/visibility and every 60 seconds.
 Committed membership changes affect the next protected server request. Changed
@@ -83,7 +84,8 @@ bindings established at startup. Existing bound ledgers, memberships and
 invitations remain available there; bootstrap status remains a read-only lookup.
 
 Authenticated named users, including users without any memberships, can call
-`POST /api/v1/workspaces/bootstrap` with `request_id` (16–128 characters),
+`POST /api/v1/workspaces/bootstrap` with `request_id` (16–128 ASCII letters,
+digits, underscores or hyphens, so each accepted ID is one recoverable URL segment),
 `workspace_name` and `business_name` (required, trimmed, at most 160 characters).
 The acting internal user becomes Owner. No caller-supplied owner/entity IDs or
 legal/tax fields are accepted. Books use the existing standard chart of accounts
@@ -138,8 +140,9 @@ be sent later. Existing live Sheets migration remains the explicit #258/#303
 operator process, with no browser import or authority switch during setup.
 
 Apply forward migration `0011_control_plane_join` before this browser revision.
-It joins the existing `0009_external_connections` and `0010_onboarding_routes`
-branches without rewriting either. The onboarding migration
+The canonical chain is `0009_external_connections` -> `0010_workspace_lifecycle`
+-> `0010_onboarding_routes` -> `0011_control_plane_join`. The published connection
+and workspace revisions are unchanged; onboarding extends their chain. The onboarding migration
 extends the exact server/database login return-path allowlist with
 `/invitations`, preserving all existing sessions, login attempts and bookkeeping
 records. External URLs and query-bearing return paths remain forbidden. Native
@@ -150,7 +153,7 @@ acceptance, operations/legal and external-beta admission under #222/#124.
 
 ## Migration and validation
 
-Apply forward revision `0009_workspace_lifecycle` using the existing explicit
+Apply forward revision `0010_workspace_lifecycle` using the existing explicit
 deployment migration command. It adds invitation/idempotency tables and the
 server-only verified session email; existing sessions may keep bookkeeping access
 but must sign in again for invitation acceptance/ownership changes. It does not

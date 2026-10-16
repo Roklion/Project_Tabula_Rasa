@@ -352,3 +352,9 @@ Python Ruff, browser ESLint, TypeScript/build, API contract generation and
 remediation for copy completion, selection lifetime, bulk outcome preservation,
 import recovery and full-DTO conversion replay. These are local implementation
 results, not hosted CI, stage acceptance or approval for #303's live execution.
+
+
+The import file selectors support dropping one file or using the styled native
+chooser in the labeled drop zone. A multi-file drop is refused before preparation.
+Existing format/size validation, preparation, confirmation and explicit import
+commands remain unchanged; dropping a file never commits an import.

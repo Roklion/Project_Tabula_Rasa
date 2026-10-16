@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useEntity } from './context';
 import styles from './Shell.module.css';
 
-import { entryRoutes, isEntryRoute, matchesRoute, mileageRoutes, navigation, referenceRoutes } from './navigation';
+import { entryRoutes, isEntryRoute, isReferenceRoute, matchesRoute, mileageRoutes, navigation, referenceRoutes } from './navigation';
 import { WorkflowNav } from '../components/WorkflowNav';
 import { EntitySelector } from './EntitySelection';
 import { AuthContext } from './authContext';
@@ -12,7 +12,7 @@ export function Shell() {
   const session = useEntity();
   const auth = useContext(AuthContext);
   const location = useLocation();
-  const workflowName = entryRoutes.find(route => matchesRoute(location.pathname, route.path))?.label;
+  const workflowName = [...entryRoutes, ...referenceRoutes].find(route => matchesRoute(location.pathname, route.path))?.label;
   const [menu, setMenu] = useState({ location, open: false });
   // Reset on each successful navigation, including Back to a previous entry.
   // A blocked navigation retains its location and the initiating link.
@@ -43,7 +43,7 @@ export function Shell() {
         onClick={() => setMenu({ location, open: !open })}>Menu</button>
       <nav id="primary-navigation" aria-label="Main navigation" className={open ? styles.open : styles.navigation}>
         {navigation.map(([path, name]) => <Link key={path} to={path} aria-current={location.pathname === path || path !== '/' && matchesRoute(location.pathname, path) ? 'page'
-          : path === '/transactions' && isEntryRoute(location.pathname) ? 'true' : undefined}>{name}</Link>)}
+          : path === '/transactions' && isEntryRoute(location.pathname) || path === '/categories' && isReferenceRoute(location.pathname) ? 'true' : undefined}>{name}</Link>)}
       </nav>
       {!session.trusted_development && <Link to="/workspace">Workspace & members</Link>}
       <p className={styles.footer}>Bookkeeping with clarity.</p>
@@ -54,7 +54,7 @@ export function Shell() {
         <span className="muted">{session.entity.name}</span></header>
       <main ref={main} id="main" tabIndex={-1} className={styles.main} key={location.key}>{isEntryRoute(location.pathname) ? <WorkflowNav label="Entries" routes={entryRoutes} canWrite={session.capabilities.includes('bookkeeping:write')} />
         : matchesRoute(location.pathname, '/mileage') ? <WorkflowNav label="Mileage workflows" routes={mileageRoutes} canWrite={session.capabilities.includes('bookkeeping:write')} />
-          : matchesRoute(location.pathname, '/categories') ? <WorkflowNav label="Reference data" routes={referenceRoutes} canWrite={session.capabilities.includes('bookkeeping:write')} /> : null}
+          : isReferenceRoute(location.pathname) ? <WorkflowNav label="Reference data" routes={referenceRoutes} canWrite={session.capabilities.includes('bookkeeping:write')} /> : null}
         <Outlet /></main>
     </div>
   </div>;

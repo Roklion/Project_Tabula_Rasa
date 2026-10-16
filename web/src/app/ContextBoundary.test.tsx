@@ -13,7 +13,7 @@ import { AuthContext } from './authContext';
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 function authChannel() {
-  const channels: { onmessage?: (event: { data: string }) => void; close: ReturnType<typeof vi.fn> }[] = [];
+  const channels: { onmessage?: (event: { data: string }) => void; close: ReturnType<typeof vi.fn>; postMessage: ReturnType<typeof vi.fn> }[] = [];
   vi.stubGlobal('BroadcastChannel', class {
     onmessage?: (event: { data: string }) => void;
     close = vi.fn();
@@ -228,6 +228,7 @@ it('unmounts private UI even when server-side logout cannot be confirmed', async
 });
 
 it('replaces private scope when validation recovers to another authorized business', async () => {
+  const listeners = vi.spyOn(window, 'addEventListener');
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
   vi.spyOn(api, 'session').mockResolvedValueOnce({ ...session, trusted_development: false })
     .mockResolvedValue({ ...session, organization_id: 'other-org',
@@ -241,6 +242,7 @@ it('replaces private scope when validation recovers to another authorized busine
   }
   render(<ContextBoundary><Feature /></ContextBoundary>);
   fireEvent.change(await screen.findByLabelText('Recovery draft'), { target: { value: 'Alpha draft' } });
+  await waitFor(() => expect(listeners).toHaveBeenCalledWith('focus', expect.any(Function)));
   caches[0].setQueryData(['private'], 'Alpha cached data');
   fireEvent(window, new Event('focus'));
   await waitFor(() => expect(caches).toHaveLength(2));
@@ -285,4 +287,33 @@ it('offers logout bootstrap on an initial outage without composing private UI', 
   expect(logout).toHaveBeenCalledWith(undefined);
   expect(screen.queryByText('Private ledger')).not.toBeInTheDocument();
   expect(entities).not.toHaveBeenCalled();
+});
+
+
+it.each([true, false])('broadcasts successful scope changes only for named users (trusted=%s)', async trusted => {
+  const channels = authChannel();
+  const initial = { ...session, trusted_development: trusted };
+  const beta = { ...initial, entity: { id: 'beta', name: 'Beta' }, cache_scope: 'beta-scope' };
+  vi.spyOn(api, 'session').mockResolvedValue(initial);
+  vi.spyOn(api, 'entities').mockResolvedValue({ items: [initial.entity, beta.entity] });
+  vi.spyOn(api, 'selectEntity').mockResolvedValue(beta);
+  const resetRoute = vi.fn();
+  function Feature() {
+    const selection = useContext(EntitySelectionContext)!;
+    const active = useEntity();
+    return <><p>Active business: {active.entity.id}</p><input aria-label="Switch draft" defaultValue="" />
+      <button onClick={() => void selection.select('beta')}>Switch business fixture</button></>;
+  }
+  render(<ContextBoundary onScopeChange={resetRoute}><Feature /></ContextBoundary>);
+  fireEvent.change(await screen.findByLabelText('Switch draft'), { target: { value: 'Alpha private draft' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Switch business fixture' }));
+  await screen.findByText('Active business: beta');
+  expect(screen.getByLabelText('Switch draft')).toHaveValue('');
+  if (trusted) {
+    expect(channels[0].postMessage).not.toHaveBeenCalled();
+    expect(resetRoute).not.toHaveBeenCalled();
+  } else {
+    expect(channels[0].postMessage).toHaveBeenCalledWith('scope-changed');
+    await waitFor(() => expect(resetRoute).toHaveBeenCalledOnce());
+  }
 });

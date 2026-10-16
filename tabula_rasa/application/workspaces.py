@@ -1,8 +1,16 @@
 """Named-user workspace workflows, separate from ledger and provider identity."""
 
 from dataclasses import dataclass, field
+import re
 
 from .identity import IdentityError, capabilities
+
+BOOTSTRAP_ID_PATTERN = r'^[A-Za-z0-9_-]{16,128}$'
+
+
+def require_bootstrap_id(request_id):
+    if not isinstance(request_id, str) or re.fullmatch(BOOTSTRAP_ID_PATTERN, request_id) is None:
+        raise IdentityError('validation')
 
 
 def grant_allowed(actor_role, target_role):

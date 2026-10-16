@@ -1,13 +1,13 @@
-"""Join independent workspace/onboarding and external-connection forward branches."""
+"""Mark the integrated control-plane head after canonical workspace onboarding."""
 
 revision = '0011_control_plane_join'
-down_revision = ('0010_onboarding_routes', '0009_external_connections')
+down_revision = '0010_onboarding_routes'
 branch_labels = None
 depends_on = None
 
 
 def upgrade():
-    pass  # Both branches retain their deployed schemas and data.
+    pass  # The preceding revisions already supply the integrated schema.
 
 
 def downgrade():

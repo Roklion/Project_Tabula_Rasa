@@ -1,3 +1,4 @@
+import { FilePicker } from '../../components/FilePicker';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -30,9 +31,8 @@ export function MileageImport({ onDirtyChange }: { onDirtyChange: (dirty: boolea
     <p>Upload a QuickBooks Online Download Trips CSV. Only unique Business trips are imported;
       Personal and Unreviewed trips are skipped. Mileage stays separate from financial transactions.</p>
     <p>Use UTF-8 CSV files up to 25 MB and 1,000 source rows per batch.</p>
-    <label htmlFor="quickbooks-mileage-file">QuickBooks mileage CSV</label>
-    <input id="quickbooks-mileage-file" type="file" accept=".csv" disabled={pending} onChange={event => {
-      setFile(event.target.files?.[0]); setPrepared(undefined); setImported(undefined); setUncertain(false);
+    <FilePicker id="quickbooks-mileage-file" label="QuickBooks mileage CSV" accept=".csv" disabled={pending} onFiles={files => {
+      setFile(files[0]); setPrepared(undefined); setImported(undefined); setUncertain(false);
       preview.reset(); commit.reset();
     }} />
     <div className="actions"><ActionButton disabled={!file || pending} pending={preview.isPending} onClick={() => {

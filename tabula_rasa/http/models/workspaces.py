@@ -4,12 +4,13 @@ from typing import Literal
 from pydantic import Field, SecretStr
 
 from .common import DTO
+from tabula_rasa.application.workspaces import BOOTSTRAP_ID_PATTERN
 
 Role = Literal['owner', 'admin', 'editor', 'accountant', 'read_only']
 
 
 class BootstrapRequest(DTO):
-    request_id: str = Field(min_length=16, max_length=128)
+    request_id: str = Field(min_length=16, max_length=128, pattern=BOOTSTRAP_ID_PATTERN)
     workspace_name: str = Field(min_length=1, max_length=160)
     business_name: str = Field(min_length=1, max_length=160)
 

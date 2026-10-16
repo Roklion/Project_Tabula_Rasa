@@ -76,9 +76,10 @@ export function MapsMileageFields({ form, children }: { form: UseFormReturn<Mile
   return <><FormSection title="Route and mileage" description="Enter locations and mileage manually or review optional Maps suggestions.">
     {maps?.browser_api_key && <><MapsAddress browserKey={maps.browser_api_key} regionCode={maps.region_code ?? null} label="Starting location lookup" onSelect={selectOrigin} onClear={clearOrigin} />
       <MapsAddress browserKey={maps.browser_api_key} regionCode={maps.region_code ?? null} label="Destination lookup" onSelect={selectDestination} onClear={clearDestination} />
-      <p className="muted">Google suggestions are used for route lookup. Review or edit the location text to record below.</p></>}
+      <p className="muted routeGuidance">Google suggestions are used for route lookup. Review or edit the location text to record below.</p></>}
     <TextField form={form} name="start_location" label="Starting location" onChange={recordedChanged} />
     <TextField form={form} name="destination" label="Destination" onChange={recordedChanged} />
+    <div className="routeControls">
     {recordedMismatch && maps?.browser_api_key && <p role="status">The recorded location changed. Check that the mileage still matches the travel you are recording.</p>}
     {maps?.browser_api_key && maps.routes_available ? <>
       <button type="button" disabled={busy || !origin || !destination || origin.placeId === destination.placeId} onClick={() => void calculate()}>Calculate mileage</button>
@@ -88,6 +89,7 @@ export function MapsMileageFields({ form, children }: { form: UseFormReturn<Mile
     {(route?.error_code || failure) && <p role="alert">{route?.outbound_miles ? 'Outbound mileage was calculated, but the return route failed. ' : ''}
       {route?.error_code === 'quota' ? 'Google Maps quota has been reached. ' : route?.error_code === 'no_route' ? 'Google Maps did not return a usable route. ' : 'Google Maps routing is unavailable. '}
       Enter miles manually or try Calculate mileage again.</p>}
+    </div>
     <TextField form={form} name="miles" label="Business miles" inputMode="decimal" onChange={reviewAgain} />
     {roundTrip && <TextField form={form} name="return_miles" label="Return business miles" inputMode="decimal" onChange={reviewAgain} />}
     </FormSection>

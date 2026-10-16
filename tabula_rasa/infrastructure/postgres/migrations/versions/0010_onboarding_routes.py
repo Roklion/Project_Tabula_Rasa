@@ -3,7 +3,7 @@
 from alembic import op
 
 revision = '0010_onboarding_routes'
-down_revision = '0009_workspace_lifecycle'
+down_revision = '0010_workspace_lifecycle'
 branch_labels = None
 depends_on = None
 

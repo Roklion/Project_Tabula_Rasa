@@ -192,12 +192,20 @@ def test_workspace_http_setup_csrf_foreign_scope_and_secret_safe_errors(database
         client.cookies.set(auth.session_cookie, raw, domain='127.0.0.1', path='/')
         headers = {'origin': auth.settings.public_origin, 'x-csrf-token': session.csrf_token}
         body = {'request_id': uuid4().hex, 'workspace_name': 'Workspace', 'business_name': 'Business'}
+        for invalid_id in ('a' * 16 + '/b', 'a' * 16 + '?b', 'a' * 16 + '%2Fb', 'a' * 16 + ' b'):
+            rejected = client.post('/api/v1/workspaces/bootstrap', json={**body, 'request_id': invalid_id}, headers=headers)
+            assert rejected.status_code == 422
+        assert client.get('/api/v1/workspaces/bootstrap/' + 'a' * 16 + '%20b').status_code == 422
         assert client.post('/api/v1/workspaces/bootstrap', json=body).status_code == 403
         result = client.post('/api/v1/workspaces/bootstrap', json=body, headers=headers)
         assert result.status_code == 200 and result.json()['state'] == 'ready'
         org = result.json()['organization_id']
         assert client.post('/api/v1/workspaces/bootstrap', json=body, headers=headers).json() == result.json()
         assert client.get('/api/v1/workspaces/bootstrap/' + body['request_id']).json() == result.json()
+        safe_body = {**body, 'request_id': 'Recoverable_ID-123'}
+        safe_result = client.post('/api/v1/workspaces/bootstrap', json=safe_body, headers=headers)
+        assert safe_result.status_code == 200
+        assert client.get('/api/v1/workspaces/bootstrap/' + safe_body['request_id']).json() == safe_result.json()
         choices = client.get('/api/v1/entities').json()['items']
         assert choices[0]['organization_name'] == 'Workspace' and choices[0]['role'] == 'owner'
         assert client.get('/api/v1/workspaces/foreign/members').status_code == 403

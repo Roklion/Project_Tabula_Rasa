@@ -69,7 +69,12 @@ active status, multi-source merge and the service's guarded remove/deactivate
 result. Inactive historical references remain resolvable.
 
 Create and protected-edit forms use the same labeled field groups and control
-geometry. Related fields align on desktop and stack at narrow widths; memo and
+geometry. Their light Soft workspace surfaces use softly tinted controls, bounded
+form widths and compact desktop sizing, with comfortable touch targets. Tables
+share quiet headers, primary record/amount hierarchy, compact textual statuses
+and inline row actions while keeping financial alignment and local scrolling.
+On desktop, wide tables keep row actions visible as other columns scroll.
+Related fields align on desktop and stack at narrow widths; memo and
 notes fields are multiline. Native multiple selects retain their keyboard
 semantics and display complete selected labels. Save is primary, Back and
 explicit commands are neutral, and permanent Delete is red. Reference tables
@@ -80,12 +85,17 @@ existing selection rules and baseline checks.
 
 The sidebar indicates the current destination with a leading rule and weight,
 as well as color. Transactions remains current while visiting Journals,
-Mixed-use expenses, Recurring expenses, Payees or Tags. Their shared **Entries**
+Mixed-use expenses or Recurring expenses. Their shared **Entries**
 navigation wraps on narrow screens and identifies the current route, including
-create/detail/merge screens. These are ordinary links: unsaved changes still
+create/detail screens. These are ordinary links: unsaved changes still
 require keep/discard, cancellation restores the opener, and successful navigation
 closes the mobile menu and focuses main content. Server business context and
 capability checks retain their existing owners under #222.
+
+**Categories & contacts** owns Categories, Payees and Tags. Their shared
+reference navigation stays in that main-menu group, including create and merge
+routes. Each reference page shows one page title; the table retains its
+accessible name and explicit per-record actions without repeated visible titles.
 
 Dashboard groups primary **View ledger** and neutral **Set up accounts** links
 beside its heading. Transactions groups primary **Add transaction** and neutral

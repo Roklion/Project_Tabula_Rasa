@@ -1,6 +1,9 @@
 """Transport-only workspace handlers; named identity without a selected ledger."""
 
-from fastapi import APIRouter, Request, Response
+from typing import Annotated
+
+from fastapi import APIRouter, Path, Request, Response
+from tabula_rasa.application.workspaces import BOOTSTRAP_ID_PATTERN
 
 from ..errors import ERROR_RESPONSES, TransportError
 from ..models.common import ErrorEnvelope
@@ -26,7 +29,7 @@ def bootstrap_workspace(body: BootstrapRequest, request: Request):
 
 
 @router.get('/api/v1/workspaces/bootstrap/{request_id}', response_model=BootstrapResult, operation_id='bootstrap_status')
-def bootstrap_status(request_id: str, request: Request):
+def bootstrap_status(request_id: Annotated[str, Path(pattern=BOOTSTRAP_ID_PATTERN)], request: Request):
     service, session = workflow(request)
     return service.bootstrap_status(session, request_id)
 

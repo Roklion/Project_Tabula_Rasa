@@ -18,19 +18,25 @@ wrap on narrow screens and retain the dirty-navigation confirmation. Add trip
 is visible only to writers; detail routes remain associated with the log.
 
 **From**, **To** and **Filter by tags**
-use one inclusive date/tag scope for the table, trip count, business-mile total
+align compact date controls with the top of the multiline tags list on desktop
+and stack on narrow screens. They use one inclusive date/tag scope for the table, trip count, business-mile total
 and **Download filtered mileage CSV**. Multiple selected tags match any selected
 tag. The log preserves date, distance, vehicle, both locations, purpose, notes,
 tags and stable identity. Read-only users can inspect a trip; writers can edit it.
 CSV export prefixes formula-leading text with an apostrophe so spreadsheet
 applications treat it as literal text; the stored trip remains unchanged.
 
-Related create/edit fields share Trip details, Route and purpose, and Tags
-groups. They stack on narrow screens; purpose and notes are multiline controls.
+Related create/edit fields share Trip details, Route and mileage, Tags, and
+Purpose and notes groups. Optional Maps lookups use the shared field grid; route
+guidance, calculation and failure messages span a complete row before editable
+mileage, and the grid stacks on narrow screens. Purpose and notes are multiline
+controls.
 Save mileage trip is the primary action and Back to records retains the draft
 navigation guard. The log wraps long locations, purpose, notes and tags, aligns
 distance headings/values, and scrolls within its named keyboard-focusable region.
 Tag listboxes expose keyboard guidance and the full selected labels.
+Download filtered mileage CSV has a 16px gap before the log table, keeping the
+action separate from the table header on desktop and narrow layouts.
 
 **Add trip** captures the existing application-service fields. **Round trip**
 initializes an independently editable return distance and creates two independent
@@ -76,7 +82,8 @@ is labeled and retains downloads; unavailable storage has a reload/availability
 surface without an attachment control. Selected-file states and partial-failure
 guidance remain visible alongside the existing upload/link progress.
 
-Select supported PDF, PNG, JPG, JPEG, WEBP or HEIC files, then **Attach selected
+Drop supported PDF, PNG, JPG, JPEG, WEBP or HEIC files into **Receipt files**,
+or use its styled native file chooser, then **Attach selected
 receipts**. The complete selected batch is checked before any upload: nonempty
 files, 20 MB per file, 200 MB per selection and at most 100 receipts per target.
 The service also validates each upload and the repository enforces the reference

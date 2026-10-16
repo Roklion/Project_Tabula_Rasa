@@ -17,7 +17,7 @@ attach organization ownership to retained canonical entities and add durable
 authentication state without copying or rebaselining ledger records. Revision
 `0008_owner_lock_scope` narrows user owner locks to state updates/deletion,
 preserving membership and last-active-owner invariants. These revisions are
-extended by `0009_workspace_lifecycle`, which adds recipient-bound invitations,
+extended by `0010_workspace_lifecycle`, which adds recipient-bound invitations,
 bootstrap idempotency receipts and server-verified session email while retaining
 the bookkeeping inventory. `0010_onboarding_routes` permits the explicit
 invitation login return route without changing ledger records. See [Workspace lifecycle](WORKSPACE_LIFECYCLE.md).
@@ -740,6 +740,7 @@ artifact procedure, format/validation contract, #224 customer-delivery handoff
 and #258's verified-export activation evidence. It does not switch the active
 ledger or replace #259's managed backup/PITR recovery requirements.
 
-Forward revision `0011_control_plane_join` joins the independent
-`0009_external_connections` and `0010_onboarding_routes` branches. Upgrade to
-this single head from either supported branch; neither branch is rewritten.
+Forward revision `0011_control_plane_join` marks the integrated head after
+`0009_external_connections` -> `0010_workspace_lifecycle` -> `0010_onboarding_routes`. Upgrade to
+this single head from the supported connection or workspace revision; those
+published revisions are unchanged.

@@ -165,7 +165,7 @@ export function ContextBoundary({ children, onScopeChange }: { children: ReactNo
             error => { if (expected === identityGeneration.current) setEntityError(error); },
           );
         }
-        authChannel.current?.postMessage('scope-changed');
+        if (!session.trusted_development) authChannel.current?.postMessage('scope-changed');
       }
     }
     catch (error) {

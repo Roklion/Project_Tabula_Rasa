@@ -880,6 +880,7 @@
           "request_id": {
             "maxLength": 128,
             "minLength": 16,
+            "pattern": "^[A-Za-z0-9_-]{16,128}$",
             "title": "Request Id",
             "type": "string"
           },
@@ -15222,6 +15223,7 @@
             "name": "request_id",
             "required": true,
             "schema": {
+              "pattern": "^[A-Za-z0-9_-]{16,128}$",
               "title": "Request Id",
               "type": "string"
             }
