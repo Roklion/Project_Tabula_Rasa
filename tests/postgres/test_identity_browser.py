@@ -121,7 +121,10 @@ def test_named_sign_in_revocation_two_users_and_cross_tab_logout(named_server, w
             peer = bob_browser.new_page()
             peer.goto(origin)
             expect(peer.get_by_role('button', name='Sign out', exact=True)).to_be_visible()
-            second.get_by_role('button', name='Sign out', exact=True).click()
+            with second.expect_response(lambda response: response.request.method == 'POST'
+                                        and response.url.endswith('/auth/logout')) as logged_out:
+                second.get_by_role('button', name='Sign out', exact=True).click()
+            assert logged_out.value.status == 204
             expect(second.get_by_role('link', name='Sign in', exact=True)).to_be_visible()
             expect(peer.get_by_role('link', name='Sign in', exact=True)).to_be_visible()
             peer.reload()
@@ -183,8 +186,13 @@ def test_named_transaction_receipt_logout_then_other_user_has_no_residual_data(n
             assert Path(download.value.path()).read_bytes() == b'%PDF synthetic Alice'
             linked = context.request.get(origin + '/api/v1/entities/alpha/transactions/' + record + '/receipts').json()['items']
             document = linked[0]['id']
+            receipt_url = page.url
+            receipt_history_length = page.evaluate('history.length')
             previous = context.request.get(origin + '/api/v1/session').json()
-            page.get_by_role('button', name='Sign out', exact=True).click()
+            with page.expect_response(lambda response: response.request.method == 'POST'
+                                      and response.url.endswith('/auth/logout')) as logged_out:
+                page.get_by_role('button', name='Sign out', exact=True).click()
+            assert logged_out.value.status == 204
             expect(page.get_by_role('link', name='Sign in', exact=True)).to_be_visible()
             expect(page.get_by_text('alice-private.pdf', exact=False)).to_have_count(0)
             claims['sub'] = info['sub'] = 'bob'
@@ -199,8 +207,15 @@ def test_named_transaction_receipt_logout_then_other_user_has_no_residual_data(n
             page.goto(origin + '/transactions')
             expect(page.get_by_role('heading', name='No matching entries', exact=True)).to_be_visible()
             expect(page.get_by_text('Alice private transaction', exact=True)).to_have_count(0)
-            page.go_back(wait_until='networkidle')  # History cannot resurrect the previous user's receipt view.
-            expect(page.get_by_text('alice-private.pdf', exact=False)).to_have_count(0)
+            # Traverse every entry added by Bob's login and ledger navigation,
+            # including the actual receipt entry visited while Alice was signed in.
+            history_steps = page.evaluate('history.length') - receipt_history_length
+            assert history_steps > 0
+            for _ in range(history_steps):
+                page.go_back(wait_until='networkidle')
+                expect(page.get_by_text('Alice private transaction', exact=True)).to_have_count(0)
+                expect(page.get_by_text('alice-private.pdf', exact=False)).to_have_count(0)
+            expect(page).to_have_url(receipt_url)
             for storage in ('localStorage', 'sessionStorage'):
                 stored = page.evaluate(f'JSON.stringify(Object.entries({storage}))')
                 assert all(value not in stored for value in ('Alice private transaction', 'alice-private.pdf', document))

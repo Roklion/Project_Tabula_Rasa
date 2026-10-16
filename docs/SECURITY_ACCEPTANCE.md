@@ -100,6 +100,15 @@ is claimed. The HTTP test transport emits a deprecation notice for HTTPX; it
 passes with the declared dependencies. Future transport migration can be handled
 separately from tenant authorization.
 
+Review remediation, 2026-10-16: the two-user history test now traverses every
+entry added after Alice's receipt view and verifies that it actually reaches
+that original URL without rendering Alice's transaction or receipt. Logout
+tests await the confirmed server response before reload or another sign-in.
+All 19 affected native identity-browser/security-acceptance cases passed,
+including both desktop/mobile widths, along with 354 route inventory and
+authorization checks, the SPA build, repository Ruff and whitespace checks.
+These focused local results do not replace fresh CI for the remediation head.
+
 The first hosted run (`38843378193`) passed Python/PostgreSQL, Windows and all
 160 browser E2E cases, then exhausted the combined browser job's 20-minute
 budget during the native browser suite. The job now has a bounded 30-minute
