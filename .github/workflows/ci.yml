@@ -52,7 +52,7 @@ jobs:
       - name: Lint Python
         run: ruff check .
       - name: Run complete Python suite
-        run: python -m pytest -ra --junitxml=python-results.xml
+        run: python -m pytest -ra --durations=20 --junitxml=python-results.xml
       - name: Upload Python results
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
@@ -84,10 +84,76 @@ jobs:
           path: windows-results.xml
           if-no-files-found: ignore
 
-  browser:
-    name: Browser and generated API contract
+  frontend-contract:
+    name: Frontend, contracts and runtime image
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - name: Install development dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm --prefix web ci
+      - run: python -m tabula_rasa.http.export_openapi --output contracts/http/openapi.json
+      - run: npm --prefix web run api:generate
+      - run: git diff --exit-code -- contracts/http/openapi.json web/src/api/schema.d.ts
+      - run: npm --prefix web run build
+      - run: npm --prefix web run lint
+      - run: npm --prefix web test
+      - run: npm --prefix web run test:contracts
+      - name: Build and inspect commercial runtime image (no runtime secrets)
+        shell: bash
+        run: |
+          SCHEMA=$(python -c 'from tabula_rasa.infrastructure.postgres.migrations import head_revision; print(head_revision())')
+          docker build --platform linux/amd64 --build-arg RELEASE_ID="$GITHUB_SHA" --build-arg SCHEMA_REVISION="$SCHEMA" -f deploy/commercial/Dockerfile -t tabula-commercial:ci .
+          docker run --rm tabula-commercial:ci python -c 'import sys; from tabula_rasa.http.app import create_app; from tabula_rasa.http.alpha_documents import load_alpha_document_store; create_app(schema_only=True).openapi(); assert not {"streamlit", "gspread", "tabula_rasa.storage"}.intersection(sys.modules)'
+      - name: Upload run-once contract results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-contract-results
+          path: web/test-results/contracts/
+          if-no-files-found: ignore
+
+  browser:
+    name: Browser UI (shard ${{ matrix.shard }}/2)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm --prefix web ci
+      - run: npm --prefix web exec -- playwright install --with-deps chromium firefox webkit
+      - run: npm --prefix web run test:browser -- --shard=${{ matrix.shard }}/2
+      - name: Upload browser UI results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-ui-${{ matrix.shard }}
+          path: web/test-results/browser/
+          if-no-files-found: ignore
+
+  native-browser:
+    name: Native browser (HTTP + PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:18.6
@@ -108,47 +174,34 @@ jobs:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: requirements*.txt
+      - name: Install development dependencies
+        run: python -m pip install -r requirements-dev.txt
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - name: Install development dependencies
-        run: python -m pip install -r requirements-dev.txt
       - run: npm --prefix web ci
-      - run: python -m tabula_rasa.http.export_openapi --output contracts/http/openapi.json
-      - run: npm --prefix web run api:generate
-      - run: git diff --exit-code -- contracts/http/openapi.json web/src/api/schema.d.ts
       - run: npm --prefix web run build
-      - run: npm --prefix web run lint
-      - run: npm --prefix web test
-      - run: npm --prefix web exec -- playwright install --with-deps chromium firefox webkit
-      - run: npm --prefix web run test:e2e
-      - name: Build and inspect commercial runtime image (no runtime secrets)
-        shell: bash
-        run: |
-          SCHEMA=$(python -c 'from tabula_rasa.infrastructure.postgres.migrations import head_revision; print(head_revision())')
-          docker build --platform linux/amd64 --build-arg RELEASE_ID="$GITHUB_SHA" --build-arg SCHEMA_REVISION="$SCHEMA" -f deploy/commercial/Dockerfile -t tabula-commercial:ci .
-          docker run --rm tabula-commercial:ci python -c 'import sys; from tabula_rasa.http.app import create_app; from tabula_rasa.http.alpha_documents import load_alpha_document_store; create_app(schema_only=True).openapi(); assert not {"streamlit", "gspread", "tabula_rasa.storage"}.intersection(sys.modules)'
       - run: python -m playwright install --with-deps chromium firefox webkit
       - name: Run native browser concurrency and core workflow tests
-        run: python -m pytest tests/postgres/test_browser_baselines.py tests/postgres/test_browser_workflows.py tests/postgres/test_browser_quality.py tests/postgres/test_browser_mileage_documents.py tests/postgres/test_browser_secondary.py tests/postgres/test_browser_alpha.py tests/postgres/test_browser_workflow_ports.py tests/postgres/test_identity_browser.py tests/postgres/test_workspace_browser.py --junitxml=browser-results.xml
+        run: python -m pytest tests/postgres/test_browser_alpha.py tests/postgres/test_browser_baselines.py tests/postgres/test_browser_copy_recurring.py tests/postgres/test_browser_mileage_documents.py tests/postgres/test_browser_mileage_imports.py tests/postgres/test_browser_quality.py tests/postgres/test_browser_secondary.py tests/postgres/test_browser_transaction_bulk_copy.py tests/postgres/test_browser_transaction_imports.py tests/postgres/test_browser_workflow_ports.py tests/postgres/test_browser_workflows.py tests/postgres/test_identity_browser.py tests/postgres/test_workspace_browser.py -ra --durations=20 --junitxml=native-browser-results.xml
         env:
           TABULA_RASA_REQUIRE_BROWSER_TESTS: '1'
-      - name: Upload bounded browser gate results
+      - name: Upload native browser results
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: browser-results
+          name: native-browser-results
           path: |
-            browser-results.xml
+            native-browser-results.xml
             web/test-results/
           if-no-files-found: ignore
 
   full-suite:
     name: Full test suite
     if: ${{ always() }}
-    needs: [python-suite, windows-tooling, browser]
+    needs: [python-suite, windows-tooling, frontend-contract, browser, native-browser]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -157,11 +210,17 @@ jobs:
         env:
           PYTHON_RESULT: ${{ needs.python-suite.result }}
           WINDOWS_RESULT: ${{ needs.windows-tooling.result }}
+          FRONTEND_RESULT: ${{ needs.frontend-contract.result }}
+          NATIVE_RESULT: ${{ needs.native-browser.result }}
           BROWSER_RESULT: ${{ needs.browser.result }}
         run: |
           echo "Python suite: $PYTHON_RESULT"
           echo "Windows setup: $WINDOWS_RESULT"
-          echo "Browser suite: $BROWSER_RESULT"
+          echo "Browser UI shards: $BROWSER_RESULT"
+          echo "Frontend/contracts/image: $FRONTEND_RESULT"
+          echo "Native browser: $NATIVE_RESULT"
           test "$PYTHON_RESULT" = success
           test "$WINDOWS_RESULT" = success
           test "$BROWSER_RESULT" = success
+          test "$FRONTEND_RESULT" = success
+          test "$NATIVE_RESULT" = success

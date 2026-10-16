@@ -1,0 +1,67 @@
+{
+  "base_revision": "d5530d9c118153b196af3c6e0fa02fb0899d5f7a",
+  "source_state": "codex/issue-376-ci-partitions working changes on the base revision",
+  "environment": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.10",
+    "node": "24.19.0"
+  },
+  "contract_comparison": {
+    "inputs": "same five contract bodies and preview configuration from base revision",
+    "before": {
+      "projects": 4,
+      "workers": 2,
+      "passed": 20,
+      "observed_cli_seconds": 3.1
+    },
+    "after": {
+      "projects": 1,
+      "workers": 1,
+      "passed": 5,
+      "observed_cli_seconds": 1.2
+    }
+  },
+  "browser_inventory": {
+    "unique_cases": 140,
+    "shard_counts": [
+      70,
+      70
+    ],
+    "overlap": 0,
+    "omitted": 0
+  },
+  "browser_validation": {
+    "cases": 140,
+    "failures": 0,
+    "skipped": 0,
+    "case_seconds": 527.836,
+    "max_case_seconds": 20.463,
+    "median_case_seconds": 2.368
+  },
+  "native_validation": {
+    "cases": 125,
+    "failures": 0,
+    "skipped": 0,
+    "case_seconds": 418.95,
+    "max_case_seconds": 14.319,
+    "median_case_seconds": 2.472
+  },
+  "other_validation": {
+    "tooling_suite_passed": 171,
+    "final_focused_policy_and_timing_passed": 44,
+    "frontend_unit_passed": 92,
+    "ruff": "passed",
+    "eslint": "passed",
+    "typecheck_build": "passed",
+    "openapi_client_drift": "passed"
+  },
+  "limits": "One local Windows sample; no equivalent hosted after run, aggregate CI result, billed-cost or reliability improvement claimed.",
+  "native_phase_observation": {
+    "reported_slowest_phases": 20,
+    "all_reported_phases": "call",
+    "smallest_reported_seconds": 3.95,
+    "largest_reported_seconds": 13.24,
+    "setup_teardown_per_phase_upper_bound_seconds": 3.95,
+    "scope": "Local pytest --durations=20; bound per phase, not total fixture cost"
+  }
+}

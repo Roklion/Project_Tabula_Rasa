@@ -80,7 +80,8 @@ Chromium at 1440px/390px/320px. New-format candidate captures supersede developm
 outputs; retain both when sharing the comparison. Prior workstream before/after
 captures remain linked through their implementation PRs and foundation guide.
 
-Repository CI already uploads `web/test-results/` in **browser-results** even on
+Repository CI uploads per-shard UI evidence in **browser-ui-1** and
+**browser-ui-2**, and native evidence in **native-browser-results**, even on
 failure. On publication, attach the sanitized local before/after package or link
 its retained artifact alongside the current CI candidate; local ignored files
 alone are not a durable hosted handoff. Keep generated validation output out of
