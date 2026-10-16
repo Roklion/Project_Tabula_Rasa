@@ -56,7 +56,8 @@ def test_logout_bootstrap_during_outage_preserves_origin_csrf_and_cookie_isolati
         runtime.services.assert_not_called()
 
 
-def test_login_callback_cookie_contract_and_no_entity_setup(database):
+@pytest.mark.parametrize('return_path', ['/', '/onboarding', '/invitations'])
+def test_login_callback_cookie_contract_and_no_entity_setup(database, return_path):
     client, auth, factory = client_for(database)
     auth.provider.authorization_url.return_value = 'https://id.example.test/authorize'
     auth.provider.verify.return_value = verified()
@@ -64,14 +65,15 @@ def test_login_callback_cookie_contract_and_no_entity_setup(database):
         client.cookies.set(auth.session_cookie, 'x' * 43, domain='127.0.0.1', path='/')
         delayed_denial = client.get('/api/v1/session')
         assert delayed_denial.status_code == 401
-        assert client.get('/api/v1/auth/login?return_path=https://foreign.test').status_code == 403
-        start = client.get('/api/v1/auth/login', follow_redirects=False)
+        for bad_path in ('https://foreign.test', '//foreign.test', '/invitations?credential=private', '/invitations/../other'):
+            assert client.get('/api/v1/auth/login', params={'return_path': bad_path}).status_code == 403
+        start = client.get('/api/v1/auth/login', params={'return_path': return_path}, follow_redirects=False)
         assert start.status_code == 303
         transaction = auth.provider.authorization_url.call_args.args[0]
         assert client.get('/api/v1/session').status_code == 401
         assert auth.login_cookie in client.cookies  # Late private denial cannot erase login.
         result = client.get('/api/v1/auth/callback', params={'code': 'synthetic-code', 'state': transaction.state}, follow_redirects=False)
-        assert result.status_code == 303 and result.headers['location'] == '/'
+        assert result.status_code == 303 and result.headers['location'] == return_path
         cookies = result.headers.get_list('set-cookie')
         assert all('HttpOnly' in cookie and 'Path=/' in cookie and 'SameSite=lax' in cookie and 'Domain=' not in cookie for cookie in cookies)
         fresh_cookie = client.cookies.get(auth.session_cookie)

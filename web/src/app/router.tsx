@@ -1,4 +1,4 @@
-import { createBrowserRouter, createMemoryRouter } from 'react-router-dom';
+import { createBrowserRouter, createMemoryRouter, Navigate } from 'react-router-dom';
 import { AuthorizedShell } from './AuthorizedShell';
 import { navigation } from './navigation';
 import { Accounts, PlannedPage, MissingPage, RouteError } from '../features/foundation/Pages';
@@ -24,6 +24,7 @@ const routes = [{
   errorElement: <RouteError />,
   children: [
     { index: true, element: <ReportsPage dashboard /> },
+    { path: 'onboarding', element: <Navigate to="/" replace /> },
     { path: 'accounts', element: <Accounts /> },
     { path: 'workspace', element: <WorkspacePage /> },
     { path: 'transactions', element: <LedgerPage /> },

@@ -126,6 +126,13 @@ end-to-end performance or reliability. Collection confirms 140 retained UI cases
 split 70/70 with no overlap/omission, plus five run-once cases (previously 160
 executions). Native collection is 125 including the ten restored cases.
 
+Publication integrates main `ae9d9c5` (guided onboarding, PR #372), including its
+native identity/workspace additions. The earlier measurements above remain
+identified with their original inputs, not relabeled as validation of onboarding.
+Main's 30-minute headroom applied to the old combined browser job; the split
+UI/native partitions retain dedicated 20-minute budgets. Final integration
+validation and current-candidate hosted results are recorded in the PR.
+
 Hosted after measurements and current-candidate required CI remain pending
 publication. Do not mark #376's hosted acceptance complete from local evidence.
 Compare equivalent source/test inputs on the same hosted OS/runner class and

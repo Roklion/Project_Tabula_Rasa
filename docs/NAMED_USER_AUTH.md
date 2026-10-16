@@ -62,7 +62,8 @@ cookie replacement and deletion. Retaining a rejected cookie grants no authority
 every later request still validates its durable session.
 
 `GET /api/v1/auth/login` starts a five-minute durable browser-bound one-time
-transaction. Return paths are only `/` and `/onboarding`. The code callback
+transaction. Return paths are only `/`, `/onboarding` and `/invitations` (after forward migration
+`0010_onboarding_routes`). The code callback
 consumes it before exchange; failures require starting a new login. The server
 prunes expired and consumed login transactions in the same environment when a
 new login starts, including clients without a previous login cookie. Active
