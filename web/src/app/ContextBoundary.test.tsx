@@ -182,6 +182,7 @@ it('clears private cache and drafts after authoritative session failure on focus
 });
 
 it('refreshes permitted choices when another workspace is revoked without changing the selected scope', async () => {
+  const listeners = vi.spyOn(window, 'addEventListener');
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
   vi.spyOn(api, 'session').mockResolvedValue({ ...session, trusted_development: false });
   vi.spyOn(api, 'entities').mockResolvedValueOnce({ items: [session.entity, { id: 'beta', name: 'Beta' }] })
@@ -192,6 +193,7 @@ it('refreshes permitted choices when another workspace is revoked without changi
   }
   render(<ContextBoundary><Choices /></ContextBoundary>);
   await screen.findByText('Permitted choices: Alpha, Beta');
+  await waitFor(() => expect(listeners).toHaveBeenCalledWith('focus', expect.any(Function)));
   fireEvent(window, new Event('focus'));
   expect(await screen.findByText('Permitted choices: Alpha')).toBeVisible();
 });

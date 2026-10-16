@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from threading import Event
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import event, text
 
 from tabula_rasa.infrastructure.postgres.composition import create_postgres_services
 from tabula_rasa.infrastructure.postgres.config import DatabaseSettings
@@ -297,3 +297,31 @@ def test_existing_recurring_service_can_commit_independent_idempotent_effects(da
     assert len(alpha.transactions.list()) == 2
     assert reader(database, 'beta').query(target_type='entries') == ()
     assert reader(database).verify()['mismatches'] == 0
+
+
+def test_independent_participant_outlives_orchestration_idle_budget_without_losing_fence(database):
+    seed_core(database)
+
+    def participant_work(participant, execution):
+        with participant.transaction(read_only=True) as connection:
+            connection.execute(text('SELECT pg_sleep(0.25)'))
+        create_postgres_services(participant, execution.entity_id).transactions.create(transaction_id='independent', **expense())
+
+    worker = queue(database, handler=participant_work, independent=True)
+    identity = worker.enqueue('test.post', 'idle-fence')
+    claim = worker.claim()
+
+    def shorten_idle_budget(connection, cursor, statement, parameters, context, many):
+        # Reproduce the reported session death in 100 ms instead of 30 seconds.
+        if statement == "SET LOCAL idle_in_transaction_session_timeout='30s'":
+            statement = "SET LOCAL idle_in_transaction_session_timeout='100ms'"
+        return statement, parameters
+
+    event.listen(database.engine, 'before_cursor_execute', shorten_idle_budget, retval=True)
+    try:
+        assert worker.execute(*claim) is True
+    finally:
+        event.remove(database.engine, 'before_cursor_execute', shorten_idle_budget)
+    assert worker.diagnostics()[0]['state'] == 'succeeded'
+    assert worker.attempts(identity)[0]['outcome'] == 'succeeded'
+    assert len(reader(database).query(target_type='entries')) == 1

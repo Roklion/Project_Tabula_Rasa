@@ -1,4 +1,13 @@
 -- Private bookkeeping history, deliberately excluded from ordinary entity exports.
+-- Drain canonical writers before the watermark or any baseline snapshot. These
+-- locks remain held through trigger installation and the migration's commit.
+LOCK TABLE accounts, categories, payees, tags, entries, postings,
+    mixed_use_sources, recurring_schedules, fixed_assets, mileage_records,
+    documents, import_batches, migration_runs, entry_tags, mixed_use_tags,
+    schedule_tags, asset_tags, mileage_tags, document_links, recurring_occurrences,
+    asset_period_overrides, depreciation_events, import_records
+    IN SHARE ROW EXCLUSIVE MODE;
+
 CREATE TABLE audit_activation (
     singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
     activated_at timestamptz NOT NULL DEFAULT clock_timestamp()

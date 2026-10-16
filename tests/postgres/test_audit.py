@@ -2,6 +2,8 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from threading import Event
+from time import monotonic
 from uuid import uuid4
 
 from alembic import command
@@ -16,6 +18,7 @@ from tabula_rasa.infrastructure.postgres.runtime import DatabaseError
 from tests.postgres.core_support import seed_core, expense, journal_lines
 from tests.postgres.test_mileage_repository import trip, source
 from tests.postgres.test_import_repository import csv, qb
+from tests.postgres._support import account, entity
 
 CAPABILITIES = frozenset({'platform:operate', 'audit:inspect'})
 
@@ -162,6 +165,32 @@ def test_activation_marks_existing_history_and_verifier_detects_unsupported_sql(
         connection.execute(text("SET LOCAL session_replication_role='replica'"))
         connection.execute(text("UPDATE entries SET description='unsupported edit' WHERE id='old'"))
     assert reader(database).verify()['mismatches'] == 1
+
+
+def test_activation_drains_inflight_writer_before_baseline_snapshot(empty_database):
+    database = empty_database
+    with database.engine.begin() as connection:
+        command.upgrade(migration_config(connection), '0010_workspace_lifecycle')
+    with database.transaction() as connection:
+        entity(connection)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        with database.transaction() as writer:
+            account(writer, account_id='inflight')
+            migration = pool.submit(upgrade, database)
+            deadline = monotonic() + 5
+            with database.engine.connect() as observer:
+                while not observer.scalar(text("""SELECT EXISTS (SELECT 1 FROM pg_locks
+                    WHERE relation='accounts'::regclass AND mode='ShareRowExclusiveLock' AND NOT granted)""")):
+                    assert monotonic() < deadline and not migration.done()
+                    Event().wait(0.01)
+            assert not migration.done()
+            committed_after = writer.scalar(text('SELECT clock_timestamp()'))
+        migration.result(timeout=10)
+    boundary = reader(database).boundary(target_type='accounts', target_key={'id': 'inflight'})
+    assert boundary['activated_at'] >= committed_after
+    assert boundary['pre_activation_records'] == 1
+    assert reader(database).verify()['mismatches'] == 0
+    assert reader(database).query() == ()  # Inflight history is a gap marker, not an invented event.
 
 
 def test_stable_operation_replay_does_not_silently_discard_a_second_mutation(database):

@@ -6,6 +6,10 @@ independent operations foundations under [EPIC #223](https://github.com/Roklion/
 and [initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124).
 Forward-only migration `0011_operations` extends the retained `0010` chain.
 Run the normal explicit migration command before deploying this revision.
+Schedule an operator migration window: the migration drains and blocks audited
+table writers before recording the activation watermark, and holds those locks
+through baseline capture and trigger installation. Reads may continue; pause old
+application writers until the compatible audited runtime is deployed.
 The commercial HTTP runtime starts and serves page loads without scheduler or
 recurring mutations. The legacy internal Streamlit initialization route retains
 its existing reconciliation; #334 owns the supported recurring worker integration.
@@ -69,8 +73,11 @@ additional Redis broker, scheduler daemon or application transaction manager.
    and records an attempt. Default lease is 60 seconds, configurable 1–3,600.
 3. Execution locks that run and checks the exact unexpired lease. That transaction
    lock is the exclusivity fence, including after the wall-clock lease expires.
-   Reclaimers skip a live execution. Statement and idle-in-transaction timeouts
-   are 30 seconds; handlers must be short and must not do external I/O.
+   Reclaimers skip a live execution. Statement timeouts are 30 seconds. Atomic
+   execution also has a 30-second idle-in-transaction timeout; independently
+   committing services disable that idle timeout on their orchestration connection
+   so its fence survives participant work. Handlers must be bounded and must not
+   do external I/O.
 4. For atomic handlers, effects, audit events, successful attempt and job success
    commit together. For independently committing services, each effect/event pair
    commits through that service, and job success is recorded only after it returns

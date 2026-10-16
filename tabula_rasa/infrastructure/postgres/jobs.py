@@ -180,6 +180,10 @@ class JobQueue:
                 if row is None:
                     return False
                 registration = self.registry.handler(row['job_type'])
+                if registration.independent_idempotent:
+                    # This connection legitimately idles while its participant
+                    # works. Keep the row-lock fence until that service returns.
+                    connection.execute(text("SET LOCAL idle_in_transaction_session_timeout='0'"))
                 execution = JobExecution(self.entity_id, job_id, row['idempotency_key'], self.service_id)
                 self._invoke(registration, execution)
                 # The lock remains held even past lease expiry. Reclaimers skip it;
