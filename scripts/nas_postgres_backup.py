@@ -91,6 +91,17 @@ def digest(path):
     return value.hexdigest()
 
 
+def sync_directory(path):
+    """Persist directory entries on the supported POSIX NAS execution host."""
+    if os.name != "posix":
+        return  # Windows is a development test host, not a supported NAS runner.
+    descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 def write_json(path, value):
     temporary = path.with_suffix(".tmp")
     with temporary.open("w", encoding="utf-8") as stream:
@@ -99,6 +110,7 @@ def write_json(path, value):
         stream.flush()
         os.fsync(stream.fileno())
     temporary.replace(path)
+    sync_directory(path.parent)
 
 
 def load_config(path):
@@ -122,7 +134,7 @@ def load_config(path):
         raise BackupError("configuration")
     service = parser["backup"]
     host = service.get("host", "")
-    if (not re.fullmatch(r"[A-Za-z0-9.-]+", host) or "-pooler" in host
+    if (not re.fullmatch(r"[A-Za-z0-9.-]+", host) or "-pooler" in host.lower()
             or service.get("sslmode") != "verify-full"
             or service.get("channel_binding") != "require"
             or service.get("connect_timeout") != "15"
@@ -302,6 +314,10 @@ def backup(config, *, scheduled=False):
             complete = root / "complete"
             complete.mkdir(exist_ok=True, mode=0o700)
             partial.rename(complete / generation)
+            # Persist publication and newly created namespace entries before
+            # publishing a durable last-success pointer. Errors remain failures.
+            for directory in (complete, partial.parent, root, root.parent, config["storage"]):
+                sync_directory(directory)
             state.update(result="complete", last_success=generation, completed_at=manifest["completed_at"])
             write_json(root / "status.json", state)
             return {"status": "complete", "generation": generation}

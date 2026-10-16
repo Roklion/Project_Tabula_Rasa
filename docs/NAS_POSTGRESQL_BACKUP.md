@@ -170,6 +170,12 @@ Never delete a retained generation or incomplete directory to clear a lock.
 The runner executes `pg_dump -Fc`, traverses/decompresses the entire archive
 with `pg_restore --file /dev/null`, encrypts it with age, hashes the ciphertext,
 flushes the files and renames the generation from `incomplete/` to `complete/`.
+On the POSIX NAS host it syncs the manifest, publication and namespace directory
+entries before persisting the last-success pointer, and syncs status replacement
+before returning success. A directory-sync failure remains an actionable failed
+run, even if the complete archive is already present. Filesystem/device durability
+still depends on the NAS storage honoring sync requests; this is not a substitute
+for the actual device power/recovery and protected-storage checks.
 Only a complete directory containing `database.dump.age` and `manifest.json`
 belongs to the usable set. The manifest records UTC capture-start/completion,
 environment, source fingerprint, server/schema/client versions, TLS preflight,

@@ -315,3 +315,65 @@ def test_overdue_running_state_alerts_after_grace(configured, clients, monkeypat
     monkeypatch.setattr(nas, "instant", lambda: NOW + timedelta(hours=3))
     assert nas.main(["status", "--config", str(configured[0])]) == 1
     assert json.loads(capsys.readouterr().out)["status"] == "overdue"
+
+
+@pytest.mark.parametrize("host,accepted", [
+    ("production-pooler.example.invalid", False),
+    ("PRODUCTION-POOLER.EXAMPLE.INVALID", False),
+    ("Production-PoOlEr.example.invalid", False),
+    ("PRODUCTION.EXAMPLE.INVALID", True),
+])
+def test_dns_case_cannot_bypass_direct_endpoint_guard(configured, clients, capsys, host, accepted):
+    path, config = configured
+    service = Path(config["service_file"])
+    service.write_text(service.read_text().replace("production.example.invalid", host))
+    config["source_sha256"] = hashlib.sha256(f"{host.lower()}:5432/ledger".encode()).hexdigest()
+    path.write_text(json.dumps(config))
+    assert nas.main(["preflight", "--config", str(path)]) == (0 if accepted else 1)
+    output = json.loads(capsys.readouterr().out)
+    assert output["status"] == ("compatible" if accepted else "failed")
+    if not accepted:
+        assert output["code"] == "configuration" and not clients
+
+
+def test_publication_entries_are_synced_before_durable_success(configured, clients, monkeypatch):
+    config = load(configured)
+    root = nas.namespace(config)
+    synced = []
+    original_write = nas.write_json
+    def record(directory):
+        synced.append(directory)
+    def write(path, value):
+        if path == root / "status.json" and value["result"] == "complete":
+            generation = root / "complete" / value["last_success"]
+            assert generation.is_dir()
+            # The generation's manifest is persisted before the rename;
+            # both rename parents and all new namespace entries are persisted
+            # before status can advertise this generation as successful.
+            assert synced[-5:] == [root / "complete", root / "incomplete", root, root.parent, config["storage"]]
+            assert generation.name in {p.name for p in synced if p.parent == root / "incomplete"}
+        original_write(path, value)
+    monkeypatch.setattr(nas, "sync_directory", record)
+    monkeypatch.setattr(nas, "write_json", write)
+    result = nas.backup(config)
+    assert result["status"] == "complete"
+    assert synced[-1] == root  # status replacement is persisted before return.
+
+
+def test_publication_sync_failure_preserves_last_success(configured, clients, monkeypatch, capsys):
+    config = load(configured)
+    previous = nas.backup(config)["generation"]
+    root = nas.namespace(config)
+    original_sync = nas.sync_directory
+    def fail(directory):
+        if directory == root / "complete":
+            raise OSError(SENTINEL)
+        original_sync(directory)
+    monkeypatch.setattr(nas, "sync_directory", fail)
+    assert nas.main(["run", "--config", str(configured[0])]) == 1
+    output = capsys.readouterr().out
+    assert SENTINEL not in output and json.loads(output)["status"] == "failed"
+    state = nas.read_state(root)
+    assert state["result"] == "failed" and state["last_success"] == previous
+    assert len(list((root / "complete").iterdir())) == 2
+    nas.verify_generation(config, previous)
