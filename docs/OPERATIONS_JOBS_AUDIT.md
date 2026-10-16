@@ -4,7 +4,7 @@ Issues [#333](https://github.com/Roklion/Project_Tabula_Rasa/issues/333) and
 [#335](https://github.com/Roklion/Project_Tabula_Rasa/issues/335) deliver the
 independent operations foundations under [EPIC #223](https://github.com/Roklion/Project_Tabula_Rasa/issues/223)
 and [initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124).
-Forward-only migration `0011_operations` extends the retained `0010` chain.
+Forward-only migration `0012_operations` extends the retained `0011_control_plane_join` chain.
 Run the normal explicit migration command before deploying this revision.
 Schedule an operator migration window: the migration drains and blocks audited
 table writers before recording the activation watermark, and holds those locks

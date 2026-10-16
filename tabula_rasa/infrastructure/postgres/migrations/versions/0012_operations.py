@@ -4,8 +4,8 @@ from pathlib import Path
 
 from alembic import op
 
-revision = '0011_operations'
-down_revision = '0010_workspace_lifecycle'
+revision = '0012_operations'
+down_revision = '0011_control_plane_join'
 branch_labels = None
 depends_on = None
 

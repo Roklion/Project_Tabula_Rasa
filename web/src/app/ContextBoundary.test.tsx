@@ -127,6 +127,22 @@ it('unmounts named private data while a switch is pending and after an uncertain
   expect(screen.queryByLabelText('Named draft')).not.toBeInTheDocument();
 });
 
+it.each([true, false])('resets record navigation only for named-user switching (trusted=%s)', async trusted => {
+  vi.spyOn(api, 'session').mockResolvedValue({ ...session, trusted_development: trusted });
+  vi.spyOn(api, 'entities').mockResolvedValue({ items: [session.entity, { id: 'beta', name: 'Beta' }] });
+  vi.spyOn(api, 'selectEntity').mockResolvedValue({ ...session, trusted_development: trusted, entity: { id: 'beta', name: 'Beta' } });
+  const resetRoute = vi.fn();
+  function Feature() {
+    const current = useEntity();
+    const selection = useContext(EntitySelectionContext)!;
+    return <><p>Selected: {current.entity.name}</p><button onClick={() => void selection.select('beta')}>Switch route scope</button></>;
+  }
+  render(<ContextBoundary onScopeChange={resetRoute}><Feature /></ContextBoundary>);
+  fireEvent.click(await screen.findByRole('button', { name: 'Switch route scope' }));
+  expect(await screen.findByText('Selected: Beta')).toBeVisible();
+  await waitFor(() => expect(resetRoute).toHaveBeenCalledTimes(trusted ? 0 : 1));
+});
+
 it('discards private drafts on a cross-tab scope signal and ignores a late switch error after logout', async () => {
   const channels = authChannel();
   vi.spyOn(api, 'session').mockResolvedValue({ ...session, trusted_development: false });
@@ -238,6 +254,7 @@ it('replaces private scope when validation recovers to another authorized busine
 });
 
 it('offers outage logout with only the retained CSRF token after clearing private scope', async () => {
+  const listeners = vi.spyOn(window, 'addEventListener');
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
   vi.spyOn(api, 'session').mockResolvedValueOnce({ ...session, trusted_development: false })
     .mockRejectedValue(new ApiError('unavailable'));
@@ -250,6 +267,7 @@ it('offers outage logout with only the retained CSRF token after clearing privat
   }
   render(<ContextBoundary><Feature /></ContextBoundary>);
   await screen.findByLabelText('Outage draft');
+  await waitFor(() => expect(listeners).toHaveBeenCalledWith('focus', expect.any(Function)));
   cache!.setQueryData(['private'], 'Private ledger');
   fireEvent(window, new Event('focus'));
   const signOut = await screen.findByRole('button', { name: 'Sign out' });
