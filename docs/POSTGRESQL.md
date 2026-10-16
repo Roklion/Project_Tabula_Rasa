@@ -30,6 +30,13 @@ and approved existing-entity claims without rewriting bookkeeping. Follow
 for separate encrypted secret custody and operator approval. It is forward-only
 and does not activate authority, install credentials or migrate live profiles.
 
+Revision `0011_operations` adds durable entity-scoped job definitions/runs/attempts
+and append-only, same-transaction bookkeeping audit events. It preserves the
+canonical v1 export inventory; audit inspection/export has separate authorization.
+See [Durable jobs and bookkeeping history](OPERATIONS_JOBS_AUDIT.md) for trusted
+actor attribution, worker registration, operator commands, integrity checks,
+retention/recovery limits and the explicit hosted scheduling setup checkpoint.
+
 ## Access and migration tools
 
 Use synchronous **SQLAlchemy Core 2.0 + Psycopg 3**, with **Alembic** for

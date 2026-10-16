@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import NoReturn
+from uuid import uuid4
 
 from psycopg import Error as PsycopgError
 from psycopg.pq import TransactionStatus
@@ -71,6 +72,8 @@ class Database:
         self._operation: ContextVar[_Operation | None] = ContextVar(
             "tabula_postgres_operation", default=None,
         )
+        from .audit import INTERNAL_AUDIT
+        self._audit_context = ContextVar('tabula_postgres_audit_context', default=INTERNAL_AUDIT)
 
     @contextmanager
     def transaction(
@@ -96,6 +99,9 @@ class Database:
                     connection.execute(text("SET LOCAL TIME ZONE 'UTC'"))
                     if read_only:
                         connection.execute(text("SET TRANSACTION READ ONLY"))
+                    else:
+                        from .audit import configure_audit
+                        configure_audit(connection, self._audit_context.get(), uuid4().hex)
                     operation = _Operation(connection, read_only)
                     token = self._operation.set(operation)
                     try:

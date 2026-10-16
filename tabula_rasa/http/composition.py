@@ -57,6 +57,16 @@ class PostgresRuntime:
         # Error translation only; repositories own transaction boundaries.
         return translate_database_errors()
 
+    def audit_operation(self, context, request_id, source):
+        from tabula_rasa.infrastructure.postgres.audit import AuditContext, audit_context
+        from .identity import NamedIdentity
+        named = isinstance(self.resolve_context, NamedIdentity) and self.identity is self.resolve_context
+        return audit_context(self.database, AuditContext(
+            'user' if named else 'system',
+            context.actor_id if named or context.trusted_development else 'internal-application',
+            source, context.entity_id, correlation_id=request_id,
+        ))
+
     @contextmanager
     def document_upload_operation(self, context, document_id):
         """Reject overlapping creates for one entity/ID across HTTP workers."""
