@@ -163,7 +163,7 @@ def test_backup_restore_and_local_admin_remain_unavailable_remotely(database):
     with named_client(database) as (client, _, repo, identities, factory, _, headers):
         alice, bob, org_a, _ = identities
         repo.set_membership(org_a, bob.id, 'owner')
-        for role in ('owner', 'editor', 'read_only'):
+        for role in ('owner', 'admin', 'accountant', 'editor', 'read_only'):
             repo.set_membership(org_a, alice.id, role)
             for path in ('backup', 'backups', 'restore', 'recovery', 'migration', 'cutover', 'reset', 'connections', 'profile-admin'):
                 for entity in ('alpha', 'beta'):

@@ -59,7 +59,7 @@ def test_invalid_file_or_credentials_do_not_fallback(tmp_path, monkeypatch, fail
 
 
 @pytest.mark.parametrize("configured", [HttpSettings("test", "http://testserver", trusted_entity_id="alpha-synthetic"),
-                                        HttpSettings("production", "https://production.example.test")])
+                                        HttpSettings("production", "https://production.example.test", access_mode='named_user')])
 def test_secret_file_is_hosted_synthetic_only(configured, tmp_path, monkeypatch):
     factory = Mock()
     monkeypatch.setattr(alpha_documents, "GoogleDriveClient", factory)

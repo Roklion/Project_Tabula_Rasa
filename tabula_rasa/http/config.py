@@ -47,6 +47,8 @@ class HttpSettings:
         object.__setattr__(self, 'public_origin', f'{origin.scheme}://{host}{suffix}')
         if self.access_mode not in {"restricted_alpha", "named_user"}:
             raise ValueError("An explicit supported access mode is required.")
+        if self.environment == "production" and self.access_mode != "named_user":
+            raise ValueError("Production requires explicit named-user access mode.")
         if self.access_mode == "named_user" and (self.trusted_entity_id or self.alpha_username or self.alpha_password_hash):
             raise ValueError("Named-user mode rejects synthetic context and alpha credentials.")
         if self.environment in {"staging", "production"} and origin.scheme != "https":

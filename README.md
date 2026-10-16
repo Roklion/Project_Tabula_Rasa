@@ -63,6 +63,7 @@ The documentation index is this section of the root README. Go directly to:
 | Implement the selected commercial browser/API/runtime stack | [Commercial web ADR](docs/adr/0002-commercial-web-runtime.md) |
 | Select identity, sessions, roles and tenant authorization | [Commercial identity ADR](docs/adr/0003-commercial-identity-and-tenancy.md) |
 | Prepare identity-provider setup and #311–#321 security handoff | [Commercial identity](docs/COMMERCIAL_IDENTITY.md) |
+| Run tenant/identity security acceptance and inspect release gaps | [Security acceptance](docs/SECURITY_ACCEPTANCE.md) |
 | Switch workspaces, manage invitations/members and bootstrap a ledger | [Workspace lifecycle](docs/WORKSPACE_LIFECYCLE.md) |
 | Connect tenant-owned Google grants and claim existing entities | [Connections and existing entity claims](docs/EXTERNAL_CONNECTIONS_AND_LEGACY_CLAIMS.md) |
 | Follow commercial package, local topology and deployment conventions | [Commercial development and deployment](docs/COMMERCIAL_WEB.md) |

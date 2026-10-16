@@ -129,7 +129,7 @@ their existing protected middleware; health/version and the public browser
 shell contain no private bookkeeping data.
 
 Complete bookkeeping export, backup/list/download,
-archive recovery/restore, migration/cutover/reset, credentials/connections,
+archive recovery/restore, migration/cutover/reset, deployment credentials,
 legacy profile administration and audit/support are **not exposed HTTP
 operations in this revision**. Existing operator CLIs remain internal and keep
 their current independent target, maintenance, evidence and approval boundaries.
@@ -138,6 +138,11 @@ must register the distinct action, authorize before resource/secret binding,
 and apply their domain and operator preconditions. Login grants no access to
 Streamlit's loopback-only Business Profiles/local Account settings.
 
+Tenant-owned Google connection status/connect/disconnect are exposed under
+`connections_manage`; [Connections and claims](EXTERNAL_CONNECTIONS_AND_LEGACY_CLAIMS.md)
+owns their approved provisioning and secret boundary. They never expose raw
+credentials or confer deployment/local administration.
+
 ## Adding an operation and verification
 
 Register an explicit operation ID, exact method, action and entity/identity scope
@@ -145,6 +150,11 @@ before adding a private route. Unknown/mismatched actions deny at request time;
 the build-time route audit rejects missing policies, duplicate IDs, mismatched
 scopes/methods, missing shared guards and non-FastAPI private routes. It examines
 effective included-router metadata, including inherited dependencies/prefixes.
+The audit covers all paths, including private routes outside `/api` and mounted
+subapplications. Only exact health/version/browser-shell routes, protected
+framework docs and the hashed static asset mount have explicit exceptions.
+Unregistered FastAPI handlers deny at runtime even outside `/api`; the unused
+framework OAuth Swagger redirect is disabled.
 Do not assign a read action to bulk export or reuse a sibling operation ID.
 
 The route inventory test independently compares effective entity routes with
@@ -162,3 +172,7 @@ verify that the identity and ledger database/environment agree before binding
 profile secrets and that accepted cutover/document bindings survive named-session
 restart without crossing profiles. These synthetic tests do not provide #321's
 hosted ZITADEL evidence or complete #320/#224 acceptance.
+
+[Security acceptance](SECURITY_ACCEPTANCE.md) extends this evidence across the
+complete private schema, native role/session matrix and same-browser
+transaction/receipt/logout/other-user journey, with exact downstream gap owners.
