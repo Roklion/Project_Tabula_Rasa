@@ -19,7 +19,8 @@ authentication state without copying or rebaselining ledger records. Revision
 preserving membership and last-active-owner invariants. These revisions are
 extended by `0010_workspace_lifecycle`, which adds recipient-bound invitations,
 bootstrap idempotency receipts and server-verified session email while retaining
-the bookkeeping inventory. See [Workspace lifecycle](WORKSPACE_LIFECYCLE.md).
+the bookkeeping inventory. `0010_onboarding_routes` permits the explicit
+invitation login return route without changing ledger records. See [Workspace lifecycle](WORKSPACE_LIFECYCLE.md).
 Identity revisions are
 forward-only: recover with an approved compatible procedure instead of a
 destructive identity downgrade. See [Named-user authentication](NAMED_USER_AUTH.md).
@@ -738,3 +739,8 @@ provenance, historical references and external document metadata. See
 artifact procedure, format/validation contract, #224 customer-delivery handoff
 and #258's verified-export activation evidence. It does not switch the active
 ledger or replace #259's managed backup/PITR recovery requirements.
+
+Forward revision `0011_control_plane_join` marks the integrated head after
+`0009_external_connections` -> `0010_workspace_lifecycle` -> `0010_onboarding_routes`. Upgrade to
+this single head from the supported connection or workspace revision; those
+published revisions are unchanged.

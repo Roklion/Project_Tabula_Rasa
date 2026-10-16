@@ -4,7 +4,7 @@ Issues #314–#316 deliver Wave 3 of [identity EPIC #222](https://github.com/Rok
 under [initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124).
 They reuse the named-user sessions, current membership policy and canonical
 PostgreSQL ledger. No Streamlit profiles, live migration or provider grants are
-created by these operations. #317 owns the full browser onboarding journey;
+created by these operations. #317 adds the guided browser onboarding journey;
 #318/#319 own connections and existing-profile mapping. Hosted identity evidence
 remains #321, adversarial initiative acceptance #320, and external-beta admission
 still requires #223/#224's independent gates.
@@ -109,6 +109,50 @@ authorized result IDs or `not_started` for no committed receipt. Another user
 cannot inspect the receipt. There is no half-created/incomplete durable state:
 resume means retrying the same request. Receipts and ledger defaults survive
 pool/worker restart. Session inspection then discovers the first available entity.
+
+## Browser onboarding (#317)
+
+Sign in (or register with the configured hosted identity provider), then choose
+**Start fresh**, **Join an invited workspace**, or **Move existing Sheets books**.
+Fresh setup collects workspace/business names and offers the currently supported
+standard basic bookkeeping defaults. Back preserves names before submission.
+Create ledger uses the existing atomic bootstrap, then selects the authorized
+business, notifies peer tabs to discard stale scope through the existing data-free
+scope-change signal, and opens Dashboard with account, first-transaction and ledger actions.
+Repeat visits open the existing ledger; they do not create another workspace.
+Owners can add another business in Workspace & members using the same setup flow.
+
+The tab stores only an opaque request ID keyed by authenticated user and target
+workspace in session storage. Names, invitation credentials, sessions and ledger
+contents are not persisted there. After refresh, choose Start fresh again to
+resume: a committed receipt opens its authorized business; otherwise re-enter
+the original names. After an uncertain create, one status readback can confirm
+completion. Explicit Retry same setup retains the original request and payload;
+there is no automatic create retry. Browser storage must be available before
+creation. Closing the tab ends this browser resume handle; server receipts and
+any created ledger remain durable and discoverable through authenticated login.
+
+Privately distributed invitations are supported now: share the app's
+`/invitations` route separately from the credential. That route returns to
+acceptance after login for both new and existing members, without creating an
+organization. Credentials must be pasted after login and never enter URLs.
+Confirmed acceptance uses the same peer scope-change signal as fresh setup, so
+other tabs clear stale setup or ledger views and reload their authorized business.
+Connections remain optional through Data & backup (#318); invites are optional and can
+be sent later. Existing live Sheets migration remains the explicit #258/#303
+operator process, with no browser import or authority switch during setup.
+
+Apply forward migration `0011_control_plane_join` before this browser revision.
+The canonical chain is `0009_external_connections` -> `0010_workspace_lifecycle`
+-> `0010_onboarding_routes` -> `0011_control_plane_join`. The published connection
+and workspace revisions are unchanged; onboarding extends their chain. The onboarding migration
+extends the exact server/database login return-path allowlist with
+`/invitations`, preserving all existing sessions, login attempts and bookkeeping
+records. External URLs and query-bearing return paths remain forbidden. Native
+browser tests cover desktop/mobile setup, failures, lost responses, refresh,
+repeat visits, invitations, two-business switching and foreign-entity denial.
+This is local/CI evidence; #320/#321 and #223/#224 still own adversarial hosted
+acceptance, operations/legal and external-beta admission under #222/#124.
 
 ## Migration and validation
 

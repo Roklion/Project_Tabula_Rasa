@@ -95,7 +95,7 @@ it('ignores a superseded preparation response and blocks business switching duri
   await waitFor(() => expect(screen.queryByText('superseded-private-account')).not.toBeInTheDocument());
 });
 
-it('preserves staged files when navigation is cancelled and clears them on authorized business switching', async () => {
+it('preserves staged files when navigation is cancelled and clears them on restricted-alpha business switching', async () => {
   vi.spyOn(api, 'prepareTransactionCsv').mockResolvedValue(csv);
   vi.spyOn(api, 'selectEntity').mockResolvedValue({ ...session, entity: { id: 'beta', name: 'Beta' }, cache_scope: 'beta-scope' });
   render(<RouterProvider router={createTestRouter(['/data'])} />);
@@ -107,6 +107,7 @@ it('preserves staged files when navigation is cancelled and clears them on autho
   await userEvent.selectOptions(screen.getByLabelText('Select business'), 'beta');
   await userEvent.click(screen.getByRole('button', { name: 'Discard draft and switch' }));
   await waitFor(() => expect(screen.queryByRole('region', { name: 'Tabula Rasa source rows' })).not.toBeInTheDocument());
+  expect(await screen.findByRole('heading', { name: 'Data & backup' })).toBeVisible();
   expect(await screen.findByRole('button', { name: 'Import rows' })).toBeDisabled();
   expect(screen.getByLabelText('Transaction CSV file')).toHaveValue('');
   expect(screen.queryByRole('region', { name: 'Tabula Rasa source rows' })).not.toBeInTheDocument();

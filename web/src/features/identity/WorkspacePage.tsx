@@ -1,42 +1,16 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, type SessionState, type Schemas } from '../../api/client';
+import { api, type Schemas } from '../../api/client';
 import { resourceKey } from '../../api/query';
 import { useEntity } from '../../app/context';
-import { ErrorNotice, Field, LoadingState, SuccessNotice } from '../../components/States';
+import { ErrorNotice, Field, LoadingState } from '../../components/States';
 import { ActionButton, FormSection, PageHeader } from '../../components/VisualPrimitives';
+import { InvitationAcceptance } from './InvitationAcceptance';
+import { LedgerSetup } from './Onboarding';
 import { ConfirmationDialog } from '../../components/ConfirmationDialog';
 
 const roleNames = { owner: 'Owner', admin: 'Admin', editor: 'Editor', accountant: 'Accountant', read_only: 'Read-only' };
 type Role = keyof typeof roleNames;
-
-export function InvitationAcceptance({ session }: { session: SessionState }) {
-  const [credential, setCredential] = useState('');
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<unknown>();
-  const [declined, setDeclined] = useState(false);
-  async function respond(accept: boolean) {
-    const submitted = credential;
-    setCredential(''); setPending(true); setError(undefined);
-    try {
-      await api.respondInvitation(session, submitted, accept);
-      if (accept) window.location.replace('/');
-      else setDeclined(true);
-    } catch (failure) { setError(failure); }
-    finally { setPending(false); }
-  }
-  return <section className="surface"><h2>Respond to an invitation</h2>
-    <p>Sign in with the invited account, then paste the credential shared privately by your workspace administrator. A recent sign-in is required.</p>
-    <form onSubmit={event => { event.preventDefault(); void respond(true); }}>
-      <Field id="invitation-credential" label="Invitation credential"><input id="invitation-credential" type="password" autoComplete="off" spellCheck={false}
-        value={credential} onChange={event => setCredential(event.target.value)} required disabled={pending} /></Field>
-      <div className="actions"><ActionButton type="submit" disabled={!credential || pending}>Accept invitation</ActionButton>
-        <ActionButton type="button" disabled={!credential || pending} onClick={() => void respond(false)}>Decline invitation</ActionButton></div>
-    </form>
-    {declined && <SuccessNotice>Invitation declined.</SuccessNotice>}
-    {error !== undefined && <ErrorNotice error={error} />}
-  </section>;
-}
 
 function MemberEditor({ member, owner, onSave, onGrant }: { member: Schemas['Member']; owner: boolean; onSave: (role: Role, active: boolean) => Promise<void>; onGrant: () => Promise<void> }) {
   const actor = useEntity().actor_id;
@@ -129,6 +103,7 @@ export function WorkspacePage() {
   return <><PageHeader title="Workspace & members" description={session.entity.organization_name ?? 'Your workspace'} />
     <p>Membership roles apply to every active business in this workspace.</p>
     {session.capabilities.includes('members:manage') && !session.trusted_development ? <MemberAdministration /> : <p>Workspace administration requires Owner or Admin access.</p>}
+    {!session.trusted_development && session.capabilities.includes('entity:manage') && <LedgerSetup key={session.actor_id + session.organization_id} session={session} organization={session.organization_id} />}
     {!session.trusted_development && <InvitationAcceptance session={session} />}
   </>;
 }
