@@ -286,3 +286,9 @@ candidate's evidence and use [#288's release contract](TECHNICAL_ALPHA.md) for t
 complete workflow suite, real document binding, rollback rehearsal and manual
 acceptance. #279's completion does not complete #288, retire Streamlit or activate
 commercial production.
+
+## Operational telemetry
+
+[Operational observability](OBSERVABILITY.md) owns #332's sanitized contract,
+optional collection setup, tier/retention/access checkpoint, alert thresholds,
+staging smoke and #223 integration responsibilities.

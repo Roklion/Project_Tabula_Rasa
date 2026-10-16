@@ -89,9 +89,11 @@ def resolve_context(request: Request) -> RequestContext:
         raise TransportError("unauthorized")
     if context.trusted_development and (settings.environment == "production" or settings.access_mode == "named_user"):
         raise TransportError("forbidden")
+    request.state.telemetry_context = context
     requested = request.path_params.get("entity_id")
     if requested is not None and requested != context.entity_id:
         request.state.security_event = 'authorization_denied'
+        request.state.security_reason = 'cross_entity'
         raise TransportError("forbidden")
     unsafe = request.method not in {"GET", "HEAD", "OPTIONS"}
     from .authorization import route_policy
@@ -101,6 +103,7 @@ def resolve_context(request: Request) -> RequestContext:
     try:
         authorize_action(context.capabilities, action)
     except IdentityError:
+        request.state.security_reason = 'capability'
         request.state.security_event = 'authorization_denied'
         raise TransportError('forbidden') from None
     if unsafe:
@@ -114,4 +117,5 @@ def require_csrf(request, expected):
     if (request.headers.get("origin", "") != request.app.state.settings.public_origin
             or not csrf or not expected or not compare_digest(csrf.encode(), expected.encode())):
         request.state.security_event = 'authorization_denied'
+        request.state.security_reason = 'csrf'
         raise TransportError("forbidden")

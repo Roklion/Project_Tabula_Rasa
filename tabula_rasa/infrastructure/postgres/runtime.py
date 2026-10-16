@@ -10,7 +10,7 @@ from psycopg import Error as PsycopgError
 from psycopg.pq import TransactionStatus
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Connection
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError, TimeoutError as PoolTimeoutError
 
 from .config import DatabaseSettings
 
@@ -30,8 +30,9 @@ def safe_database_error(error: SQLAlchemyError | PsycopgError) -> DatabaseError:
         "23502": "required", "40001": "concurrent_write", "40P01": "concurrent_write",
         "25006": "read_only",
         "55000": "backend_inactive",
+        "53300": "database_exhausted",
     }
-    return DatabaseError(codes.get(state, "unavailable"))
+    return DatabaseError("database_exhausted" if isinstance(error, PoolTimeoutError) else codes.get(state, "unavailable"))
 
 
 def raise_database_error(failure: DatabaseError) -> NoReturn:

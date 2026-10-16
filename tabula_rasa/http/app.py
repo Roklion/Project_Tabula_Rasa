@@ -1,10 +1,8 @@
 """FastAPI factory, process lifecycle and safe request instrumentation."""
 
 from contextlib import asynccontextmanager
-import json
 import logging
 from pathlib import Path
-import re
 from time import perf_counter
 from uuid import uuid4
 
@@ -17,15 +15,16 @@ from starlette.responses import FileResponse
 from .static import HashedAssets
 from .alpha import PUBLIC_PROBES, gate_response
 
+from tabula_rasa.telemetry import Telemetry, TelemetrySettings, configure_console
 from tabula_rasa.errors import StorageError
 from tabula_rasa.application.mileage import MileageValidationError
 from tabula_rasa.application.documents import DocumentError
 from tabula_rasa.application.identity import IdentityError
 from .composition import open_runtime
 from .config import HttpSettings
-from .authorization import authorize_request, validate_routes
+from .authorization import PUBLIC_ROUTES, ROUTE_POLICIES, authorize_request, validate_routes
 from .errors import (
-    TransportError, error_response, handle_error, handle_http_error, handle_validation,
+    ERRORS, TransportError, error_response, handle_error, handle_http_error, handle_validation,
 )
 from .models.common import Health, Version
 from .routes import accounting, accounts, auth, documents, financial_csv, imports, mileage, mileage_imports, references, reporting, secondary, session
@@ -41,11 +40,30 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
         app.state.settings = settings or HttpSettings.from_environment()
         app.state.alpha_workers = CapacityLimiter(2)
         factory = runtime_factory or open_runtime
-        app.state.runtime = await run_in_threadpool(factory, app.state.settings)
+        if not logger.hasHandlers():
+            configure_console()
+        from fastapi.routing import iter_route_contexts
+        app.state.telemetry = Telemetry(
+            app.state.settings.environment, app.state.settings.release_id,
+            TelemetrySettings.from_environment(),
+            routes={route.path for route in iter_route_contexts(app.routes)} | {"/assets/{path:path}"},
+            operations=ROUTE_POLICIES.keys() | PUBLIC_ROUTES.keys(),
+            actions={policy.action for policy in ROUTE_POLICIES.values()}, failure_codes=ERRORS,
+        )
         try:
-            yield
+            try:
+                app.state.runtime = await run_in_threadpool(factory, app.state.settings)
+            except Exception:
+                app.state.telemetry.record("runtime", "startup", failure_code="unavailable",
+                                           provider_status="unavailable")
+                raise
+            app.state.telemetry.record("runtime", "startup", provider_status="ok")
+            try:
+                yield
+            finally:
+                await run_in_threadpool(app.state.runtime.close)
         finally:
-            await run_in_threadpool(app.state.runtime.close)
+            await run_in_threadpool(app.state.telemetry.close)
 
     logging.getLogger("uvicorn.access").disabled = True
     app = FastAPI(
@@ -67,6 +85,7 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
     async def identity_error(request, error):
         response = error_response(request, error.code)
         request.state.security_event = "identity_denied"
+        request.state.security_reason = "identity"
         # Passive denials must not delete cookies by name: a delayed response
         # could erase credentials issued by a newer successful callback.
         # Server validation denies stale credentials; explicit logout clears.
@@ -79,10 +98,8 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
     async def safe_request(request: Request, call_next):
         started = perf_counter()
         request.state.request_id = uuid4().hex
-        correlation = request.headers.get("x-correlation-id", "")
-        request.state.correlation_id = (
-            correlation if re.fullmatch(r"[A-Za-z0-9._-]{1,64}", correlation) else None
-        )
+        # Never export caller-controlled headers verbatim, even when token-shaped.
+        request.state.correlation_id = request.headers.get("x-correlation-id", "")[:1025]
         try:
             configured = getattr(app.state, "settings", None)
             if (configured and request.url.path not in {"/health/live", "/health/ready", "/version"}
@@ -114,17 +131,28 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
         else:
             response.headers.setdefault("Cache-Control", "no-store")
         route = request.scope.get("route")
-        logger.info(json.dumps({
-            "request_id": request.state.request_id,
-            "correlation_id": request.state.correlation_id,
-            "method": request.method if request.method in {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"} else "OTHER",
-            "route": getattr(route, "path", "unmatched"),
-            "status": response.status_code,
-            "duration_ms": round((perf_counter() - started) * 1000, 2),
-            "release": configured.release_id if configured else "schema",
-            "failure_code": getattr(request.state, "failure_code", None),
-            "security_event": getattr(request.state, "security_event", None),
-        }, sort_keys=True))
+        operation = getattr(route, "operation_id", None) or ("static_assets" if getattr(route, "path", "").startswith("/assets") else "unmatched")
+        policy = ROUTE_POLICIES.get(operation)
+        failure = getattr(request.state, "failure_code", None)
+        if response.status_code >= 500 and failure is None:
+            failure = "unavailable" if response.status_code == 503 else "unexpected"
+        provider = getattr(request.state, "telemetry_provider", None) or (
+            "identity" if operation in {"begin_login", "complete_login", "logout", "revoke_all_sessions"} else
+            "postgresql" if operation == "readiness" else "application"
+        )
+        context = getattr(request.state, "telemetry_context", None)
+        session = getattr(request.state, "named_session", None)
+        app.state.telemetry.record("http_request", operation,
+            request_id=request.state.request_id, correlation=request.state.correlation_id,
+            route=getattr(route, "path", None), method=request.method, status=response.status_code,
+            duration_ms=(perf_counter() - started) * 1000, failure_code=failure,
+            security_event=getattr(request.state, "security_event", None),
+            security_reason=getattr(request.state, "security_reason", None),
+            action=policy.action if policy else None, context=context,
+            actor_id=getattr(session, "user_id", None), provider=provider,
+            provider_status=getattr(request.state, "provider_status", None) or (
+                "unavailable" if failure in {"unavailable", "unexpected"} else "ok"),
+        )
         return response
 
     @app.get("/health/live", response_model=Health, tags=["Runtime"], operation_id="liveness")
