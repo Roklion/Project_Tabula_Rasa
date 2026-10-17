@@ -44,7 +44,8 @@ def safe_denial(response, status, secrets=()):
 
 
 @pytest.mark.parametrize('loss', ['anonymous', 'tampered', 'expired', 'revoked', 'disabled', 'outage'])
-def test_every_private_family_denies_lost_identity_before_binding(database, loss, caplog):
+def test_every_private_family_denies_lost_identity_before_binding(database, loss, caplog, monkeypatch):
+    monkeypatch.setenv('TABULA_RASA_TELEMETRY_SCOPE_KEY', 'synthetic-security-acceptance-key-32-chars')
     with named_client(database) as (client, auth, repo, identities, factory, _, headers):
         alice, bob, org, _ = identities
         raw = client.cookies.get(auth.session_cookie)
@@ -72,7 +73,8 @@ def test_every_private_family_denies_lost_identity_before_binding(database, loss
                 event = json.loads(next(record.message for record in reversed(caplog.records)
                                         if record.name == 'tabula_rasa.http'))
                 assert event['request_id'] == result.headers['x-request-id']
-                assert event['correlation_id'] == 'security-320'
+                assert len(event['correlation_id']) == 24 and event['correlation_id'] != 'security-320'
+                assert 'security-320' not in event.values()
                 assert event['security_event'] == 'identity_denied'
             for path in ('/api/docs', '/api/openapi.json'):
                 safe_denial(client.get(path), expected, (raw,))
@@ -116,7 +118,8 @@ def test_all_unsafe_operations_keep_origin_and_csrf_before_effects(database):
 
 
 @pytest.mark.parametrize('role', ['owner', 'admin', 'accountant', 'editor', 'read_only'])
-def test_current_role_matrix_across_every_entity_action(database, role, caplog):
+def test_current_role_matrix_across_every_entity_action(database, role, caplog, monkeypatch):
+    monkeypatch.setenv('TABULA_RASA_TELEMETRY_SCOPE_KEY', 'synthetic-security-acceptance-key-32-chars')
     permitted = {
         'owner': {'read', 'write', 'import', 'connections_manage'},
         'admin': {'read', 'write', 'import'}, 'accountant': {'read', 'write', 'import'},
@@ -146,7 +149,8 @@ def test_current_role_matrix_across_every_entity_action(database, role, caplog):
             assert event['security_event'] == 'authorization_denied'
             assert event['failure_code'] == 'forbidden'
             assert event['request_id'] == denied.headers['x-request-id']
-            assert event['correlation_id'] == 'security-320-role'
+            assert len(event['correlation_id']) == 24 and event['correlation_id'] != 'security-320-role'
+            assert 'security-320-role' not in event.values()
         assert 'shared@example.test' not in caplog.text and headers['X-CSRF-Token'] not in caplog.text
         factory.assert_not_called()
         assert not any(store.upload_calls for store in stores.values())

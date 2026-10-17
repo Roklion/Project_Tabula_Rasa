@@ -57,7 +57,10 @@ def test_logout_bootstrap_during_outage_preserves_origin_csrf_and_cookie_isolati
 
 
 @pytest.mark.parametrize('return_path', ['/', '/onboarding', '/invitations'])
-def test_login_callback_cookie_contract_and_no_entity_setup(database, return_path):
+def test_login_callback_cookie_contract_and_no_entity_setup(database, return_path, caplog, monkeypatch):
+    import json
+    monkeypatch.setenv('TABULA_RASA_TELEMETRY_SCOPE_KEY', 'synthetic-identity-telemetry-key-32-chars')
+    caplog.set_level('INFO', logger='tabula_rasa.http')
     client, auth, factory = client_for(database)
     auth.provider.authorization_url.return_value = 'https://id.example.test/authorize'
     auth.provider.verify.return_value = verified()
@@ -93,6 +96,14 @@ def test_login_callback_cookie_contract_and_no_entity_setup(database, return_pat
         assert client.post('/api/v1/auth/activity', headers=headers).status_code == 204
         assert client.post('/api/v1/auth/logout', headers=headers).status_code == 204
         assert client.get('/api/v1/session').status_code == 401
+        security = [json.loads(record.message) for record in caplog.records
+                    if record.name == 'tabula_rasa.http' and '"http_request"' in record.message]
+        succeeded = next(event for event in security if event['security_event'] == 'login_succeeded')
+        failed = next(event for event in security if event['security_event'] == 'login_failed')
+        assert succeeded['actor_ref'] and succeeded['outcome'] == 'success'
+        assert failed['outcome'] == 'failure' and failed['status'] == 303
+        assert any(event['security_event'] == 'logout_succeeded' for event in security)
+        assert all(value not in caplog.text for value in ('synthetic-code', fresh_cookie, fresh_csrf))
         factory.assert_not_called()
 
 
@@ -173,7 +184,7 @@ def test_middleware_identity_denial_uses_cookie_and_event_handler(code, status, 
         assert not response.headers.get_list('set-cookie')
         assert auth.login_cookie in client.cookies
         event = next(json.loads(record.message) for record in caplog.records
-                     if record.name == 'tabula_rasa.http')
+                     if record.name == 'tabula_rasa.http' and '"http_request"' in record.message)
         assert event['security_event'] == 'identity_denied'
         assert 'synthetic-session' not in caplog.text
         runtime.services.assert_not_called()
@@ -209,3 +220,33 @@ def test_late_denial_cannot_erase_newer_browser_login():
         assert client.cookies.get(auth.session_cookie) == 'new-session'
         assert client.cookies.get(auth.csrf_cookie) == 'new-csrf'
         runtime.services.assert_not_called()
+
+
+def test_provider_outage_redirect_and_session_revocation_have_truthful_telemetry(database, caplog, monkeypatch):
+    import json
+    monkeypatch.setenv('TABULA_RASA_TELEMETRY_SCOPE_KEY', 'synthetic-identity-telemetry-key-32-chars')
+    caplog.set_level('INFO', logger='tabula_rasa.http')
+    setup(database)
+    client, auth, _ = client_for(database)
+    auth.provider.authorization_url.return_value = 'https://id.example.test/authorize'
+    auth.provider.verify.side_effect = IdentityError('unavailable')
+    with client:
+        assert client.get('/api/v1/auth/login', follow_redirects=False).status_code == 303
+        transaction = auth.provider.authorization_url.call_args.args[0]
+        failed = client.get('/api/v1/auth/callback',
+            params={'state': transaction.state, 'code': 'private-provider-code'}, follow_redirects=False)
+        assert failed.status_code == 303
+        event = json.loads(caplog.records[-1].message)
+        assert event['security_event'] == 'login_failed' and event['failure_code'] == 'unavailable'
+        assert event['outcome'] == 'failure' and event['level'] == 'error'
+        assert event['provider'] == 'identity' and event['provider_status'] == 'unavailable'
+        raw, session = auth.sessions.issue(verified())
+        client.cookies.set(auth.session_cookie, raw, domain='127.0.0.1', path='/')
+        response = client.post('/api/v1/auth/revoke-all',
+            headers={'origin': auth.settings.public_origin, 'x-csrf-token': session.csrf_token})
+        assert response.status_code == 204
+        event = json.loads(caplog.records[-1].message)
+        assert event['security_event'] == 'user_sessions_revoked' and event['actor_ref']
+        assert event['outcome'] == 'success'
+        assert client.get('/api/v1/session').status_code == 401
+        assert all(value not in caplog.text for value in ('private-provider-code', raw, session.csrf_token))

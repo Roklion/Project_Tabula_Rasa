@@ -359,3 +359,9 @@ The [bounded technical-alpha browser gate](COMMERCIAL_BROWSER_QUALITY.md) adds
 axe scans, desktop/mobile journeys and keyboard/failure checks to the existing
 Playwright baseline. Repository CI runs it in the required native-browser job after
 compiling the SPA; the guide owns local setup and outstanding release evidence.
+
+## Operational telemetry
+
+[Operational observability](OBSERVABILITY.md) owns #332's sanitized contract,
+optional collection setup, tier/retention/access checkpoint, alert thresholds,
+staging smoke and #223 integration responsibilities.
