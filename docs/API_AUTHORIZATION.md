@@ -51,6 +51,9 @@ one-execution recovery approval.
 | --- | --- | --- |
 | `read` | None | Owner, Admin, Editor, Accountant, Read-only |
 | `write` | `bookkeeping:write` | Owner, Admin, Editor, Accountant |
+| `period_close` | `bookkeeping:write`, `period:close` | Owner, Admin |
+| `period_unlock` | `bookkeeping:write`, `period:unlock` | Owner |
+| `entry_correct` | `bookkeeping:write`, `bookkeeping:correct` | Owner, Admin, Accountant |
 | `import` | `bookkeeping:write`, `bookkeeping:import` | Owner, Admin, Accountant |
 | `export` | `bookkeeping:export` | Owner, Admin, Accountant |
 | `entity_manage` | `entity:manage` | Owner |
@@ -99,6 +102,9 @@ HTTP method. No unsafe-method-to-write fallback exists for registered routes.
 | Mixed-use create/update/delete | `write` |
 | Recurring list/detail | `read` |
 | Recurring create/update, explicit reconciliation and state transition | `write` |
+| Accounting period state inspection | `read` |
+| Monthly close / unlock | `period_close` / `period_unlock` |
+| Explicit linked reversing journal | `entry_correct` |
 | Asset types/list/detail | `read` |
 | Assets create/update/delete, explicit depreciation posting and override changes | `write` |
 | Transaction/mixed-use copy draft preparation | `read` |
@@ -106,6 +112,11 @@ HTTP method. No unsafe-method-to-write fallback exists for registered routes.
 | Transaction CSV, QuickBooks transactions and mileage preparation/preview/import | `import` |
 
 Login and callback are the only public authentication protocol operations.
+Period controls also revalidate active role/entity authority inside their
+mutation transaction. Operator activation is independent and never granted by
+a tenant role. See [accounting periods](ACCOUNTING_PERIODS.md) for the policy,
+loaded version/baseline requirements and safe conflict contract.
+
 Session inspection, permitted-entity discovery/selection, activity and
 user-wide revocation receive central session/CSRF checks before their handlers,
 using the same validator and immutable request-local session snapshot. They do

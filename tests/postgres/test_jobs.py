@@ -325,3 +325,27 @@ def test_independent_participant_outlives_orchestration_idle_budget_without_losi
     assert worker.diagnostics()[0]['state'] == 'succeeded'
     assert worker.attempts(identity)[0]['outcome'] == 'succeeded'
     assert len(reader(database).query(target_type='entries')) == 1
+
+
+@pytest.mark.parametrize('independent', [False, True])
+def test_statement_timeout_rolls_back_and_stable_retry_can_recover(database, independent):
+    seed_core(database)
+
+    def blocked(participant, execution):
+        with participant.transaction() as connection:
+            assert connection.scalar(text('SHOW statement_timeout')) == '30s'
+            create_postgres_services(participant, execution.entity_id).transactions.create(
+                transaction_id='job-' + execution.job_id, **expense())
+            connection.execute(text("SET LOCAL statement_timeout='20ms'"))
+            connection.execute(text('SELECT pg_sleep(0.1)'))
+
+    failing = queue(database, handler=blocked, independent=independent)
+    identity = failing.enqueue('test.post', 'timeout')
+    assert failing.execute(*failing.claim()) is False
+    assert failing.diagnostics()[0]['state'] == 'queued'
+    assert failing.attempts(identity)[0]['outcome'] == 'transient'
+    assert reader(database).query(target_type='entries') == ()
+    due(database, identity)
+    healthy = queue(database, independent=independent)
+    assert healthy.execute(*healthy.claim())
+    assert len(reader(database).query(target_type='entries')) == 1

@@ -13,6 +13,7 @@ from tabula_rasa.application.documents import DocumentError, DocumentNotFoundErr
 
 
 ERRORS = {
+    'period_closed': (409, 'This accounting period is closed. Use an authorized reversal in an open month or ask the owner to unlock it.'),
     'reauthentication_required': (403, 'Sign in again to continue. Re-enter any invitation credential after login.'),
     'invitation_invalid': (403, 'This invitation is unavailable for this signed-in user.'),
     'invitation_used': (409, 'This invitation has already been redeemed, declined or revoked. Ask for a new invitation.'),
@@ -66,7 +67,7 @@ def failure_code(error):
     if isinstance(error, StorageNotFoundError):
         return "not_found"
     if isinstance(error, StorageConflictError):
-        return error.code if error.code in {"duplicate", "stale", "concurrent_write"} else "conflict"
+        return error.code if error.code in {"duplicate", "stale", "concurrent_write", 'period_closed'} else "conflict"
     if isinstance(error, StorageValidationError):
         return error.code if error.code in {
             "reference", "invariant", "required", "baseline_required", "baseline_invalid",

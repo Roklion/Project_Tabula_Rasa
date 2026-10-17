@@ -30,3 +30,21 @@ it('retains a create identity and draft after uncertain failure, and advances th
   await waitFor(() => expect(create).toHaveBeenCalledTimes(3));
   expect(create.mock.calls[2][1]).not.toBe(firstIdentity);
 });
+
+it('preserves a draft on a closed-period rejection and explains the authorized correction path', async () => {
+  const create = vi.fn().mockRejectedValue(new ApiError('period_closed'));
+  const router = createMemoryRouter([{ path: '/', element: <ScopeBoundary session={session}>
+    <CreateEditor title="Save entry" initial={() => ({ description: '' })} create={create} onClose={() => {}}
+      fields={form => <TextField form={form} name="description" label="Memo" />} />
+  </ScopeBoundary> }]);
+  render(<RouterProvider router={router} />);
+  await userEvent.type(screen.getByLabelText('Memo'), 'Preserved correction draft');
+  await userEvent.click(screen.getByRole('button', { name: 'Save entry' }));
+  const failure = await screen.findByRole('alert');
+  expect(failure).toHaveTextContent('This accounting month is closed. Your draft is preserved.');
+  expect(failure).toHaveTextContent('authorized reversal in an open month');
+  expect(failure).toHaveTextContent('ask the Owner to unlock');
+  expect(screen.getByLabelText('Memo')).toHaveValue('Preserved correction draft');
+  expect(screen.queryByText('Record created.')).not.toBeInTheDocument();
+  expect(create).toHaveBeenCalledTimes(1);
+});

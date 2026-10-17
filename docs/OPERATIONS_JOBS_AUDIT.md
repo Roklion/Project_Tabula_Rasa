@@ -12,7 +12,9 @@ through baseline capture and trigger installation. Reads may continue; pause old
 application writers until the compatible audited runtime is deployed.
 The commercial HTTP runtime starts and serves page loads without scheduler or
 recurring mutations. The legacy internal Streamlit initialization route retains
-its existing reconciliation; #334 owns the supported recurring worker integration.
+its existing reconciliation. #334's opt-in worker integration is documented below;
+#336's independent [period/correction policy](ACCOUNTING_PERIODS.md) remains off
+until approved adoption.
 
 ## Reuse and ownership
 
@@ -26,15 +28,16 @@ request ID. Workspace bootstrap supplies its existing named actor.
 
 The only new state machine owns queue execution and attempts. It does not
 duplicate recurring occurrence state, depreciation calculation, document recovery,
-import deduplication or remote-write reconciliation. #334 owns integration of
-recurring reconciliation, including its independently committed occurrences;
-#336 owns period locks/correction policy. No period-lock semantics are introduced.
+import deduplication or remote-write reconciliation. #334 integrates independently
+committed recurring occurrences; #336 adds one shared database period gate and
+reuses canonical journal writes for corrections.
 
 ## Jobs: supported effect boundary
 
 `JobRegistry.register` is the single trusted source-code registration boundary.
 A handler receives the shared database and an immutable `JobExecution` containing
-the server-selected entity, job ID, stable idempotency key and worker service ID.
+the server-selected entity, job ID, stable idempotency key and worker service ID,
+plus optional typed target ID, business date and generation-authority revision.
 It invokes the existing services with that entity and stable domain record IDs.
 The queue stores no arbitrary payload, credentials, Python module name or browser
 session. Job rows cannot choose handler code or service identity.
@@ -45,7 +48,10 @@ registration option, `independent_idempotent=True`, supports existing services
 that already guarantee stable identities and safe replay after partial commits.
 That service receives a separate one-connection participant against the exact
 same database while the worker retains the job-row execution fence. Its existing
-outer transaction boundaries stay intact; each committed service mutation keeps
+outer transaction boundaries stay intact. Participant statements have the same
+30-second SQL timeout as the atomic worker. A timeout
+rolls back the current supported operation; confirmed earlier independent effects
+remain for stable-identity retry. Each committed service mutation keeps
 its same-transaction audit event. A failed job may therefore have committed
 partial effects, and replay must confirm them through the existing service's
 idempotency rules. The scheduler does not simulate rollback or invent those rules.
@@ -54,8 +60,8 @@ External provider writes, browser impersonation and handlers that swallow failed
 operations are outside both contracts. A service requiring an independent outer
 transaction must explicitly select the idempotent option. Native tests prove
 `RecurringService.reconcile` works through it after a failure following committed
-occurrences. #334 still owns the production handler, budget, due-schedule selection
-and classification of returned attention/failure results; returning a domain
+occurrences. #334's registered handlers below own the budget, due-schedule selection
+and classification of attention/failure results; returning a domain
 failure as ordinary success is not a valid handler. Future document/import/export
 delivery must declare its stable-effect contract before registering.
 
@@ -120,7 +126,7 @@ python -m tabula_rasa.infrastructure.postgres.job_cli inspect --entity SYNTHETIC
 python -m tabula_rasa.infrastructure.postgres.job_cli attempts --entity SYNTHETIC_ENTITY --service-id staging-operator --id JOB_UUID
 ```
 
-Only `ledger.probe` is registered in the shipped operator command. It reads the
+`ledger.probe` reads the
 existing ledger service without producing accounting changes; it exercises durable
 queue execution. After approving the exact synthetic database/entity, an operator
 may use these explicit mutations for staging:
@@ -167,6 +173,82 @@ protected environment/provider secret store, never commands, logs or Git.
 This change provisions no scheduler, installs no hosted secrets and activates
 no production writes.
 
+## Recurring workload and authority switch (#334)
+
+Forward migration `0013_accounting_controls` adds persisted recurring authority
+and typed job target/business-date fields. Existing entities retain explicit
+PostgreSQL reconciliation; the legacy Sheets/Streamlit session trigger is unaffected.
+Commercial GET/startup remains read-only. `recurring.dispatch` and
+`recurring.schedule` are registered beside the probe, using the existing recurring
+service, schedule baseline guard, stable schedule/date occurrence identities and
+atomic transaction or mixed-use source/projection writers. No schedule arithmetic
+or second posting engine lives in the worker.
+
+An approved operator can adopt one exact synthetic entity:
+
+```powershell
+python -m tabula_rasa.infrastructure.postgres.job_cli recurring-enable --entity SYNTHETIC_ENTITY --service-id staging-operator --time-zone America/New_York --allow-mutations
+python -m tabula_rasa.infrastructure.postgres.job_cli recurring-status --entity SYNTHETIC_ENTITY --service-id staging-operator
+python -m tabula_rasa.infrastructure.postgres.job_cli tick --entity SYNTHETIC_ENTITY --service-id staging-worker --budget 5 --allow-mutations
+```
+
+Enable persists the selected IANA business time zone and one hourly dispatcher
+definition. It does not launch a process or provision a hosted timer. Run the
+bounded CLI on an approved OS/NAS/provider cadence, with a separately selected
+entity per invocation. The dispatcher uses its current UTC instant converted to
+that business zone to choose the local calendar date. Recurrences remain date
+granular: hourly polling adds no hour/minute scheduling promise. Spring-forward
+skips no due date; repeated fall-back hours select the same occurrence identities.
+Stop/resume and provider compute latency delay dispatch without changing due dates.
+
+Each dispatch enqueues at most 100 pending schedule jobs, oldest due first. A
+schedule job generates at most 100 missing occurrences through its persisted
+business date, committing each supported occurrence atomically. Subsequent
+dispatch continues from the domain's next due date. A missed hourly slot creates
+one catch-up dispatcher job, not a job for every missed hour. Downtime preserves
+overdue business dates and catches up in bounded batches after restart.
+
+Explicit `POST /recurring/reconcile` retains #313 write/Origin/CSRF authorization.
+In worker mode it uses the exact same enqueue path as timer dispatch and returns
+`queued_count`; the browser explains that generation is in the background. The
+command cannot generate future business dates. In explicit mode its existing
+synchronous result and supplied cutoff behavior remain available. Repeated requests
+share a job for the same schedule baseline, next due date, cutoff and authority
+revision. Persisted and in-flight revision checks fence an old business cutoff
+after a time-zone or authority change. Stable occurrence identities suppress effects when different cutoff
+jobs overlap. Schedule edits/pause/resume advance the baseline, so obsolete no-op
+jobs cannot suppress newly eligible work.
+
+Workers read current schedules/references before effects. Paused/ended/deleted
+schedules safely produce no generation; existing history is retained. Edited
+templates apply under the existing fresh schedule-baseline check. An intervening
+edit stops stale generation, marks attention and leaves confirmed occurrences
+intact. A failing/locked schedule never rolls back another schedule. Safe transient
+failures use bounded retry/backoff; validation, period locks and other poison
+require inspection. Terminal jobs do not consume the next dispatch's pending budget.
+`inspect` includes safe schedule IDs/cutoff/status and `attempts` retains history,
+without ledger values or error text. Schedule attention remains visible through
+existing authorized views; #332 owns wider alerting. Fix the cause, then use
+`retry --id JOB_UUID` when eligible. Never delete/recreate jobs to bypass deduplication.
+
+For rollback, stop the external timer, run `recurring-disable` with the same
+explicit entity/service/time-zone/mutation arguments, verify persisted authority
+is `explicit`, and resume the former explicit command path. The switch takes an
+entity-specific exclusive transaction advisory lock; occurrence writes hold its
+shared counterpart through commit. It drains an in-flight occurrence, then fences
+further worker effects. Old queued/claimed recurring jobs become safe no-ops;
+historical jobs/attempts/occurrences remain. Re-enabling advances the authority
+revision, retains due dates and resumes catchup. Switching neither migrates the
+Sheets ledger nor retires its supported reference flow.
+
+Before hosted activation, record the exact environment/entity allowlist, operator
+identity, approved business zone, timer owner/cadence, compute/storage budget,
+narrow DB grants, missing-run/dead-run inspection/alert destination, and synthetic
+two-worker/restart/switch rollback evidence. Use the stage-specific checkpoint
+above. #223/#124 operational readiness, #224/#298 commercial activation and #342
+recovery acceptance remain separate. See [accounting periods](ACCOUNTING_PERIODS.md)
+for the independent opt-in lock policy; enabling recurring never enables it.
+
 ## Atomic audit contract
 
 The guarantee covers **application-service-mediated PostgreSQL mutations after
@@ -198,9 +280,10 @@ mixed-use records; recurring definitions/occurrences; assets/overrides/depreciat
 document metadata and receipt link/unlink; import batches/records and migration-run
 administration, unit checkpoints and ID mappings. Free-text names, memos, references, addresses, filenames, provider
 locators, private bytes and credentials are excluded. Receipts remain external;
-unlink events do not delete bytes. Implemented corrections use existing updates
-and new immutable history. Future close/unlock/restore workflows must join this
-transaction contract when implemented, not invent unsupported current actions.
+unlink events do not delete bytes. Corrections/close/unlock follow the
+[accounting-control contract](ACCOUNTING_PERIODS.md), including atomic reversing
+journals and protected relationship/reason records. Future restore workflows
+must join this transaction contract when implemented.
 
 CSV/QuickBooks transaction and QuickBooks mileage imports already commit at most
 1,000 source rows per atomic submission. Each committed batch, record, canonical
@@ -278,6 +361,9 @@ Native tests in `tests/postgres/test_jobs.py` and `test_audit.py` cover competin
 workers, abandoned claims, fencing, rollback, lost commit responses, retry budgets,
 poison isolation, pause/resume, entity boundaries, named attribution, append-only
 tamper attempts, RLS, pre-activation gaps, imports and current-state reconciliation.
+`test_recurring_jobs.py` adds real recurring workload selection, bounded catchup,
+time-zone/authority fencing, schedule changes and failure isolation;
+`test_periods.py` covers monthly controls, corrections and close/write races.
 Affected repository/HTTP/export tests continue to exercise existing success/failure
 and accounting behavior. Use disposable PostgreSQL and synthetic records only;
 CI's current-revision `Full test suite` remains the authoritative full-suite gate.
