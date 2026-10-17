@@ -188,11 +188,13 @@ class RecurringService:
             source_id, changes, expected=expected_source, mixed=True
         )
 
-    def reconcile(self, *, as_of: date | str | None = None):
+    def reconcile(self, *, as_of: date | str | None = None, schedule_id=None,
+                  max_occurrences=None, raise_on_error=False):
         """Run independently of page loads; the caller supplies its cutoff date."""
         cutoff = _iso_date(as_of if as_of is not None else date.today())
         return self._repository.reconcile(
-            lambda snapshot: self._reconcile(snapshot, as_of=cutoff)
+            lambda snapshot: self._reconcile(snapshot, as_of=cutoff, schedule_id=schedule_id,
+                                            max_occurrences=max_occurrences, raise_on_error=raise_on_error)
         )
 
     def _clear_attention(self, schedule_id):
@@ -201,7 +203,10 @@ class RecurringService:
         except Exception:
             pass
 
-    def _reconcile(self, snapshot, *, as_of) -> dict[str, Any]:
+    def _reconcile(self, snapshot, *, as_of, schedule_id=None,
+                   max_occurrences=None, raise_on_error=False) -> dict[str, Any]:
+        if max_occurrences is not None and not 1 <= max_occurrences <= 100:
+            raise StorageValidationError('Invalid occurrence budget.')
         cutoff = _iso_date(as_of or date.today())
         generated: list[dict[str, str]] = []
         attention: dict[str, str] = {}
@@ -241,6 +246,8 @@ class RecurringService:
                 _validate_recurring_provenance(row, "Recurring occurrence")
         mixed_sources_by_id = {str(row.get("id", "")): row for row in mixed_sources}
         for schedule in schedules:
+            if schedule_id is not None and schedule['id'] != schedule_id:
+                continue
             expected_schedule = {key: schedule[key] for key in ("id", "baseline") if key in schedule}
             try:
                 if not schedule["id"]:
@@ -362,6 +369,8 @@ class RecurringService:
                     key = scheduled.isoformat()
                     if key in existing:
                         continue
+                    if max_occurrences is not None and len(generated) >= max_occurrences:
+                        break
                     if schedule.get("source_kind") == "mixed_use":
                         persisted_source = self._mixed_use.create_occurrence(
                             expected_schedule=expected_schedule,
@@ -381,15 +390,17 @@ class RecurringService:
                     if isinstance(exc, StorageValidationError)
                     else "storage"
                 )
-                schedule_id = schedule.get("id", "")
-                if schedule_id:
-                    attention[schedule_id] = code
+                failed_schedule_id = schedule.get("id", "")
+                if failed_schedule_id:
+                    attention[failed_schedule_id] = code
                 try:
-                    if not schedule_id:
+                    if not failed_schedule_id:
                         continue
-                    self._repository.attention(schedule_id, code)
+                    self._repository.attention(failed_schedule_id, code)
                 except Exception:
                     pass
+                if raise_on_error:
+                    raise
             else:
                 self._clear_attention(schedule["id"])
         return {"generated": generated, "attention": attention}

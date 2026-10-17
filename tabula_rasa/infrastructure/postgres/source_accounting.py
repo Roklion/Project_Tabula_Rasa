@@ -53,6 +53,8 @@ def write_tags(connection, scope, table, column, identity, tags):
 
 def check_occurrence_schedule(repository, connection, identity, expected=None):
     """References acquire this schedule root in the shared order before checking."""
+    from .recurring_jobs import check_generation_authority
+    check_generation_authority(connection, repository.entity_id)
     row = repository.get_row(connection, 'recurring_schedules', identity)
     if expected is not None:
         if expected.get('id') != identity:

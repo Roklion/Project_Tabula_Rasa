@@ -129,7 +129,8 @@ def create_recurring(entity_id: str, body: RecurringCreate, request: Request, co
 def reconcile_recurring(entity_id: str, body: ReconcileRequest, request: Request, context: Context):
     with service_operation(request, context, 'recurring') as service:
         result = service.reconcile(as_of=body.through_date)
-        return ReconcileResult(generated_count=len(result['generated']), attention_count=len(result['attention']))
+        return ReconcileResult(generated_count=len(result['generated']), attention_count=len(result['attention']),
+                               queued_count=result.get('queued_count', 0), execution_mode=result.get('execution_mode', 'explicit'))
 
 
 @router.post('/recurring/from-transaction/{record_id}', response_model=RecurringDetail,

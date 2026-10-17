@@ -63,11 +63,11 @@ function GenerateOccurrences() {
     finally { setConfirm(false); }
   }
   return <section className="surface commandSection">
-    <SectionHeader title="Generate due occurrences" description="Generation runs only after this explicit action. Page visits never run a scheduler." />
+    <SectionHeader title="Generate due occurrences" description="Request due occurrences through the selected date. Page visits do not generate expenses." />
     <div className="formGrid"><Field id="recurring-through" label="Generate through"><input id="recurring-through" type="date" value={through} disabled={mutation.isPending}
       onChange={event => setThrough(event.target.value)} /></Field></div>
     <div className="actions"><ActionButton pending={mutation.isPending} disabled={!through} onClick={event => { event.currentTarget.focus(); setConfirm(true); }}>Generate due occurrences</ActionButton></div>
-    {result && <SuccessNotice>Generated {result.generated_count} occurrence(s). {result.attention_count} schedule(s) require attention.</SuccessNotice>}
+    {result && <SuccessNotice>{result.execution_mode === 'worker' ? `Queued ${result.queued_count ?? 0} schedule(s). Generation runs in the background; refresh later to inspect occurrences and attention.` : `Generated ${result.generated_count} occurrence(s). ${result.attention_count} schedule(s) require attention.`}</SuccessNotice>}
     {failure !== undefined && <ErrorNotice error={failure} />}
     {confirm && <ConfirmationDialog title="Generate due occurrences" keepLabel="Keep records" confirmLabel="Confirm generation" pending={mutation.isPending}
       onKeep={() => setConfirm(false)} onConfirm={() => void generate()}>Generate due expenses through {through} using the current schedule templates?</ConfirmationDialog>}

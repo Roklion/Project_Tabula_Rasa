@@ -21,6 +21,10 @@ class RoutePolicy:
 # IDs are server route metadata, never request claims. Identity handlers share
 # the session guard; logout retains its documented outage-clearing path.
 ROUTE_POLICIES = MappingProxyType({
+    'list_accounting_periods': RoutePolicy('GET', 'read'),
+    'close_accounting_period': RoutePolicy('POST', 'period_close'),
+    'unlock_accounting_period': RoutePolicy('POST', 'period_unlock'),
+    'reverse_accounting_entry': RoutePolicy('POST', 'entry_correct'),
     'connection_status': RoutePolicy('GET', 'connections_manage'),
     'change_connection': RoutePolicy('POST', 'connections_manage'),
     **{name: RoutePolicy('GET', 'read') for name in (

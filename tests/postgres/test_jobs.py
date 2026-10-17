@@ -142,11 +142,12 @@ def test_poison_rolls_back_all_effects_and_does_not_block_healthy_jobs(database)
     assert len(reader(database).query(target_type='entries', action='create')) == 2
 
 
-def test_transient_failure_backoff_exhaustion_and_cancel_are_durable(database):
+@pytest.mark.parametrize('failure_code', ['unavailable', 'concurrent_write', 'database_exhausted'])
+def test_transient_failure_backoff_exhaustion_and_cancel_are_durable(database, failure_code):
     seed_core(database)
 
     def transient(database, execution):
-        raise DatabaseError('unavailable')
+        raise DatabaseError(failure_code)
 
     worker = queue(database, handler=transient)
     identity = worker.enqueue('test.post', 'transient', max_attempts=2)
@@ -324,4 +325,28 @@ def test_independent_participant_outlives_orchestration_idle_budget_without_losi
         event.remove(database.engine, 'before_cursor_execute', shorten_idle_budget)
     assert worker.diagnostics()[0]['state'] == 'succeeded'
     assert worker.attempts(identity)[0]['outcome'] == 'succeeded'
+    assert len(reader(database).query(target_type='entries')) == 1
+
+
+@pytest.mark.parametrize('independent', [False, True])
+def test_statement_timeout_rolls_back_and_stable_retry_can_recover(database, independent):
+    seed_core(database)
+
+    def blocked(participant, execution):
+        with participant.transaction() as connection:
+            assert connection.scalar(text('SHOW statement_timeout')) == '30s'
+            create_postgres_services(participant, execution.entity_id).transactions.create(
+                transaction_id='job-' + execution.job_id, **expense())
+            connection.execute(text("SET LOCAL statement_timeout='20ms'"))
+            connection.execute(text('SELECT pg_sleep(0.1)'))
+
+    failing = queue(database, handler=blocked, independent=independent)
+    identity = failing.enqueue('test.post', 'timeout')
+    assert failing.execute(*failing.claim()) is False
+    assert failing.diagnostics()[0]['state'] == 'queued'
+    assert failing.attempts(identity)[0]['outcome'] == 'transient'
+    assert reader(database).query(target_type='entries') == ()
+    due(database, identity)
+    healthy = queue(database, independent=independent)
+    assert healthy.execute(*healthy.claim())
     assert len(reader(database).query(target_type='entries')) == 1

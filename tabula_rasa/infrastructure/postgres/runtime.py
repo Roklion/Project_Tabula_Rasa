@@ -31,6 +31,7 @@ def safe_database_error(error: SQLAlchemyError | PsycopgError) -> DatabaseError:
         "23502": "required", "40001": "concurrent_write", "40P01": "concurrent_write",
         "25006": "read_only",
         "55000": "backend_inactive",
+        "TR423": "period_closed", "TR403": "forbidden", "TR409": "conflict",
         "53300": "database_exhausted",
     }
     return DatabaseError("database_exhausted" if isinstance(error, PoolTimeoutError) else codes.get(state, "unavailable"))
@@ -60,7 +61,12 @@ class Database:
     repository records. No mutation retries or post-success readbacks occur.
     """
 
-    def __init__(self, settings: DatabaseSettings):
+    def __init__(self, settings: DatabaseSettings, *, statement_timeout_ms=None):
+        if statement_timeout_ms is not None and (type(statement_timeout_ms) is not int or not 1 <= statement_timeout_ms <= 30000):
+            raise ValueError('Invalid statement timeout.')
+        connect_args = {"connect_timeout": settings.connect_timeout}
+        if statement_timeout_ms is not None:
+            connect_args['options'] = f'-c statement_timeout={statement_timeout_ms}'
         self.engine = create_engine(
             settings.url,
             pool_pre_ping=True,
@@ -68,7 +74,7 @@ class Database:
             max_overflow=settings.max_overflow,
             echo=False,
             hide_parameters=True,
-            connect_args={"connect_timeout": settings.connect_timeout},
+            connect_args=connect_args,
         )
         self._operation: ContextVar[_Operation | None] = ContextVar(
             "tabula_postgres_operation", default=None,

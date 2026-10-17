@@ -8,12 +8,17 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import SQLAlchemyError
 
 from tabula_rasa.errors import StorageConflictError, StorageError, StorageValidationError
+from tabula_rasa.application.identity import IdentityError
 from .runtime import Database, DatabaseError, safe_database_error
 from .concurrency import AggregateKey, check_baseline, lock_aggregates
 
 
-def application_database_error(error: DatabaseError) -> StorageError:
+def application_database_error(error: DatabaseError) -> StorageError | IdentityError:
     code = error.code
+    if code in {'period_closed', 'conflict'}:
+        return StorageConflictError('The accounting period or correction is locked. Inspect current history before retrying.', code=code)
+    if code == 'forbidden':
+        return IdentityError('forbidden')
     if code in {"duplicate", "concurrent_write"}:
         return StorageConflictError("The operation conflicts with current data. Reload before trying again.", code=code)
     if code in {"reference", "invariant", "required"}:
@@ -47,7 +52,7 @@ def repository_operation(
         return
     try:
         raise failure from None
-    except StorageError:
+    except (StorageError, IdentityError):
         failure.__context__ = None
         raise
 
