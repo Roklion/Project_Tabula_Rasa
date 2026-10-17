@@ -99,7 +99,7 @@ additional Redis broker, scheduler daemon or application transaction manager.
    subject to the original attempt budget. No heartbeat thread is required while
    the transaction lock is held.
 
-Only sanitized database unavailable/concurrent-write failures retry automatically.
+Only sanitized database unavailable/exhausted/concurrent-write failures retry automatically.
 Backoff is `min(300, 2 ** attempts)` seconds; default attempt budget is three,
 with a hard maximum of ten. Domain/validation errors, unknown handlers and other
 exceptions become `poison` in `dead` state. They do not block healthy runs.

@@ -206,7 +206,7 @@ class JobQueue:
         except Exception as error:
             # No exception messages or arbitrary handler content enter diagnostics.
             code = 'transient' if isinstance(error, (DatabaseError, StorageError)) and error.code in {
-                'unavailable', 'concurrent_write'} else 'poison'
+                'unavailable', 'concurrent_write', 'database_exhausted'} else 'poison'
         return self._fail(params, code)
 
     def _invoke(self, registration, execution):

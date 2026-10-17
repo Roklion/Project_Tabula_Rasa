@@ -12,6 +12,8 @@ def main():
             raise ValueError
     except ValueError:
         raise SystemExit("Invalid HTTP port.") from None
+    from tabula_rasa.telemetry import configure_console
+    configure_console()
     uvicorn.run("tabula_rasa.http.app:create_app", factory=True, host="0.0.0.0", port=port,
                 workers=1, proxy_headers=False, access_log=False)
 

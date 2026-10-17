@@ -142,11 +142,12 @@ def test_poison_rolls_back_all_effects_and_does_not_block_healthy_jobs(database)
     assert len(reader(database).query(target_type='entries', action='create')) == 2
 
 
-def test_transient_failure_backoff_exhaustion_and_cancel_are_durable(database):
+@pytest.mark.parametrize('failure_code', ['unavailable', 'concurrent_write', 'database_exhausted'])
+def test_transient_failure_backoff_exhaustion_and_cancel_are_durable(database, failure_code):
     seed_core(database)
 
     def transient(database, execution):
-        raise DatabaseError('unavailable')
+        raise DatabaseError(failure_code)
 
     worker = queue(database, handler=transient)
     identity = worker.enqueue('test.post', 'transient', max_attempts=2)

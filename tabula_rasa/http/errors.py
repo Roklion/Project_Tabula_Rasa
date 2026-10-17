@@ -79,6 +79,12 @@ def failure_code(error):
 
 
 async def handle_error(request, error):
+    if isinstance(error, DocumentError):
+        request.state.telemetry_provider = "documents"
+    elif isinstance(error, StorageError) and not isinstance(error, (StorageValidationError, StorageConflictError, StorageNotFoundError)):
+        request.state.telemetry_provider = "postgresql"
+        if error.code == "database_exhausted":
+            request.state.provider_status = "exhausted"
     return error_response(request, failure_code(error))
 
 

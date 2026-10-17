@@ -30,7 +30,7 @@ def translate_database_errors():
         raise StorageConflictError(code=code) from None
     if code in {"reference", "invariant", "required"}:
         raise StorageValidationError(code=code) from None
-    raise StorageError(code="unavailable") from None
+    raise StorageError(code="database_exhausted" if code == "database_exhausted" else "unavailable") from None
 
 
 class PostgresRuntime:

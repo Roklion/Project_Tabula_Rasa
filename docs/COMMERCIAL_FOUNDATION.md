@@ -134,12 +134,12 @@ The code enum is generated into the browser contract.
 | 405 | `method_not_allowed` |
 
 Every response gets a generated `X-Request-ID`; supplied request IDs are never
-adopted. An optional `X-Correlation-ID` is accepted only as 1–64 ASCII letters,
-digits, periods, underscores or hyphens, stored separately, and never used as
-identity. The `tabula_rasa.http` logger emits only IDs, method, route template,
-status, duration, safe failure code and release. Configure this logger's INFO
-sink under #223. Raw Uvicorn access logging is disabled by the factory;
-unexpected request exceptions are consumed into generic safe responses.
+adopted. Optional `X-Correlation-ID` values are pseudonymized with the configured
+environment telemetry key and omitted without one; they never grant identity.
+[Operational observability](OBSERVABILITY.md) owns the sanitized request/security
+contract, console/optional collector configuration, retention and alert setup.
+Raw Uvicorn access logging is disabled by the factory; unexpected request
+exceptions are consumed into generic safe responses.
 
 `/health/live` checks process liveness. `/health/ready` checks the existing
 bounded database connectivity probe and exact current Alembic head, returning
