@@ -26,6 +26,10 @@ def private_output_path(value):
 
 
 def write_artifact(path, artifact):
+    write_private_bytes(path, (canonical_json(artifact) + '\n').encode('utf-8'))
+
+
+def write_private_bytes(path, content):
     """Publish a fully written file atomically, without replacing an existing file.
 
     POSIX uses owner-only mode; Windows inherits the private directory's ACL.
@@ -36,12 +40,12 @@ def write_artifact(path, artifact):
     temporary = None
     failed = False
     try:
-        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="\n", prefix=".bookkeeping-",
+        with tempfile.NamedTemporaryFile(mode="wb", prefix=".bookkeeping-",
                                          suffix=".tmp", dir=path.parent, delete=False) as stream:
             temporary = Path(stream.name)
             if os.name != "nt":
                 os.chmod(temporary, 0o600)
-            stream.write(canonical_json(artifact) + "\n")
+            stream.write(content)
             stream.flush()
             os.fsync(stream.fileno())
         os.link(temporary, path)

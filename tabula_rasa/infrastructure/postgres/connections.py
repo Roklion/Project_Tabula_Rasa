@@ -24,11 +24,11 @@ class PostgresConnections:
         self.database = database
 
     @staticmethod
-    def _row(connection, context, *, lock=False):
+    def _row(connection, context, *, lock=False, provider='google_drive'):
         return connection.execute(text("""SELECT * FROM external_connections
-            WHERE entity_id=:entity AND organization_id=:org AND provider='google_drive'""" +
+            WHERE entity_id=:entity AND organization_id=:org AND provider=:provider""" +
             (' FOR UPDATE' if lock else '')),
-            {'entity': context.entity_id, 'org': context.organization_id}).mappings().first()
+            {'entity': context.entity_id, 'org': context.organization_id, 'provider': provider}).mappings().first()
 
     def status(self, context):
         with identity_operation(self.database, read_only=True) as connection:
@@ -36,15 +36,24 @@ class PostgresConnections:
             row = self._row(connection, context)
             return ConnectionStatus(status=row['status'], revision=row['revision']) if row else ConnectionStatus()
 
-    def grant(self, context, *, require_connected=True, action='read'):
+    def grant(self, context, *, require_connected=True, action='read', provider='google_drive'):
         with identity_operation(self.database, read_only=True) as connection:
             authorized_entity(connection, context, action)
-            row = self._row(connection, context)
+            row = self._row(connection, context, provider=provider)
             if row is None:
                 return None
             if require_connected and row['status'] != 'connected':
                 raise IdentityError('unavailable')
             return dict(row)
+
+    def document_grant(self, context):
+        """Explicit managed binding wins; disconnected managed storage never falls back."""
+        with identity_operation(self.database, read_only=True) as connection:
+            authorized_entity(connection, context, 'read')
+            row = self._row(connection, context, provider='s3')
+            if row is None:
+                row = self._row(connection, context)
+            return dict(row) if row else None
 
     def change(self, context, *, authenticated_at, expected_revision, connect, validate):
         now = datetime.now(timezone.utc)

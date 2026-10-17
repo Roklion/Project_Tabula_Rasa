@@ -207,7 +207,8 @@ class PostgresTransactionRepository(_AccountingRepository):
         documents = []
         for reference in decode_receipt_references(references):
             rows = connection.execute(text(
-                'SELECT * FROM documents WHERE entity_id=:scope AND storage_key=:key '
+                "SELECT * FROM documents WHERE entity_id=:scope AND "
+                "((store_kind='s3' AND id=:key) OR (store_kind<>'s3' AND storage_key=:key)) "
                 + ('AND id=:id ' if reference.get('receipt_id') else '') + 'FOR UPDATE'
             ), {'scope': self.entity_id, 'key': reference['id'], 'id': reference.get('receipt_id')}).mappings().all()
             if len(rows) != 1 or self.receipt_reference(rows[0]) != reference:

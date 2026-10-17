@@ -66,7 +66,7 @@ class MigratedProfileServices:
         self._named_binding(context.entity_id, context.organization_id)
         store = self.connections.document_store(context)
         return create_postgres_services(self.database, context.entity_id,
-            document_store=store, document_store_kind='google_drive' if store is not None else None)
+            document_store=store, document_store_kind=store.store_kind if store is not None else None)
 
     def _services(self, entity_id):
         profile, _ = self._configuration(entity_id)

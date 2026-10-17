@@ -20,7 +20,9 @@ from .repository import EntityRepository, insert, new_object
 
 def receipt_reference(doc):
     """Compatibility projection for the current Simple Ledger record contract."""
-    result = {'id': doc['storage_key'], 'name': doc['stored_filename']}
+    # The legacy-shaped projection accepts short IDs, not versioned S3 paths.
+    # Managed receipts expose the canonical ID; the repository resolves its pin.
+    result = {'id': doc['id'] if doc['store_kind'] == 's3' else doc['storage_key'], 'name': doc['stored_filename']}
     if doc['sha256']:
         result.update(receipt_id=doc['id'], original_filename=doc['original_filename'],
                       mime_type=doc['mime_type'], byte_size=doc['byte_size'], sha256=doc['sha256'])
@@ -97,6 +99,46 @@ class PostgresReceiptRepository(EntityRepository):
             ), {'scope': self.entity_id, 'kind': self.store_kind, 'binding': self.store_scope_key})
         if mismatch:
             raise DocumentValidationError('Retained receipts require the original document-store binding.')
+
+    def retained_documents(self):
+        """Includes unlinked metadata; migration/recovery must not lose it."""
+        with self.operation(read_only=True) as connection:
+            return tuple(self.document(row) for row in self.rows(connection, 'documents'))
+
+    def promote_locations(self, expected, destinations, *, target_kind, target_scope, connection_binding=None,
+                          expected_content_sha256=None):
+        """Explicit frozen-entity operator action; compare all metadata atomically."""
+        target = type(self)(self.database, self.entity_id, store_kind=target_kind, store_scope_key=target_scope)
+        if len(expected) != len(destinations) or target_kind not in {'google_drive', 's3'} or target_scope == self.store_scope_key:
+            raise DocumentValidationError('Invalid receipt location promotion.')
+        with self.operation() as connection:
+            self.lock_entity(connection)
+            if expected_content_sha256 is not None:
+                from tabula_rasa.bookkeeping_export.format import build_artifact
+                from .entity_export import PostgresEntityExportRepository
+                snapshot = PostgresEntityExportRepository(self.database, self.entity_id).read_snapshot(connection)
+                if build_artifact(snapshot)['manifest']['content_sha256'] != expected_content_sha256:
+                    raise StorageConflictError('The restored bookkeeping/link recovery point changed during copy.')
+            rows = self.rows(connection, 'documents')
+            current = tuple(self.document(row) for row in rows)
+            if current != tuple(expected):
+                raise StorageConflictError('Receipt metadata changed during copy. Freeze writers and restart.')
+            for original, destination in zip(expected, destinations, strict=True):
+                values = target.metadata_values(destination)
+                if (original.metadata != destination.metadata or original.profile_key != destination.profile_key):
+                    raise DocumentValidationError('Receipt copy must preserve canonical identity and metadata.')
+                connection.execute(text('''INSERT INTO document_locations
+                    (entity_id,document_id,store_kind,store_scope_key,storage_key,open_url)
+                    VALUES (:scope,:id,:kind,:binding,:key,:url) ON CONFLICT DO NOTHING'''),
+                    {'scope': self.entity_id, 'id': original.metadata.document_id, 'kind': self.store_kind,
+                     'binding': self.store_scope_key, 'key': original.storage_key, 'url': original.open_url})
+                connection.execute(text('''UPDATE documents SET store_kind=:kind,store_scope_key=:binding,
+                    storage_key=:key,open_url=:url WHERE entity_id=:scope AND id=:id'''),
+                    {'scope': self.entity_id, 'id': values['id'], 'kind': target_kind, 'binding': target_scope,
+                     'key': values['storage_key'], 'url': values['open_url']})
+            if connection_binding is not None:
+                from .managed_documents import install_managed_connection
+                install_managed_connection(connection, self.entity_id, target_scope, provider=target_kind, **connection_binding)
 
     def check_profile(self, profile_key):
         if profile_key != self.entity_id:
