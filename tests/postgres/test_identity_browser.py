@@ -90,6 +90,11 @@ def configure_login(context, origin, claims):
     context.route('**/api/v1/auth/login**', login_redirect)
 
 
+def test_named_deployment_smoke_uses_public_shell_and_denied_http_boundary(named_server):
+    from tabula_rasa.deployment.smoke import named_smoke
+    named_smoke(named_server[0], 'development')
+
+
 @pytest.mark.parametrize('width', [1440, 390])
 def test_named_sign_in_revocation_two_users_and_cross_tab_logout(named_server, width):
     origin, repo, alice, bob, a, _, claims, info = named_server

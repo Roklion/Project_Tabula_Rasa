@@ -141,7 +141,7 @@ fresh current-head CI remains required, and hosted acceptance stays downstream.
 
 | Unresolved acceptance | Exact downstream owner / required evidence |
 | --- | --- |
-| Actual ZITADEL MFA, recovery mail/factors, outage, hosted login/logout/switch/revoke and named-mode rollback | **#321**, using [the operator-authorized provider setup](COMMERCIAL_IDENTITY.md). Live credentials/accounts are not required or authorized by these tests. |
+| Actual ZITADEL MFA, recovery mail/factors, outage, hosted login/logout/switch/revoke and named-mode rollback | **#321**, using [the authenticated rollout checklist](AUTHENTICATED_ROLLOUT.md) and approved provider setup. Staging client/fixtures are not yet configured; hosted acceptance remains pending. Live credentials/accounts are not required or authorized by these tests. |
 | Actor/action security events, retention/sink/alerts and hosted correlation | **#332** under **#223**: extend the safe hooks, then verify delivered telemetry with synthetic denied/revoked requests. Local request/event redaction is covered; operational completeness remains open. |
 | Managed document grant/byte durability and restore evidence | **#337/#338** under **#223**: verify the selected adapter, qualified grants, byte recovery and restoration. Fake-byte success is not this evidence. |
 | Future support/recovery adapters and restored-session invalidation | **#341** owns privileged support adapters; **#223/#340** own recovery/incident procedures, including invalidating restored sessions before ingress. **#298/#303** retain commercial recovery/owner execution approvals. Extend absence/policy checks when operations become exposed. |

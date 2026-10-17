@@ -40,6 +40,9 @@ owns the exact provider/secret checkpoint, ordered migration, smoke and rollback
 procedure. #279 records hosted acceptance; [Technical alpha](TECHNICAL_ALPHA.md)
 owns #288's staged core workflow matrix, browser release gate, rollback rehearsal,
 remaining hosted/manual prerequisites and Streamlit retirement boundary.
+[Authenticated rollout](AUTHENTICATED_ROLLOUT.md) covers #321's explicit hosted
+access mode, named promotion smoke, operator provider/rehearsal checkpoint and
+handoff. Its hosted acceptance remains pending separate from repository tests.
 
 [Identity ADR 0003](adr/0003-commercial-identity-and-tenancy.md) and
 [Commercial identity](COMMERCIAL_IDENTITY.md) freeze #310's provider, session,
