@@ -16,6 +16,7 @@ PRIOR = REPOSITORY + "@sha256:" + "b" * 64
 MANIFEST = "sha256:" + "e" * 64
 PRIOR_MANIFEST = "sha256:" + "f" * 64
 ENV = {"TABULA_RASA_ENVIRONMENT": "staging", "GITHUB_REPOSITORY": "Roklion/Project_Tabula_Rasa",
+       "TABULA_RASA_ACCESS_MODE": "restricted_alpha",
        "TABULA_RASA_PUBLIC_ORIGIN": "https://stage.example.test", "RENDER_SERVICE_ID": "srv-test",
        "RENDER_API_KEY": "synthetic-only", "TABULA_RASA_ALPHA_USERNAME": "stage", "TABULA_RASA_ALPHA_PASSWORD": "synthetic"}
 

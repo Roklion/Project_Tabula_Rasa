@@ -13,6 +13,8 @@ services:
     envVars:
       - key: TABULA_RASA_ENVIRONMENT
         value: development
+      - key: TABULA_RASA_ACCESS_MODE
+        value: restricted_alpha
       - key: TABULA_RASA_TRUSTED_ENTITY_ID
         value: alpha-synthetic
       - key: TABULA_RASA_PUBLIC_ORIGIN
@@ -40,6 +42,8 @@ services:
     envVars:
       - key: TABULA_RASA_ENVIRONMENT
         value: staging
+      - key: TABULA_RASA_ACCESS_MODE
+        value: restricted_alpha
       - key: TABULA_RASA_TRUSTED_ENTITY_ID
         value: alpha-synthetic
       - key: TABULA_RASA_PUBLIC_ORIGIN

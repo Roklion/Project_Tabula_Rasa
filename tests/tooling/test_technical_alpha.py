@@ -15,6 +15,7 @@ import yaml
 from tabula_rasa.deployment import alpha
 
 ENV = {'TABULA_RASA_ENVIRONMENT': 'staging', 'TABULA_RASA_PUBLIC_ORIGIN': 'https://stage.example.test',
+       'TABULA_RASA_ACCESS_MODE': 'restricted_alpha',
        'TABULA_RASA_ALPHA_USERNAME': 'operator', 'TABULA_RASA_ALPHA_PASSWORD': 'synthetic'}
 RELEASE = 'a' * 40
 
@@ -27,6 +28,7 @@ RELEASE = 'a' * 40
     {'TABULA_RASA_PUBLIC_ORIGIN': 'https://stage.example.test?secret=value'},
     {'TABULA_RASA_PUBLIC_ORIGIN': 'https://127.0.0.1'},
     {'TABULA_RASA_ALPHA_PASSWORD': ''},
+    {'TABULA_RASA_ACCESS_MODE': ''}, {'TABULA_RASA_ACCESS_MODE': 'named_user'},
 ])
 def test_invalid_environment_never_starts_smoke_or_browser(monkeypatch, changes):
     smoke = Mock()

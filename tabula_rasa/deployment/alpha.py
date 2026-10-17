@@ -59,6 +59,7 @@ def configuration(environ, release, allow_writes):
     origin = environ.get('TABULA_RASA_PUBLIC_ORIGIN', '')
     parsed = urlsplit(origin)
     if (environ.get('TABULA_RASA_ENVIRONMENT') != 'staging' or not allow_writes
+            or environ.get('TABULA_RASA_ACCESS_MODE') != 'restricted_alpha'
             or parsed.scheme != 'https' or not parsed.hostname
             or parsed.hostname in {'localhost', '127.0.0.1', '::1', 'testserver'}
             or parsed.netloc != parsed.hostname or parsed.path or parsed.query or parsed.fragment
