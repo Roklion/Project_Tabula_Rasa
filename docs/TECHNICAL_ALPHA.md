@@ -35,6 +35,14 @@ additional workflows and require the corresponding completed slice and evidence.
 
 ## Repeatable retained-staging gate
 
+This gate requires explicit `TABULA_RASA_ACCESS_MODE=restricted_alpha` in the
+GitHub staging environment and runner; it refuses named staging before release
+checkout. After
+the approved transition, use [authenticated rollout](AUTHENTICATED_ROLLOUT.md)
+to overlay named identity checks on the existing matrix. Keep this gate and
+its synthetic context separate; do not restore Basic access to run it on a
+named owner/external deployment.
+
 Reuse [#279 deployment](COMMERCIAL_DEPLOYMENT.md) for target binding, explicit
 migration, immutable-image integrity, ingress and temporary alpha credentials.
 The read-only deployment smoke proves connectivity; it is not the complete alpha

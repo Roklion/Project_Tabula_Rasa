@@ -41,9 +41,11 @@ def callback(request: Request):
         response = RedirectResponse(transaction.return_path, status_code=303)
         auth.set_cookie(response, auth.session_cookie, raw, 43200)
         auth.set_cookie(response, auth.csrf_cookie, session.csrf_token, 43200)
+        request.state.named_session = session
         request.state.security_event = "login_succeeded"
     except IdentityError as error:
         response = RedirectResponse("/signed-out?reason=" + ("unavailable" if error.code == "unavailable" else "login_failed"), status_code=303)
+        request.state.failure_code = error.code
         request.state.security_event = "login_failed"
     auth.clear(response, login_only=True)
     response.headers['Referrer-Policy'] = 'no-referrer'

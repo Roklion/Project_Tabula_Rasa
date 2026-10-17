@@ -176,7 +176,7 @@ def test_request_id_logging_allowlist_and_host_policy(client, runtime, caplog):
     assert response.headers["Cache-Control"] == "no-store"
     event = json.loads(caplog.records[-1].message)
     assert event["route"] == "/api/v1/entities/{entity_id}/accounts"
-    assert event["correlation_id"] == "safe-correlation"
+    assert event["correlation_id"] is None  # No pseudonym key in ordinary local tests.
     assert "password" not in caplog.text
     runtime.services.reset_mock()
     assert client.get("/api/v1/session", headers={"Host": "spoofed.test"}).status_code == 403

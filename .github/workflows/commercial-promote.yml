@@ -42,6 +42,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Verify tested main image and metadata
+        env:
+          TABULA_RASA_ACCESS_MODE: ${{ vars.TABULA_RASA_ACCESS_MODE }}
         run: python -m tabula_rasa.deployment.release verify --image "$IMAGE"
       - name: Explicit bound migration (separate credential and process)
         env:
@@ -56,9 +58,18 @@ jobs:
           python -m pip install playwright==1.62.0
           python -m playwright install --with-deps chromium
       - name: Deploy, verify and recover prior compatible image on smoke failure
+        if: vars.TABULA_RASA_ACCESS_MODE == 'restricted_alpha'
         env:
+          TABULA_RASA_ACCESS_MODE: ${{ vars.TABULA_RASA_ACCESS_MODE }}
           RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
           TABULA_RASA_ALPHA_USERNAME: ${{ secrets.TABULA_RASA_ALPHA_USERNAME }}
           TABULA_RASA_ALPHA_PASSWORD: ${{ secrets.TABULA_RASA_ALPHA_PASSWORD }}
+        run: python -m tabula_rasa.deployment.release promote --image "$IMAGE" >> "$GITHUB_STEP_SUMMARY"
+      - name: Deploy and verify named-user boundary (operator rollback on failure)
+        if: vars.TABULA_RASA_ACCESS_MODE == 'named_user'
+        env:
+          TABULA_RASA_ACCESS_MODE: ${{ vars.TABULA_RASA_ACCESS_MODE }}
+          RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
         run: python -m tabula_rasa.deployment.release promote --image "$IMAGE" >> "$GITHUB_STEP_SUMMARY"

@@ -105,6 +105,7 @@ def route_policy(request):
     if (policy is None or request.method != policy.method
             or (policy.scope == 'entity') != entity_route):
         request.state.security_event = 'authorization_denied'
+        request.state.security_reason = 'policy'
         raise TransportError('forbidden')
     return policy
 

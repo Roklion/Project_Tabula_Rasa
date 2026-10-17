@@ -103,6 +103,7 @@ No subscription purchase is implied.
 | --- | --- |
 | `RENDER_SERVICE_ID` | Exact service ID for this environment |
 | `TABULA_RASA_PUBLIC_ORIGIN` | Exact canonical HTTPS origin, no trailing slash |
+| `TABULA_RASA_ACCESS_MODE` | Explicit `restricted_alpha` or `named_user`, matching Render; missing/unknown stops verification before migration |
 | `TABULA_RASA_DEPLOY_DATABASE_SHA256` | Approved target fingerprint |
 
 | GitHub environment secret | Custody/use |
@@ -148,16 +149,20 @@ separate disposable administrator URL; never point the test suite at retained
 Neon staging/production. The one-time fixture is synthetic and deployment-wide,
 not a migrated business or an authority switch.
 
-## Named identity handoff (#310)
+## Named identity rollout (#321)
 
 [ADR 0003](adr/0003-commercial-identity-and-tenancy.md) selects ZITADEL hosted
 OIDC plus durable opaque PostgreSQL sessions. [Commercial identity](COMMERCIAL_IDENTITY.md)
-owns the exact provider/callback/mail/recovery checkpoints, future named versus
-restricted-alpha mode rules and #321 rollout. No identity settings are
-implemented by #310. Today's hosted development/staging path below continues
-to require the restricted synthetic Basic gate; #312/#321 must add the named
-path without weakening that gate. External beta and lasting live owner use
-must use normal named authorization and their separate acceptance gates.
+owns the approved provider/callback/mail/recovery contract. Named login,
+membership enforcement, switching and entity-owned connections are implemented.
+[Authenticated rollout](AUTHENTICATED_ROLLOUT.md) owns the operator setup,
+retained-staging rehearsal, named-image rollback and cross-EPIC handoff. Actual
+hosted provider acceptance remains pending. The setup and Blueprint above
+describe restricted synthetic alpha; they remain supported with explicit
+`TABULA_RASA_ACCESS_MODE=restricted_alpha` in Render and GitHub. Named promotion
+uses `named_user` in both and injects no Basic credentials. Follow the rollout
+checklist to remove synthetic settings and provision separate named credentials
+and grants. Lasting owner use and external beta retain their independent gates.
 
 ## Ingress, alpha access and session boundary
 
@@ -170,7 +175,7 @@ scope or relax Host/Origin checks. The application uses configured HTTPS origin
 for policy, not the internal hop's scheme. Its minimal probes accept internal
 health-check Hosts; private paths require the exact configured Host.
 
-Hosted development/staging refuses startup without explicit HTTPS,
+Restricted-alpha hosted development/staging refuses startup without explicit HTTPS,
 `alpha-synthetic`, an operator username, a valid scrypt password hash, direct
 TLS database URL and matching endpoint binding. HTTP Basic protects shell,
 assets, API, documents and schema paths; only minimal health/version probes are
@@ -187,18 +192,22 @@ Secrets and private request/draft data never enter safe HTTP error/log output.
 This temporary gate uses browser HTTP Basic authentication and a process-lived
 synthetic CSRF context. It issues no commercial session cookie. #222 owns the
 ADR's host-only HttpOnly/Secure/SameSite cookie, durable sessions, memberships
-and revocation; production rejects alpha credentials/context entirely. Restrict
-the temporary runtime to trusted synthetic use until that replacement lands.
+and revocation, now implemented by #312–#319; production rejects alpha
+credentials/context entirely. Restrict the temporary runtime to trusted synthetic
+use. Hosted mode must be explicit; missing named configuration never falls back.
 
 ## Promotion, failure and rollback
 
-The ordered lifecycle is image verification -> bound `current`/`upgrade`/`health`
+The ordered lifecycle is mode/image verification -> bound `current`/`upgrade`/`health`
 in a separate migration container -> Render digest deployment -> readiness ->
-real browser smoke. The smoke checks gate restrictions, release identity,
+real browser smoke. Restricted-alpha smoke checks gate restrictions, release identity,
 deep-link/static/error routing, session scope and the rendered synthetic account
 read from PostgreSQL. It creates no new records, retains no traces/screenshots,
 and records only safe release metadata. Repeat a successful staging promotion
 and retain both workflow-run/digest references as repeatability evidence.
+Named smoke instead verifies the public sign-in shell and anonymous/forged-Basic
+denial without provider login or private reads; readiness verifies DB connectivity.
+It does not complete the named hosted rehearsal. Results identify `access_mode`.
 
 Current automation supports releases whose deployed schema is already the
 image's head. Unknown/old revisions stop before migration; there is no stamp,
@@ -226,13 +235,16 @@ and matching schema head. Rollback retains this verified reference instead of
 constructing a pull reference from Render's SHA. A prior tag-only or unverifiable
 deployment stops before a new deploy: inspect it and pin the verified retained
 release by immutable digest through the operator procedure first.
-A live candidate whose smoke fails is replaced by that prior compatible digest
+A live restricted-alpha candidate whose smoke fails is replaced by that prior compatible digest
 and checked with the same registry/Render integrity comparison before smoke.
 The workflow still fails, preventing claims of promotion
 success. An initial deploy with no prior image stops for operator inspection.
 Render terminal deployment failure stops; inspect the retained previous live
 deployment. An uncertain POST, poll failure or timeout stops for inspection
 without retrying the deploy or racing it with rollback.
+Named smoke failure stops for operator inspection rather than restoring an older
+auth implementation automatically. Follow the [named-mode rollback checklist](AUTHENTICATED_ROLLOUT.md#compatible-application-rollback-and-incidents),
+keeping named access and forward schema throughout.
 
 ### Digest verification investigation (October 9, 2026)
 
@@ -265,7 +277,9 @@ superseded main images; a manual development rollback instead selects the exact
 retained compatible digest in the Render Dashboard, after pausing automatic
 development promotion. Verify readiness/release and run
 `python -m tabula_rasa.deployment.smoke --release EXPECTED_SHA` with this
-environment's origin and smoke credentials exported privately. Resume automatic
+environment's explicit access mode and origin exported privately (alpha smoke
+also needs its credentials). Named rollback additionally requires the reviewed
+auth/epoch compatibility checklist above. Resume automatic
 development promotion only after a validated corrective main release exists.
 Do not change/delete bookkeeping records as rollback. If the
 schema is incompatible, stop, restrict traffic/drain writers and use #220's
@@ -286,3 +300,9 @@ candidate's evidence and use [#288's release contract](TECHNICAL_ALPHA.md) for t
 complete workflow suite, real document binding, rollback rehearsal and manual
 acceptance. #279's completion does not complete #288, retire Streamlit or activate
 commercial production.
+
+## Operational telemetry
+
+[Operational observability](OBSERVABILITY.md) owns #332's sanitized contract,
+optional collection setup, tier/retention/access checkpoint, alert thresholds,
+staging smoke and #223 integration responsibilities.
