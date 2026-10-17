@@ -1,0 +1,1278 @@
+{
+  "jobs": [
+    {
+      "id": 117300845392,
+      "run_id": 39000043429,
+      "run_attempt": 1,
+      "head_sha": "b85cec2d95733d5492eb67ac0b200b6368ffe3a4",
+      "name": "Baseline | Windows environment setup",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-17T03:46:13Z",
+      "completed_at": "2026-10-17T03:48:11Z",
+      "labels": [
+        "windows-latest"
+      ],
+      "html_url": "https://github.com/Roklion/Project_Tabula_Rasa/actions/runs/39000043429/job/117300845392",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:14Z",
+          "completed_at": "2026-10-17T03:46:15Z"
+        },
+        {
+          "number": 2,
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:15Z",
+          "completed_at": "2026-10-17T03:46:21Z"
+        },
+        {
+          "number": 3,
+          "name": "Verify fixed source and record runtime",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:21Z",
+          "completed_at": "2026-10-17T03:46:23Z"
+        },
+        {
+          "number": 4,
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:23Z",
+          "completed_at": "2026-10-17T03:46:33Z"
+        },
+        {
+          "number": 5,
+          "name": "Install development dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:33Z",
+          "completed_at": "2026-10-17T03:47:37Z"
+        },
+        {
+          "number": 6,
+          "name": "Run Windows-only setup coverage",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:37Z",
+          "completed_at": "2026-10-17T03:48:06Z"
+        },
+        {
+          "number": 7,
+          "name": "Upload Windows results",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:48:06Z",
+          "completed_at": "2026-10-17T03:48:07Z"
+        },
+        {
+          "number": 13,
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:48:07Z",
+          "completed_at": "2026-10-17T03:48:07Z"
+        },
+        {
+          "number": 14,
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:48:07Z",
+          "completed_at": "2026-10-17T03:48:09Z"
+        },
+        {
+          "number": 15,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:48:09Z",
+          "completed_at": "2026-10-17T03:48:09Z"
+        }
+      ]
+    },
+    {
+      "id": 117300845471,
+      "run_id": 39000043429,
+      "run_attempt": 1,
+      "head_sha": "b85cec2d95733d5492eb67ac0b200b6368ffe3a4",
+      "name": "Partitioned | Frontend, contracts and runtime image",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-17T03:46:12Z",
+      "completed_at": "2026-10-17T03:47:50Z",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "html_url": "https://github.com/Roklion/Project_Tabula_Rasa/actions/runs/39000043429/job/117300845471",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:13Z",
+          "completed_at": "2026-10-17T03:46:14Z"
+        },
+        {
+          "number": 2,
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:14Z",
+          "completed_at": "2026-10-17T03:46:16Z"
+        },
+        {
+          "number": 3,
+          "name": "Verify fixed source and record runtime",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:16Z",
+          "completed_at": "2026-10-17T03:46:16Z"
+        },
+        {
+          "number": 4,
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:16Z",
+          "completed_at": "2026-10-17T03:46:19Z"
+        },
+        {
+          "number": 5,
+          "name": "Install development dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:19Z",
+          "completed_at": "2026-10-17T03:46:48Z"
+        },
+        {
+          "number": 6,
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:48Z",
+          "completed_at": "2026-10-17T03:46:50Z"
+        },
+        {
+          "number": 7,
+          "name": "Run npm --prefix web ci",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:50Z",
+          "completed_at": "2026-10-17T03:46:53Z"
+        },
+        {
+          "number": 8,
+          "name": "Run python -m tabula_rasa.http.export_openapi --output contracts/http/openapi.json",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:53Z",
+          "completed_at": "2026-10-17T03:46:55Z"
+        },
+        {
+          "number": 9,
+          "name": "Run npm --prefix web run api:generate",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:55Z",
+          "completed_at": "2026-10-17T03:46:56Z"
+        },
+        {
+          "number": 10,
+          "name": "Run git diff --exit-code -- contracts/http/openapi.json web/src/api/schema.d.ts",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:56Z",
+          "completed_at": "2026-10-17T03:46:56Z"
+        },
+        {
+          "number": 11,
+          "name": "Run npm --prefix web run build",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:56Z",
+          "completed_at": "2026-10-17T03:47:02Z"
+        },
+        {
+          "number": 12,
+          "name": "Run npm --prefix web run lint",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:02Z",
+          "completed_at": "2026-10-17T03:47:07Z"
+        },
+        {
+          "number": 13,
+          "name": "Run npm --prefix web test",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:07Z",
+          "completed_at": "2026-10-17T03:47:18Z"
+        },
+        {
+          "number": 14,
+          "name": "Run npm --prefix web run test:contracts",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:18Z",
+          "completed_at": "2026-10-17T03:47:20Z"
+        },
+        {
+          "number": 15,
+          "name": "Build and inspect commercial runtime image (no runtime secrets)",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:20Z",
+          "completed_at": "2026-10-17T03:47:46Z"
+        },
+        {
+          "number": 16,
+          "name": "Upload run-once contract results",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:46Z",
+          "completed_at": "2026-10-17T03:47:47Z"
+        },
+        {
+          "number": 30,
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:47Z",
+          "completed_at": "2026-10-17T03:47:47Z"
+        },
+        {
+          "number": 31,
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:47Z",
+          "completed_at": "2026-10-17T03:47:47Z"
+        },
+        {
+          "number": 32,
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:47Z",
+          "completed_at": "2026-10-17T03:47:47Z"
+        },
+        {
+          "number": 33,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:47Z",
+          "completed_at": "2026-10-17T03:47:47Z"
+        }
+      ]
+    },
+    {
+      "id": 117300845509,
+      "run_id": 39000043429,
+      "run_attempt": 1,
+      "head_sha": "b85cec2d95733d5492eb67ac0b200b6368ffe3a4",
+      "name": "Partitioned | Browser UI (shard 1/2)",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-17T03:46:13Z",
+      "completed_at": "2026-10-17T03:53:50Z",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "html_url": "https://github.com/Roklion/Project_Tabula_Rasa/actions/runs/39000043429/job/117300845509",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:14Z",
+          "completed_at": "2026-10-17T03:46:15Z"
+        },
+        {
+          "number": 2,
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:15Z",
+          "completed_at": "2026-10-17T03:46:16Z"
+        },
+        {
+          "number": 3,
+          "name": "Verify fixed source and record runtime",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:16Z",
+          "completed_at": "2026-10-17T03:46:17Z"
+        },
+        {
+          "number": 4,
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:17Z",
+          "completed_at": "2026-10-17T03:46:20Z"
+        },
+        {
+          "number": 5,
+          "name": "Run npm --prefix web ci",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:20Z",
+          "completed_at": "2026-10-17T03:46:26Z"
+        },
+        {
+          "number": 6,
+          "name": "Run npm --prefix web exec -- playwright install --with-deps chromium firefox webkit",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:26Z",
+          "completed_at": "2026-10-17T03:47:34Z"
+        },
+        {
+          "number": 7,
+          "name": "Run npm --prefix web run test:browser -- --shard=1/2",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:34Z",
+          "completed_at": "2026-10-17T03:53:42Z"
+        },
+        {
+          "number": 8,
+          "name": "Upload browser UI results",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:53:42Z",
+          "completed_at": "2026-10-17T03:53:47Z"
+        },
+        {
+          "number": 15,
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:53:47Z",
+          "completed_at": "2026-10-17T03:53:47Z"
+        },
+        {
+          "number": 16,
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:53:47Z",
+          "completed_at": "2026-10-17T03:53:47Z"
+        },
+        {
+          "number": 17,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:53:47Z",
+          "completed_at": "2026-10-17T03:53:47Z"
+        }
+      ]
+    },
+    {
+      "id": 117300845515,
+      "run_id": 39000043429,
+      "run_attempt": 1,
+      "head_sha": "b85cec2d95733d5492eb67ac0b200b6368ffe3a4",
+      "name": "Partitioned | Windows environment setup",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-17T03:46:12Z",
+      "completed_at": "2026-10-17T03:48:11Z",
+      "labels": [
+        "windows-latest"
+      ],
+      "html_url": "https://github.com/Roklion/Project_Tabula_Rasa/actions/runs/39000043429/job/117300845515",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:13Z",
+          "completed_at": "2026-10-17T03:46:14Z"
+        },
+        {
+          "number": 2,
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:14Z",
+          "completed_at": "2026-10-17T03:46:19Z"
+        },
+        {
+          "number": 3,
+          "name": "Verify fixed source and record runtime",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:19Z",
+          "completed_at": "2026-10-17T03:46:20Z"
+        },
+        {
+          "number": 4,
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:20Z",
+          "completed_at": "2026-10-17T03:46:27Z"
+        },
+        {
+          "number": 5,
+          "name": "Install development dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:27Z",
+          "completed_at": "2026-10-17T03:47:31Z"
+        },
+        {
+          "number": 6,
+          "name": "Run Windows-only setup coverage",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:31Z",
+          "completed_at": "2026-10-17T03:48:07Z"
+        },
+        {
+          "number": 7,
+          "name": "Upload Windows results",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:48:07Z",
+          "completed_at": "2026-10-17T03:48:08Z"
+        },
+        {
+          "number": 13,
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:48:08Z",
+          "completed_at": "2026-10-17T03:48:08Z"
+        },
+        {
+          "number": 14,
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:48:08Z",
+          "completed_at": "2026-10-17T03:48:10Z"
+        },
+        {
+          "number": 15,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:48:10Z",
+          "completed_at": "2026-10-17T03:48:10Z"
+        }
+      ]
+    },
+    {
+      "id": 117300845543,
+      "run_id": 39000043429,
+      "run_attempt": 1,
+      "head_sha": "b85cec2d95733d5492eb67ac0b200b6368ffe3a4",
+      "name": "Partitioned | Native browser (HTTP + PostgreSQL)",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-17T03:46:12Z",
+      "completed_at": "2026-10-17T03:58:20Z",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "html_url": "https://github.com/Roklion/Project_Tabula_Rasa/actions/runs/39000043429/job/117300845543",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:13Z",
+          "completed_at": "2026-10-17T03:46:14Z"
+        },
+        {
+          "number": 2,
+          "name": "Initialize containers",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:14Z",
+          "completed_at": "2026-10-17T03:46:26Z"
+        },
+        {
+          "number": 3,
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:26Z",
+          "completed_at": "2026-10-17T03:46:27Z"
+        },
+        {
+          "number": 4,
+          "name": "Verify fixed source and record runtime",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:27Z",
+          "completed_at": "2026-10-17T03:46:28Z"
+        },
+        {
+          "number": 5,
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:28Z",
+          "completed_at": "2026-10-17T03:46:31Z"
+        },
+        {
+          "number": 6,
+          "name": "Install development dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:31Z",
+          "completed_at": "2026-10-17T03:46:59Z"
+        },
+        {
+          "number": 7,
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:59Z",
+          "completed_at": "2026-10-17T03:47:02Z"
+        },
+        {
+          "number": 8,
+          "name": "Run npm --prefix web ci",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:02Z",
+          "completed_at": "2026-10-17T03:47:06Z"
+        },
+        {
+          "number": 9,
+          "name": "Run npm --prefix web run build",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:06Z",
+          "completed_at": "2026-10-17T03:47:13Z"
+        },
+        {
+          "number": 10,
+          "name": "Run python -m playwright install --with-deps chromium firefox webkit",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:13Z",
+          "completed_at": "2026-10-17T03:48:09Z"
+        },
+        {
+          "number": 11,
+          "name": "Run native browser concurrency and core workflow tests",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:48:09Z",
+          "completed_at": "2026-10-17T03:58:16Z"
+        },
+        {
+          "number": 12,
+          "name": "Upload native browser results",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:58:16Z",
+          "completed_at": "2026-10-17T03:58:17Z"
+        },
+        {
+          "number": 21,
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:58:17Z",
+          "completed_at": "2026-10-17T03:58:17Z"
+        },
+        {
+          "number": 22,
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:58:17Z",
+          "completed_at": "2026-10-17T03:58:17Z"
+        },
+        {
+          "number": 23,
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:58:17Z",
+          "completed_at": "2026-10-17T03:58:17Z"
+        },
+        {
+          "number": 24,
+          "name": "Stop containers",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:58:17Z",
+          "completed_at": "2026-10-17T03:58:17Z"
+        },
+        {
+          "number": 25,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:58:17Z",
+          "completed_at": "2026-10-17T03:58:17Z"
+        }
+      ]
+    },
+    {
+      "id": 117300845585,
+      "run_id": 39000043429,
+      "run_attempt": 1,
+      "head_sha": "b85cec2d95733d5492eb67ac0b200b6368ffe3a4",
+      "name": "Partitioned | Python suite (Linux + PostgreSQL)",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-17T03:46:12Z",
+      "completed_at": "2026-10-17T03:53:41Z",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "html_url": "https://github.com/Roklion/Project_Tabula_Rasa/actions/runs/39000043429/job/117300845585",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:13Z",
+          "completed_at": "2026-10-17T03:46:14Z"
+        },
+        {
+          "number": 2,
+          "name": "Initialize containers",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:14Z",
+          "completed_at": "2026-10-17T03:46:30Z"
+        },
+        {
+          "number": 3,
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:30Z",
+          "completed_at": "2026-10-17T03:46:31Z"
+        },
+        {
+          "number": 4,
+          "name": "Verify fixed source and record runtime",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:31Z",
+          "completed_at": "2026-10-17T03:46:31Z"
+        },
+        {
+          "number": 5,
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:31Z",
+          "completed_at": "2026-10-17T03:46:34Z"
+        },
+        {
+          "number": 6,
+          "name": "Install development dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:34Z",
+          "completed_at": "2026-10-17T03:46:52Z"
+        },
+        {
+          "number": 7,
+          "name": "Build NAS backup client image",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:52Z",
+          "completed_at": "2026-10-17T03:47:15Z"
+        },
+        {
+          "number": 8,
+          "name": "Verify synthetic NAS TLS backup and isolated restore",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:15Z",
+          "completed_at": "2026-10-17T03:47:17Z"
+        },
+        {
+          "number": 9,
+          "name": "Lint Python",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:17Z",
+          "completed_at": "2026-10-17T03:47:18Z"
+        },
+        {
+          "number": 10,
+          "name": "Run complete Python suite",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:18Z",
+          "completed_at": "2026-10-17T03:53:38Z"
+        },
+        {
+          "number": 11,
+          "name": "Upload Python results",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:53:38Z",
+          "completed_at": "2026-10-17T03:53:39Z"
+        },
+        {
+          "number": 20,
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:53:39Z",
+          "completed_at": "2026-10-17T03:53:39Z"
+        },
+        {
+          "number": 21,
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:53:39Z",
+          "completed_at": "2026-10-17T03:53:39Z"
+        },
+        {
+          "number": 22,
+          "name": "Stop containers",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:53:39Z",
+          "completed_at": "2026-10-17T03:53:39Z"
+        },
+        {
+          "number": 23,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:53:39Z",
+          "completed_at": "2026-10-17T03:53:39Z"
+        }
+      ]
+    },
+    {
+      "id": 117300845599,
+      "run_id": 39000043429,
+      "run_attempt": 1,
+      "head_sha": "b85cec2d95733d5492eb67ac0b200b6368ffe3a4",
+      "name": "Partitioned | Browser UI (shard 2/2)",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-17T03:46:12Z",
+      "completed_at": "2026-10-17T03:53:01Z",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "html_url": "https://github.com/Roklion/Project_Tabula_Rasa/actions/runs/39000043429/job/117300845599",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:13Z",
+          "completed_at": "2026-10-17T03:46:14Z"
+        },
+        {
+          "number": 2,
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:14Z",
+          "completed_at": "2026-10-17T03:46:15Z"
+        },
+        {
+          "number": 3,
+          "name": "Verify fixed source and record runtime",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:15Z",
+          "completed_at": "2026-10-17T03:46:15Z"
+        },
+        {
+          "number": 4,
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:15Z",
+          "completed_at": "2026-10-17T03:46:18Z"
+        },
+        {
+          "number": 5,
+          "name": "Run npm --prefix web ci",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:18Z",
+          "completed_at": "2026-10-17T03:46:23Z"
+        },
+        {
+          "number": 6,
+          "name": "Run npm --prefix web exec -- playwright install --with-deps chromium firefox webkit",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:23Z",
+          "completed_at": "2026-10-17T03:47:19Z"
+        },
+        {
+          "number": 7,
+          "name": "Run npm --prefix web run test:browser -- --shard=2/2",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:19Z",
+          "completed_at": "2026-10-17T03:52:55Z"
+        },
+        {
+          "number": 8,
+          "name": "Upload browser UI results",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:52:55Z",
+          "completed_at": "2026-10-17T03:52:58Z"
+        },
+        {
+          "number": 15,
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:52:58Z",
+          "completed_at": "2026-10-17T03:52:58Z"
+        },
+        {
+          "number": 16,
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:52:58Z",
+          "completed_at": "2026-10-17T03:52:59Z"
+        },
+        {
+          "number": 17,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:52:59Z",
+          "completed_at": "2026-10-17T03:52:59Z"
+        }
+      ]
+    },
+    {
+      "id": 117300845653,
+      "run_id": 39000043429,
+      "run_attempt": 1,
+      "head_sha": "b85cec2d95733d5492eb67ac0b200b6368ffe3a4",
+      "name": "Baseline | Combined frontend, UI and native browser",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-17T03:46:13Z",
+      "completed_at": "2026-10-17T04:11:06Z",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "html_url": "https://github.com/Roklion/Project_Tabula_Rasa/actions/runs/39000043429/job/117300845653",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:14Z",
+          "completed_at": "2026-10-17T03:46:15Z"
+        },
+        {
+          "number": 2,
+          "name": "Initialize containers",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:15Z",
+          "completed_at": "2026-10-17T03:46:26Z"
+        },
+        {
+          "number": 3,
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:26Z",
+          "completed_at": "2026-10-17T03:46:27Z"
+        },
+        {
+          "number": 4,
+          "name": "Verify fixed source and record runtime",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:27Z",
+          "completed_at": "2026-10-17T03:46:27Z"
+        },
+        {
+          "number": 5,
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:27Z",
+          "completed_at": "2026-10-17T03:46:32Z"
+        },
+        {
+          "number": 6,
+          "name": "Install development dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:32Z",
+          "completed_at": "2026-10-17T03:46:59Z"
+        },
+        {
+          "number": 7,
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:59Z",
+          "completed_at": "2026-10-17T03:47:02Z"
+        },
+        {
+          "number": 8,
+          "name": "Run npm --prefix web ci",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:02Z",
+          "completed_at": "2026-10-17T03:47:06Z"
+        },
+        {
+          "number": 9,
+          "name": "Run python -m tabula_rasa.http.export_openapi --output contracts/http/openapi.json",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:06Z",
+          "completed_at": "2026-10-17T03:47:09Z"
+        },
+        {
+          "number": 10,
+          "name": "Run npm --prefix web run api:generate",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:09Z",
+          "completed_at": "2026-10-17T03:47:10Z"
+        },
+        {
+          "number": 11,
+          "name": "Run git diff --exit-code -- contracts/http/openapi.json web/src/api/schema.d.ts",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:10Z",
+          "completed_at": "2026-10-17T03:47:10Z"
+        },
+        {
+          "number": 12,
+          "name": "Run npm --prefix web run build",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:10Z",
+          "completed_at": "2026-10-17T03:47:17Z"
+        },
+        {
+          "number": 13,
+          "name": "Run npm --prefix web run lint",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:17Z",
+          "completed_at": "2026-10-17T03:47:23Z"
+        },
+        {
+          "number": 14,
+          "name": "Run npm --prefix web test",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:23Z",
+          "completed_at": "2026-10-17T03:47:40Z"
+        },
+        {
+          "number": 15,
+          "name": "Restore pre-partition execution ownership",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:40Z",
+          "completed_at": "2026-10-17T03:47:40Z"
+        },
+        {
+          "number": 16,
+          "name": "Install Node browser engines",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:40Z",
+          "completed_at": "2026-10-17T03:48:35Z"
+        },
+        {
+          "number": 17,
+          "name": "Run unsharded UI and repeated contracts",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:48:35Z",
+          "completed_at": "2026-10-17T04:00:21Z"
+        },
+        {
+          "number": 18,
+          "name": "Build and inspect commercial runtime image (no runtime secrets)",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T04:00:21Z",
+          "completed_at": "2026-10-17T04:00:51Z"
+        },
+        {
+          "number": 19,
+          "name": "Run python -m playwright install --with-deps chromium firefox webkit",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T04:00:51Z",
+          "completed_at": "2026-10-17T04:00:54Z"
+        },
+        {
+          "number": 20,
+          "name": "Run native browser concurrency and core workflow tests",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T04:00:54Z",
+          "completed_at": "2026-10-17T04:10:56Z"
+        },
+        {
+          "number": 21,
+          "name": "Upload combined reports and overlay proof",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T04:10:56Z",
+          "completed_at": "2026-10-17T04:11:02Z"
+        },
+        {
+          "number": 39,
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T04:11:02Z",
+          "completed_at": "2026-10-17T04:11:02Z"
+        },
+        {
+          "number": 40,
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T04:11:02Z",
+          "completed_at": "2026-10-17T04:11:02Z"
+        },
+        {
+          "number": 41,
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T04:11:02Z",
+          "completed_at": "2026-10-17T04:11:03Z"
+        },
+        {
+          "number": 42,
+          "name": "Stop containers",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T04:11:03Z",
+          "completed_at": "2026-10-17T04:11:03Z"
+        },
+        {
+          "number": 43,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T04:11:03Z",
+          "completed_at": "2026-10-17T04:11:03Z"
+        }
+      ]
+    },
+    {
+      "id": 117300845658,
+      "run_id": 39000043429,
+      "run_attempt": 1,
+      "head_sha": "b85cec2d95733d5492eb67ac0b200b6368ffe3a4",
+      "name": "Baseline | Python suite (Linux + PostgreSQL)",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-17T03:46:12Z",
+      "completed_at": "2026-10-17T03:55:24Z",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "html_url": "https://github.com/Roklion/Project_Tabula_Rasa/actions/runs/39000043429/job/117300845658",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:13Z",
+          "completed_at": "2026-10-17T03:46:14Z"
+        },
+        {
+          "number": 2,
+          "name": "Initialize containers",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:14Z",
+          "completed_at": "2026-10-17T03:46:32Z"
+        },
+        {
+          "number": 3,
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:32Z",
+          "completed_at": "2026-10-17T03:46:34Z"
+        },
+        {
+          "number": 4,
+          "name": "Verify fixed source and record runtime",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:34Z",
+          "completed_at": "2026-10-17T03:46:34Z"
+        },
+        {
+          "number": 5,
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:34Z",
+          "completed_at": "2026-10-17T03:46:38Z"
+        },
+        {
+          "number": 6,
+          "name": "Install development dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:46:38Z",
+          "completed_at": "2026-10-17T03:47:02Z"
+        },
+        {
+          "number": 7,
+          "name": "Build NAS backup client image",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:02Z",
+          "completed_at": "2026-10-17T03:47:22Z"
+        },
+        {
+          "number": 8,
+          "name": "Verify synthetic NAS TLS backup and isolated restore",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:22Z",
+          "completed_at": "2026-10-17T03:47:25Z"
+        },
+        {
+          "number": 9,
+          "name": "Lint Python",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:25Z",
+          "completed_at": "2026-10-17T03:47:25Z"
+        },
+        {
+          "number": 10,
+          "name": "Run complete Python suite",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:47:25Z",
+          "completed_at": "2026-10-17T03:55:20Z"
+        },
+        {
+          "number": 11,
+          "name": "Upload Python results",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:55:20Z",
+          "completed_at": "2026-10-17T03:55:21Z"
+        },
+        {
+          "number": 20,
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:55:21Z",
+          "completed_at": "2026-10-17T03:55:21Z"
+        },
+        {
+          "number": 21,
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:55:21Z",
+          "completed_at": "2026-10-17T03:55:21Z"
+        },
+        {
+          "number": 22,
+          "name": "Stop containers",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:55:21Z",
+          "completed_at": "2026-10-17T03:55:22Z"
+        },
+        {
+          "number": 23,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T03:55:22Z",
+          "completed_at": "2026-10-17T03:55:22Z"
+        }
+      ]
+    },
+    {
+      "id": 117305515770,
+      "run_id": 39000043429,
+      "run_attempt": 1,
+      "head_sha": "b85cec2d95733d5492eb67ac0b200b6368ffe3a4",
+      "name": "Evidence pair status",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-17T04:11:08Z",
+      "completed_at": "2026-10-17T04:11:12Z",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "html_url": "https://github.com/Roklion/Project_Tabula_Rasa/actions/runs/39000043429/job/117305515770",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T04:11:09Z",
+          "completed_at": "2026-10-17T04:11:09Z"
+        },
+        {
+          "number": 2,
+          "name": "Require all evidence components",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T04:11:09Z",
+          "completed_at": "2026-10-17T04:11:09Z"
+        },
+        {
+          "number": 3,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-17T04:11:09Z",
+          "completed_at": "2026-10-17T04:11:09Z"
+        }
+      ]
+    }
+  ]
+}

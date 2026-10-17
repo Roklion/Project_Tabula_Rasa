@@ -3,7 +3,7 @@ import copy
 import yaml
 
 SOURCE = '84f427e1ec0f9bb38baf63b7b4c6a6b0bb98f6db'
-SAMPLE = 2
+SAMPLE = 3
 root = Path.cwd()
 original = yaml.safe_load((root / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
 base = original['jobs']
