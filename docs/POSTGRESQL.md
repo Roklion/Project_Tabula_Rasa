@@ -40,6 +40,13 @@ retention/recovery limits and the explicit hosted scheduling setup checkpoint.
 
 ## Access and migration tools
 
+Revision `0013_document_locations` permits managed S3 connection references and
+retains prior receipt locators separately from canonical metadata and links.
+It stores no receipt bytes or credentials and preserves export v1's 26 domains.
+Follow [Document storage and recovery](DOCUMENT_STORAGE_RECOVERY.md) for explicit
+verified location migration, preserved Drive grants, isolated recovery and the
+pending hosted-provider acceptance checkpoint.
+
 Use synchronous **SQLAlchemy Core 2.0 + Psycopg 3**, with **Alembic** for
 schema revisions. Core supplies bound SQL, connections and pooling without
 an ORM domain model. Repository SQL and returned-row mapping belong to
