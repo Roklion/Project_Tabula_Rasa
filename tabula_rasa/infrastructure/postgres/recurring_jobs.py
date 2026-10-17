@@ -10,6 +10,7 @@ from sqlalchemy import text
 
 from tabula_rasa.application.recurring import RecurringService
 from tabula_rasa.errors import StorageConflictError, StorageValidationError
+from tabula_rasa.ledger_validation import iso_date
 from .jobs import JobQueue, JobRegistry
 from .audit import audit_context
 from .operations import repository_operation
@@ -71,7 +72,7 @@ def enqueue_reconciliation(database, scope, *, through_date=None, service_id='re
     if selected['authority'] != 'worker':
         return []
     today = business_today(selected['time_zone'])
-    cutoff = date.fromisoformat(str(through_date)) if through_date is not None else today
+    cutoff = date.fromisoformat(iso_date(through_date)) if through_date is not None else today
     if cutoff > today:
         raise StorageValidationError('Worker reconciliation cannot generate future business dates.')
     service = create_postgres_services(database, scope).recurring

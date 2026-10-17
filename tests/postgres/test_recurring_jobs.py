@@ -285,6 +285,24 @@ def test_authorized_http_command_queues_same_jobs_and_page_reads_do_not_dispatch
         assert future.status_code == 422 and future.json()['error']['code'] == 'validation'
 
 
+@pytest.mark.parametrize('authority', ['explicit', 'worker'])
+@pytest.mark.parametrize('cutoff', ['not-a-date', '2026-02-30', ''])
+def test_http_reconciliation_rejects_invalid_dates_without_queue_or_ledger_effects(database, authority, cutoff):
+    from tests.postgres.test_authorization_http import named_client
+    from tabula_rasa.infrastructure.postgres.composition import create_postgres_services
+
+    with named_client(database) as (client, _, _, _, _, _, headers):
+        if authority == 'worker':
+            activate(database)
+        services = create_postgres_services(database, 'alpha')
+        result = client.post('/api/v1/entities/alpha/recurring/reconcile', headers=headers,
+                             json={'through_date': cutoff})
+        assert result.status_code == 422, result.text
+        assert result.json()['error']['code'] == 'validation'
+        assert worker(database).diagnostics() == ()
+        assert services.transactions.list() == []
+
+
 def test_distinct_overlapping_cutoff_jobs_reuse_occurrence_and_audit_identities(database, monkeypatch):
     from tabula_rasa.infrastructure.postgres.recurring import PostgresRecurringRepository
     alpha, _ = seed_core(database)
