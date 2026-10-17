@@ -6,6 +6,8 @@ const origin = `http://127.0.0.1:${port}`;
 
 export default defineConfig({
   testDir: './e2e',
+  outputDir: 'test-results/browser/artifacts',
+  reporter: [['line'], ['junit', { outputFile: 'test-results/browser/results.xml' }]],
   fullyParallel: true,
   workers: process.env.CI ? 2 : undefined,
   use: { baseURL: origin, trace: 'retain-on-failure' },

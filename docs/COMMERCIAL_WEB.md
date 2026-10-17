@@ -83,7 +83,9 @@ models. Commit library locks/pins; never commit generated build output or
 environment secrets.
 
 Required npm scripts from #278: `dev`, `build` (TypeScript check + Vite build),
-`typecheck`, `lint`, `test` (Vitest run), `test:e2e` (Playwright), and
+`typecheck`, `lint`, `test` (Vitest run), `test:e2e` (run-once contracts then
+Playwright UI), `test:contracts` (HTTP/Git),
+`test:browser` (all UI projects or an explicit shard), and
 `api:generate` (`openapi-typescript` over `../contracts/http/openapi.json`).
 The API exporter from #277 writes deterministic JSON to `--output` without
 reading settings/credentials, starting database lifespan or using the network.

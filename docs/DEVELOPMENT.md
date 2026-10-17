@@ -103,7 +103,7 @@ they are not mandatory before PR creation or at review completion.
 
 [Repository CI](../.github/workflows/ci.yml) consolidates the former PostgreSQL
 and commercial-foundation workflows. Its stable merge-gate check name is
-**`Full test suite`**. It requires success from all three parallel jobs:
+**`Full test suite`**. It requires success from all required partitions (six runner jobs):
 
 - **Python suite (Linux + PostgreSQL)** installs `requirements-dev.txt` with
   Python 3.12, runs `ruff check .` and `python -m pytest -ra` over every test
@@ -117,12 +117,29 @@ and commercial-foundation workflows. Its stable merge-gate check name is
   Python 3.12. Those tests' existing platform skips on Linux are covered here,
   including the real Python 3.12 setup harness. The remaining suite runs once
   on Linux; no second full Python run is added on Windows.
-- **Browser and generated API contract** retains the existing Node 24/npm
-  contract generation/drift check, TypeScript build, ESLint, Vitest and three-engine
-  Playwright shell/accessibility checks, plus compiled-browser concurrency and core workflow tests against a
-  disposable PostgreSQL instance. The complete Python suite and lint remain
-  owned by the Python job; browser concurrency runs here after the SPA build. The explicitly invoked
-  Streamlit viewport scripts below remain optional developer checks.
+- **Frontend, contracts and runtime image** owns Node 24/npm OpenAPI/client
+  generation and drift checking, TypeScript/build, ESLint, Vitest, browser-independent
+  HTTP/Git preview contracts and the commercial Docker image build/import inspection.
+  The preview contracts run once without installing or launching browser engines.
+- **Browser UI (shard 1/2 and 2/2)** partitions all Playwright UI/accessibility
+  cases with Playwright's fully-parallel test sharding, two workers per runner and
+  all four existing browser/device projects. Both shards are required; fail-fast
+  is disabled to retain diagnostics from both. No browser/viewport or assertion
+  is removed. Each shard uploads a uniquely named JUnit/trace/screenshot artifact.
+- **Native browser (HTTP + PostgreSQL)** independently builds the SPA and runs
+  every `tests/postgres/test*browser*.py` module against its own disposable
+  PostgreSQL service with all three engines and required-browser mode. The CI
+  policy test verifies the explicit file inventory so a newly added module cannot
+  be silently omitted. The complete Python suite still discovers every test;
+  native scenarios skip there because that isolated checkout has no SPA build.
+  Native tests execute in this required job rather than twice. Python lint and
+  non-browser integration contracts remain owned by the Python job.
+
+The explicitly invoked Streamlit viewport scripts below remain optional developer
+checks; supported legacy unit/integration coverage remains required in Python CI.
+See [CI execution evidence and suite selection](CI_TEST_SUITES.md) for the cost
+baseline, coverage rationale, bounded budgets, focused commands and comparison
+procedure. No path-based or scheduled-only selection is introduced.
 
 The suite needs no production credentials, Google OAuth grants or live ledgers.
 It uses read-only repository permissions, pip/npm dependency caches, bounded job
@@ -337,7 +354,7 @@ private ledger data, receipts, backups, or validation output.
 
 The [bounded technical-alpha browser gate](COMMERCIAL_BROWSER_QUALITY.md) adds
 axe scans, desktop/mobile journeys and keyboard/failure checks to the existing
-Playwright baseline. Repository CI runs it in the required browser job after
+Playwright baseline. Repository CI runs it in the required native-browser job after
 compiling the SPA; the guide owns local setup and outstanding release evidence.
 
 ## Operational telemetry

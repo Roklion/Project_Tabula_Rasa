@@ -16,7 +16,7 @@ local development needs no telemetry account or secret.
 | #312/#313 identity/authorization | Reuses login success/failure, logout/local clearing/failure, all-session revoke and identity/authorization denials. Adds cross-entity/capability/CSRF reason without a foreign selector. Provider failure on a callback is a failure even though the browser receives HTTP 303. |
 | Document services/HTTP | Existing errors, upload/link/unlink/recovery and tenant isolation remain authoritative. Document errors identify the dependency without object keys, names or bytes. #337 owns the new managed adapter. |
 | Browser | Existing `RouteError`, `ErrorNotice`, `ApiError` use safe messages/request IDs. No browser SDK, replay, console harvesting, URL or draft capture is enabled. Client-only crashes retain the existing safe fallback; server diagnostics do not claim to observe them. |
-| Jobs/backup/audit | Closed `job_run`/`backup_run` seam is ready for #333. #294 now supplies the NAS runner, verified-generation health, hourly status task and independent missing-run notification checkpoint; central ingestion does not replace that path. #335 owns immutable, atomic business mutation history separately. |
+| Jobs/backup/audit | The #333 queue foundation now exists; its CLI/durable attempt diagnostics remain authoritative. The shared `job_run`/`backup_run` seam is available for producer integration and #334 recurring handlers. #294 now supplies the NAS runner, verified-generation health, hourly status task and independent missing-run notification checkpoint; central ingestion does not replace that path. #335 owns immutable, atomic business mutation history separately. |
 
 The shared owner is `tabula_rasa/telemetry.py`; adapters supply only metadata
 from registered server actions and already validated context. There is no new
@@ -152,7 +152,7 @@ validate and tune, not claimed SLOs:
 | `provider=documents`, `outcome=failure`, `failure_code=unavailable` | >=3 in 5 minutes, healthy for 5 minutes | Document operator: inspect binding/provider state; preserve recoverable uploads and receipt bytes. |
 | `telemetry_delivery` or ingestion absent during known probe traffic | >=1 notice, or no readiness log for 10 minutes | Operator: Render console, token/quota/source; independent uptime alert remains active if collection stops. Do not alert on ordinary idle tenant traffic. |
 | Security denials | >=20 denials in 5 minutes per stage; 5-minute recovery | Operator: compare action/reason/release and pseudonymous caller context, without reconstructing foreign IDs. |
-| Recurring/job failure (#333/#334) | On terminal failure; otherwise >=3 failed runs in 15 minutes; explicit successful run resolves | Job owner must emit `job_run`/`job_execute`, truthful outcome/provider status and pseudonymous stable job reference. No job exists in this change. |
+| Recurring/job failure (#333/#334) | On terminal failure; otherwise >=3 failed runs in 15 minutes; explicit successful run resolves | Job owner must emit `job_run`/`job_execute`, truthful outcome/provider status and pseudonymous stable job reference. The #333 queue exists; producer telemetry and #334 recurring handler integration must connect confirmed durable outcomes. This PR does not activate a worker. |
 | Missing backup (#294) | Existing hourly `wrapper status` reports failed/missing/stale/capacity/overdue nonzero; the due generation becomes stale after the existing 2-hour grace. Verified healthy status resolves | NAS operator registers abnormal-exit notification plus an independent missing-NAS check-in or recorded operator check. Preserve Sunday/Wednesday 22:00 America/New_York and DST; API startup never stands in for a backup. |
 
 Free Render cold starts/suspension and Neon idle compute can exceed probe
@@ -203,7 +203,7 @@ provider-denied login, unavailable callback, logout and revoke with their
 existing tests/runbook. #341 must emit `privileged_denied` for future
 backup/restore/admin capability failures, using only registered safe actions,
 trusted references and request/release context. It must not fabricate support
-authority or log a submitted target. #333/#294 must emit only confirmed run
+authority or log a submitted target. Job and NAS integrations must emit only confirmed run
 results; #337 owns adapter-specific failures; #342 consumes hosted evidence.
 
 Hosted setup, notification delivery and staging smoke remain an operator
