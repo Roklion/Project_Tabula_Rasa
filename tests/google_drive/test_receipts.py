@@ -12,6 +12,37 @@ from tabula_rasa.google_drive import (
 from ._support import FakeResponse, DriveSession, drive_settings, oauth_config
 
 class TestGoogleDriveReceipts:
+    def test_explicit_recovery_upload_preserves_canonical_names_with_normal_retry_owner(self):
+        session = DriveSession([
+            FakeResponse(200, {'files': []}), FakeResponse(200, {'files': []}),
+            requests.ConnectionError('synthetic response lost'), FakeResponse(200, {'files': []}),
+            FakeResponse(200, {'id': 'restored123456'}),
+        ])
+        client = GoogleDriveClient(oauth_config(), drive_settings(), session=session, sleeper=lambda _: None)
+        result = client.upload_receipt(profile_key='north', folder_id='folder123456', original_name='résumé.pdf',
+            stored_filename='résumé (2).pdf', content=b'receipt', mime_type='application/pdf', receipt_id='a' * 32)
+        assert result['name'] == 'résumé (2).pdf' and result['description'] == 'résumé.pdf'
+        assert [method for method, *_ in session.requests] == ['GET', 'GET', 'POST', 'GET', 'POST']
+        uploads = [request[2]['data'] for request in session.requests if request[0] == 'POST']
+        import json
+        metadata = [json.loads(body.split(b'\r\n\r\n', 1)[1].split(b'\r\n', 1)[0]) for body in uploads]
+        assert metadata[0] == metadata[1]
+        assert metadata[0]['appProperties']['tabulaRasaReceiptId'] == 'a' * 32
+
+    @pytest.mark.parametrize('existing', ['name', 'identity'])
+    def test_explicit_recovery_refuses_filename_or_identity_collision_without_upload(self, existing):
+        from tests.drive_fixtures import receipt_drive_file
+        checksum = hashlib.sha256(b'receipt').hexdigest()
+        file = receipt_drive_file('existing123456', 'other.pdf', profile_key='north', sha256=checksum)
+        responses = ([FakeResponse(200, {'files': [file]})] if existing == 'identity' else
+                     [FakeResponse(200, {'files': []}), FakeResponse(200, {'files': [{'name': 'receipt.pdf'}]})])
+        session = DriveSession(responses)
+        client = GoogleDriveClient(oauth_config(), drive_settings(), session=session, sleeper=lambda _: None)
+        with pytest.raises(GoogleDriveAccessError):
+            client.upload_receipt(profile_key='north', folder_id='folder123456', original_name='receipt.pdf',
+                stored_filename='receipt.pdf', content=b'receipt', mime_type='application/pdf', receipt_id='a' * 32)
+        assert all(method == 'GET' for method, *_ in session.requests)
+
     def test_receipt_upload_is_transaction_scoped_and_sanitizes_name(self) -> None:
         session = DriveSession(
             [

@@ -105,13 +105,20 @@ class PostgresReceiptRepository(EntityRepository):
         with self.operation(read_only=True) as connection:
             return tuple(self.document(row) for row in self.rows(connection, 'documents'))
 
-    def promote_locations(self, expected, destinations, *, target_kind, target_scope, connection_binding=None):
+    def promote_locations(self, expected, destinations, *, target_kind, target_scope, connection_binding=None,
+                          expected_content_sha256=None):
         """Explicit frozen-entity operator action; compare all metadata atomically."""
         target = type(self)(self.database, self.entity_id, store_kind=target_kind, store_scope_key=target_scope)
-        if len(expected) != len(destinations) or target_kind != 's3' or target_scope == self.store_scope_key:
+        if len(expected) != len(destinations) or target_kind not in {'google_drive', 's3'} or target_scope == self.store_scope_key:
             raise DocumentValidationError('Invalid receipt location promotion.')
         with self.operation() as connection:
             self.lock_entity(connection)
+            if expected_content_sha256 is not None:
+                from tabula_rasa.bookkeeping_export.format import build_artifact
+                from .entity_export import PostgresEntityExportRepository
+                snapshot = PostgresEntityExportRepository(self.database, self.entity_id).read_snapshot(connection)
+                if build_artifact(snapshot)['manifest']['content_sha256'] != expected_content_sha256:
+                    raise StorageConflictError('The restored bookkeeping/link recovery point changed during copy.')
             rows = self.rows(connection, 'documents')
             current = tuple(self.document(row) for row in rows)
             if current != tuple(expected):
@@ -131,7 +138,7 @@ class PostgresReceiptRepository(EntityRepository):
                      'key': values['storage_key'], 'url': values['open_url']})
             if connection_binding is not None:
                 from .managed_documents import install_managed_connection
-                install_managed_connection(connection, self.entity_id, target_scope, **connection_binding)
+                install_managed_connection(connection, self.entity_id, target_scope, provider=target_kind, **connection_binding)
 
     def check_profile(self, profile_key):
         if profile_key != self.entity_id:

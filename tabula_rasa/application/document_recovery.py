@@ -19,8 +19,23 @@ class CopyResult:
     dry_run: bool
 
 
+def validate_document_inventory(documents, source, entity_id):
+    """Reconcile registered metadata with a fresh provider inventory before export."""
+    inventory = source.inventory(entity_id, fresh=True)
+    registered = {item.storage_key: item for item in documents}
+    seen = set()
+    for item in inventory.documents:
+        expected = registered.get(item.storage_key)
+        if (item.profile_key != entity_id or item.storage_key in seen or expected is None
+                or item.metadata != expected.metadata):
+            raise DocumentValidationError('Reconcile unregistered, duplicate or mismatched source receipts before copying this entity.')
+        seen.add(item.storage_key)
+    if inventory.unverified_storage_keys or seen != set(registered):
+        raise DocumentValidationError('Reconcile unregistered, unverified or missing source receipts before copying this entity.')
+
+
 def copy_entity_documents(repository, source, target, *, dry_run=True, promote=False, connection_binding=None,
-                          recovery_snapshot=False, progress=None):
+                          recovery_snapshot=False, progress=None, expected_point_sha256=None):
     """Freeze writers first. Deterministic destination identities are checkpoints.
 
     A failed copy keeps all source locations authoritative. Restart reuses exact
@@ -33,10 +48,7 @@ def copy_entity_documents(repository, source, target, *, dry_run=True, promote=F
         raise DocumentValidationError('Copy requires distinct explicit source and destination bindings.')
     documents = repository.retained_documents()
     if not recovery_snapshot:
-        source_inventory = source.inventory(entity_id, fresh=True)
-        registered = {item.storage_key for item in documents}
-        if source_inventory.unverified_storage_keys or any(item.storage_key not in registered for item in source_inventory.documents):
-            raise DocumentValidationError('Reconcile unregistered or unverified source receipts before copying this entity.')
+        validate_document_inventory(documents, source, entity_id)
     copied = []
     for count, document in enumerate(documents, 1):
         if document.profile_key != entity_id:
@@ -65,7 +77,8 @@ def copy_entity_documents(repository, source, target, *, dry_run=True, promote=F
             progress({'stage': 'target_verified', 'verified': count, 'total': len(documents)})
     if promote and not dry_run:
         repository.promote_locations(documents, tuple(copied), target_kind=target.store_kind,
-                                     target_scope=target.scope_key, connection_binding=connection_binding)
+                                     target_scope=target.scope_key, connection_binding=connection_binding,
+                                     expected_content_sha256=expected_point_sha256)
     return CopyResult(len(documents), promote and not dry_run, dry_run)
 
 
@@ -76,7 +89,11 @@ def verify_entity_documents(repository, store):
         if document.profile_key != repository.entity_id:
             raise DocumentValidationError('Recovery returned a different business entity.')
         actual = store.metadata(repository.entity_id, document.storage_key)
-        if actual != document:
+        # Drive may return a different equivalent presentation URL from the
+        # historical SQL export. Identity, locator/version and integrity are
+        # authoritative; a navigational URL is not a byte-recovery invariant.
+        if (actual.profile_key != document.profile_key or actual.metadata != document.metadata
+                or actual.storage_key != document.storage_key):
             raise DocumentValidationError('Restored receipt metadata or provider version differs.')
         verify_document(document, store.fetch(repository.entity_id, document.storage_key))
     return len(documents)

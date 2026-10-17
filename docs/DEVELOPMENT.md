@@ -28,9 +28,10 @@ include the database tools; the Sheets runtime does not require them or a DB URL
 ## Commercial web/API development
 
 [Document storage and recovery](DOCUMENT_STORAGE_RECOVERY.md) covers #337/#338's
-private S3 adapter, elected Drive migration, isolated byte/DB verifier and manual
-provider checkpoint under #223/#124. Drive remains supported; live provider and
-release acceptance remain separate from synthetic tests.
+Drive-first runtime, private byte backup/offline verification and isolated
+Drive/PostgreSQL recovery under #223/#124. No AWS setup or S3 SDK is required.
+Optional object adoption/customer Drive self-service belongs to #382; selected
+Drive hosted evidence and release acceptance remain separate from synthetic tests.
 
 [ADR 0002](adr/0002-commercial-web-runtime.md) selects the commercial browser,
 HTTP and deployment stack under #276/#221/#124. Follow

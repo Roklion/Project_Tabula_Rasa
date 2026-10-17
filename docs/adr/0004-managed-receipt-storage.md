@@ -1,7 +1,9 @@
-# ADR 0004: Private S3 receipt bytes and explicit recovery
+# ADR 0004: Drive-first receipt storage and optional managed providers
 
-Date: 2026-10-16. Status: accepted implementation choice; operator account,
-billing, bucket provisioning and hosted acceptance remain pending.
+Date: 2026-10-16; amended 2026-10-17 by the owner's Drive-first direction.
+Status: Google Drive remains active. S3 is optional engineering groundwork;
+commercial provider review/adoption belongs to #382. #337/#338 do not depend on
+AWS accounts, billing, buckets or credentials.
 
 Issues #337/#338 implement part of operations EPIC #223 and initiative #124.
 PostgreSQL remains authoritative for canonical document metadata and bookkeeping
@@ -37,8 +39,16 @@ Sources checked for this decision: [S3 pricing](https://aws.amazon.com/s3/pricin
 
 ## Decision and stage budget
 
-Select **AWS S3 Standard** for its native recoverable versions and straightforward
-IAM boundaries. Its published design targets are 11 nines of durability and
+Continue **Google Drive** for the current owner-operated storage and PostgreSQL
+receipt recovery path, reusing existing OAuth/folder/connection infrastructure.
+The new explicit verified byte archives and isolated Drive restore do not need
+AWS setup. Actual Drive capacity/access/retention and hosted recovery evidence
+remain explicit selected-provider checkpoints, not assumptions.
+
+If #382 later elects managed object storage, **AWS S3 Standard** is the current
+implementation candidate for native recoverable versions and straightforward
+IAM boundaries; reassess this comparison and current costs before adoption.
+Its published design targets are 11 nines of durability and
 99.99% availability, not evidence of achieved application recovery. Avoid
 infrequent/archive classes and their retrieval/minimum-duration costs initially.
 Use SSE-S3 (AES256), HTTPS and private, version-enabled buckets. KMS, Object Lock,
@@ -85,5 +95,7 @@ in provider inventory. Unlink remains reference-only. Explicit deletion creates
 a marker and never deletes a version. Migration/restore verification deliberately
 reads exact bytes before atomically promoting locations, retaining originals.
 
-See [Document storage and recovery](../DOCUMENT_STORAGE_RECOVERY.md) for actual
-setup, operator approvals, restart behavior, retention and unresolved evidence.
+The object-key, S3 version-pin and IAM discussion above applies to the optional
+adapter. See [Drive storage and recovery](../DOCUMENT_STORAGE_RECOVERY.md) for
+the active provider's backup/restore, operator approvals and unresolved evidence,
+and [optional object storage](../OPTIONAL_OBJECT_STORAGE.md) for deferred S3 setup.

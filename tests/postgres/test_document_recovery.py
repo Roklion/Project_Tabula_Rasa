@@ -154,7 +154,7 @@ def test_isolated_recovery_uses_retained_metadata_and_pinned_version_after_delet
     assert verify_entity_documents(repo, target) == 2
     # Restore/copy bytes into an isolated namespace; originals and versions remain.
     isolated = s3_store(namespace='recovery/' + '2' * 32)
-    copy_entity_documents(repo, target, isolated, dry_run=False)
+    copy_entity_documents(repo, target, isolated, dry_run=False, recovery_snapshot=True)
     assert {doc.metadata for doc in isolated.inventory('alpha').documents} == {document.metadata, other.metadata}
     key, version = target._locator(document.storage_key)
     target.client.objects.pop((target.bucket, key, version))

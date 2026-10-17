@@ -97,12 +97,20 @@ class _ReceiptOperationsMixin:
         content: bytes,
         mime_type: str,
         receipt_id: str | None = None,
+        stored_filename: str | None = None,
     ) -> dict[str, Any]:
         """Create one receipt without replacing a same-named Drive file."""
         validate_receipt_upload(original_name, content)
         folder_id = self._valid_folder_id(folder_id)
-        base_filename = safe_receipt_filename(original_name)
-        original_filename = safe_receipt_filename(original_name)
+        # Explicit recovery preserves both canonical names; ordinary uploads
+        # retain basename normalization and automatic collision suffixes.
+        try:
+            base_filename = (validate_receipt_filename(stored_filename, 'Receipt stored filename')
+                             if stored_filename is not None else safe_receipt_filename(original_name))
+            original_filename = (validate_receipt_filename(original_name, 'Receipt original filename')
+                                 if stored_filename is not None else safe_receipt_filename(original_name))
+        except ReceiptManifestError:
+            raise GoogleDriveAccessError('Receipt recovery filename metadata is invalid.') from None
         content_sha256 = hashlib.sha256(content).hexdigest()
         receipt_id = str(receipt_id or secrets.token_hex(16))
         if not RECEIPT_ID_PATTERN.fullmatch(receipt_id):
@@ -122,8 +130,12 @@ class _ReceiptOperationsMixin:
                 upload_attempted=False,
             ) from error
         if existing_by_identity:
+            if stored_filename is not None and len(existing_by_identity) != 1:
+                raise GoogleDriveConflictError('Inspect duplicate receipt identities before recovery.')
             uploaded = existing_by_identity[0]
             filename = str(uploaded.get("name") or base_filename)
+            if stored_filename is not None and filename != stored_filename:
+                raise GoogleDriveConflictError('An existing receipt conflicts with the recovery filename.')
         else:
             inventory_query = " and ".join(
                 [
@@ -148,6 +160,8 @@ class _ReceiptOperationsMixin:
                     upload_attempted=False,
                 ) from error
             filename = ""
+            if stored_filename is not None and base_filename.casefold() in existing_names:
+                raise GoogleDriveConflictError('A different receipt already uses the recovery filename.')
             for occurrence in range(1, 1001):
                 candidate = suffixed_receipt_filename(
                     base_filename,

@@ -19,6 +19,10 @@ class EntityDocumentStore:
     def scope_key(self):
         return self.store.scope_key
 
+    @property
+    def store_kind(self):
+        return self.store.store_kind
+
     def _scope(self, entity_id):
         if entity_id != self.entity_id:
             raise DocumentValidationError("Document storage belongs to a different business entity.")

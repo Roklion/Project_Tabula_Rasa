@@ -32,6 +32,8 @@ class GoogleDriveDocumentStore:
     directly to the existing client rather than duplicated here.
     """
 
+    store_kind = 'google_drive'
+
     def __init__(self, profile_key: str, folder_id: str, client_factory: Callable[[], Any]) -> None:
         self.profile_key = profile_key
         self.folder_id = folder_id
@@ -57,6 +59,7 @@ class GoogleDriveDocumentStore:
                 profile_key=profile_key, folder_id=self.folder_id,
                 original_name=upload.original_filename, content=upload.content,
                 mime_type=upload.mime_type, receipt_id=upload.document_id,
+                **({'stored_filename': upload.stored_filename} if upload.stored_filename else {}),
             )
             reference = receipt_reference_from_drive_file(uploaded)
         except (GoogleDriveError, ReceiptManifestError) as error:

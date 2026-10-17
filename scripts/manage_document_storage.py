@@ -35,7 +35,13 @@ def read_binding(path):
 
 def execute(database, secrets, payload, *, operation, environment, revision=0, apply=False,
             expected_plan=None, approval_sha256=None, source_payload=None,
-            source_database_sha256=None, target_database_sha256=None, progress=None):
+            source_database_sha256=None, target_database_sha256=None, progress=None, archive_path=None):
+    if payload.get('provider') == 'google_drive':
+        from scripts.drive_document_recovery import execute_drive
+        return execute_drive(database, secrets, payload, operation=operation, environment=environment,
+            revision=revision, apply=apply, expected_plan=expected_plan, approval_sha256=approval_sha256,
+            archive_path=archive_path, source_database_sha256=source_database_sha256,
+            target_database_sha256=target_database_sha256, progress=progress)
     if (environment not in {'staging', 'production'} or payload.get('environment') != environment
             or set(payload) != {'environment', 'organization_id', 'entity_id', 'provider', 'profile_key', 'scope_key', 's3'}
             or payload['provider'] != 's3' or secrets is None
@@ -126,7 +132,7 @@ def execute(database, secrets, payload, *, operation, environment, revision=0, a
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('operation', choices=['bind', 'rotate', 'copy', 'verify', 'restore'])
+    parser.add_argument('operation', choices=['backup', 'verify-archive', 'bind', 'rotate', 'copy', 'verify', 'restore'])
     parser.add_argument('--input', type=Path, required=True)
     parser.add_argument('--environment', choices=['staging', 'production'], required=True)
     parser.add_argument('--revision', type=int, default=0)
@@ -136,6 +142,7 @@ def main(argv=None):
     parser.add_argument('--source-input', type=Path)
     parser.add_argument('--source-database-sha256')
     parser.add_argument('--target-database-sha256')
+    parser.add_argument('--archive', type=Path)
     args = parser.parse_args(argv)
     database = None
     try:
@@ -145,6 +152,7 @@ def main(argv=None):
             expected_plan=args.expect_plan, approval_sha256=args.approval_sha256,
             source_payload=read_binding(args.source_input) if args.source_input else None,
             source_database_sha256=args.source_database_sha256, target_database_sha256=args.target_database_sha256,
+            archive_path=args.archive,
             progress=lambda value: print(json.dumps(value, sort_keys=True)))
         print(json.dumps(result, sort_keys=True))
         return 0
