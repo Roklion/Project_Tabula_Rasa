@@ -13,6 +13,8 @@ from tabula_rasa.bookkeeping_export.schema import DOMAINS, json_schema
 from tabula_rasa.errors import StorageError, StorageNotFoundError
 from tabula_rasa.infrastructure.postgres.composition import create_postgres_export_service
 from tabula_rasa.infrastructure.postgres.entity_export import PostgresEntityExportRepository
+from tabula_rasa.infrastructure.postgres.config import DatabaseSettings
+from tabula_rasa.infrastructure.postgres.runtime import Database
 from tests.postgres._support import account, mixed_pair, expense_references
 from tests.postgres.core_support import seed_core, expense
 from tests.postgres.test_reporting_sources import seed_source_history
@@ -193,12 +195,13 @@ def test_export_requires_current_committed_snapshot_and_known_entity(database):
 
 def test_export_reads_form_one_snapshot_across_concurrent_committed_write(database):
     alpha, _ = representative(database)
+    other = Database(DatabaseSettings(database.engine.url))
     fired = False
     def after_read(connection, cursor, statement, parameters, context, many):
         nonlocal fired
         if not fired and "FROM accounts WHERE entity_id" in statement:
             fired = True
-            with database.engine.begin() as writer:
+            with other.transaction() as writer:
                 writer.execute(text("UPDATE accounts SET opening_balance=124.45 WHERE entity_id='alpha' AND id='bank'"))
                 writer.execute(text("UPDATE postings SET amount=22.50 WHERE entity_id='alpha' AND entry_id='ordinary'"))
     event.listen(database.engine, "after_cursor_execute", after_read)
@@ -206,6 +209,7 @@ def test_export_reads_form_one_snapshot_across_concurrent_committed_write(databa
         artifact = create_postgres_export_service(database, "alpha").export()
     finally:
         event.remove(database.engine, "after_cursor_execute", after_read)
+        other.dispose()
     assert fired
     historical = ledger_snapshot(artifact["domains"])
     assert {row.id: row.opening_balance for row in historical.accounts}["bank"] == Decimal("123.45")

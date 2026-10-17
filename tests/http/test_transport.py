@@ -223,6 +223,9 @@ def test_schema_export_is_deterministic_offline(monkeypatch, tmp_path):
 ])
 def test_database_errors_translated_only_by_composition(runtime, code, status, mapped):
     composed = PostgresRuntime(None, runtime.resolve_context, service_factory=runtime.services)
+    # This transport-only factory has neither a database nor persisted effects.
+    # Native HTTP tests separately prove actor/event coupling with a real pool.
+    composed.audit_operation = lambda *args: nullcontext()
     composed.close = runtime.close
     runtime.accounts.list.side_effect = DatabaseError(code)
     with TestClient(create_app(settings=SETTINGS, runtime_factory=lambda settings: composed)) as client:

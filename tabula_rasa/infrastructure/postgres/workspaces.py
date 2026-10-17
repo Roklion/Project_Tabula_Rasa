@@ -16,6 +16,7 @@ from tabula_rasa.application.workspaces import (
 from .control_plane import PostgresIdentityRepository, identity_operation
 from .reference_data import PostgresLedgerSetupRepository
 from .sessions import credential_hash
+from .audit import AuditContext, audit_context
 
 
 class PostgresWorkspaceRepository:
@@ -59,7 +60,9 @@ class PostgresWorkspaceRepository:
             raise IdentityError('validation')
         workspace_name, business_name = [name.strip() for name in names]
         payload = sha256(json.dumps([workspace_name, business_name, organization_id]).encode()).hexdigest()
-        with identity_operation(self.database) as connection:
+        entity_id = uuid4().hex
+        with audit_context(self.database, AuditContext('user', actor, 'workspace.bootstrap', entity_id,
+                           operation_id='bootstrap:' + request_id)), identity_operation(self.database) as connection:
             self._users(connection, actor)
             if organization_id:
                 require_capability(self._role(connection, actor, organization_id, lock=True), 'entity:manage')
@@ -71,7 +74,6 @@ class PostgresWorkspaceRepository:
                 self._role(connection, actor, previous['organization_id'])
                 return self._bootstrap_result(previous)
             org = organization_id or self.identity.create_organization(actor, workspace_name)
-            entity_id = uuid4().hex
             ledger = PostgresLedgerSetupRepository.create_entity(self.database, entity_id, business_name)
             self.identity.bind_entity(org, entity_id)
             LedgerSetupService(ledger).ensure_defaults()

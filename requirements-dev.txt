@@ -6,4 +6,6 @@ playwright==1.62.0
 PyYAML==6.0.3
 -r requirements-api.txt
 httpx==0.28.1
+# Starlette's current TestClient imports httpx2; httpx remains used by API probes.
+httpx2==2.13.1
 PyJWT[crypto]==2.15.1
