@@ -16,6 +16,13 @@ def upload(identity='a' * 32, content=b'%PDF-1.7 synthetic', name='receipt.pdf')
     return DocumentUpload(identity, name, 'application/pdf', hashlib.sha256(content).hexdigest(), content)
 
 
+def test_invalid_recovery_filename_is_document_validation_error_without_provider_write():
+    store = s3_store()
+    with pytest.raises(DocumentValidationError, match='filename metadata'):
+        store.upload('alpha', replace(upload(), stored_filename='../invalid.pdf'))
+    assert store.client.calls == []
+
+
 def test_exact_bytes_pinned_versions_scoped_keys_and_reference_only_recovery():
     client = FakeS3()
     alpha, beta = s3_store(client=client), s3_store('beta', client)

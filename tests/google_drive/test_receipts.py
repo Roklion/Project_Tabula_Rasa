@@ -12,6 +12,41 @@ from tabula_rasa.google_drive import (
 from ._support import FakeResponse, DriveSession, drive_settings, oauth_config
 
 class TestGoogleDriveReceipts:
+    @pytest.mark.parametrize('duplicate', [False, True])
+    def test_recovery_reuses_one_matching_identity_and_rejects_duplicates(self, duplicate):
+        from tests.drive_fixtures import receipt_drive_file
+        existing = receipt_drive_file('existing123456', 'receipt.pdf', profile_key='north',
+            receipt_id='a' * 32, sha256=hashlib.sha256(b'receipt').hexdigest())
+        session = DriveSession([FakeResponse(200, {'files': [existing] * (2 if duplicate else 1)})])
+        client = GoogleDriveClient(oauth_config(), drive_settings(), session=session, sleeper=lambda _: None)
+        def recover():
+            return client.upload_receipt(profile_key='north', folder_id='folder123456', original_name='receipt.pdf',
+                stored_filename='receipt.pdf', content=b'receipt', mime_type='application/pdf', receipt_id='a' * 32)
+        if duplicate:
+            with pytest.raises(GoogleDriveAccessError, match='conflicting receipt identities'):
+                recover()
+        else:
+            assert recover()['id'] == existing['id']
+        assert [method for method, *_ in session.requests] == ['GET']
+
+    @pytest.mark.parametrize('uncertain', [False, True])
+    def test_recovery_checks_identity_without_checksum_before_create_or_retry(self, uncertain):
+        from tests.drive_fixtures import receipt_drive_file
+        conflict = receipt_drive_file('existing123456', 'different.pdf', profile_key='north',
+                                      receipt_id='a' * 32, sha256=hashlib.sha256(b'other').hexdigest())
+        responses = ([FakeResponse(200, {'files': []}), FakeResponse(200, {'files': []}),
+                      requests.ConnectionError('synthetic lost response')] if uncertain else [])
+        session = DriveSession(responses + [FakeResponse(200, {'files': [conflict]})])
+        client = GoogleDriveClient(oauth_config(), drive_settings(), session=session, sleeper=lambda _: None)
+        with pytest.raises(GoogleDriveAccessError, match='conflicting receipt identities'):
+            client.upload_receipt(profile_key='north', folder_id='folder123456', original_name='receipt.pdf',
+                stored_filename='receipt.pdf', content=b'receipt', mime_type='application/pdf', receipt_id='a' * 32)
+        assert sum(method == 'POST' for method, *_ in session.requests) == int(uncertain)
+        for request in [session.requests[0], session.requests[-1]]:
+            query = request[2]['params']['q']
+            assert "value='north'" in query and "value='" + 'a' * 32 + "'" in query
+            assert "'folder123456' in parents" in query and 'tabulaRasaSha256' not in query
+
     def test_explicit_recovery_upload_preserves_canonical_names_with_normal_retry_owner(self):
         session = DriveSession([
             FakeResponse(200, {'files': []}), FakeResponse(200, {'files': []}),

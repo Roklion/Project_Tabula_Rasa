@@ -231,6 +231,32 @@ def test_operator_plan_new_entity_binding_and_restart_verifier(database, tmp_pat
                 source_database_sha256=identity, target_database_sha256=identity)
 
 
+@pytest.mark.parametrize('apply', [False, True])
+def test_optional_s3_restore_rejects_original_scope_before_replay(database, tmp_path, monkeypatch, apply):
+    from tests.postgres.document_restore_support import cloned_database
+    from tabula_rasa.infrastructure.postgres.identity import database_identity
+    _, _, _, org, _ = identity_setup(database)
+    secrets = ConnectionSecrets(tmp_path, Fernet.generate_key().decode())
+    store = s3_store()
+    monkeypatch.setattr('scripts.manage_document_storage.provider_store', lambda *args, **kw: store)
+    payload = dict(environment='staging', organization_id=org, entity_id='alpha', provider='s3',
+                   profile_key='alpha', scope_key=store.scope_key, s3={'synthetic': True})
+    plan = execute(database, secrets, payload, operation='bind', environment='staging')
+    execute(database, secrets, payload, operation='bind', environment='staging', apply=True,
+            expected_plan=plan['plan_sha256'], approval_sha256='a' * 64)
+    repo = PostgresReceiptRepository(database, 'alpha', store_kind='s3', store_scope_key=store.scope_key)
+    repo.register_document(store.upload('alpha', upload()))
+    before = list(store.client.calls)
+    with cloned_database(database) as restored:
+        with pytest.raises(DocumentValidationError, match='distinct source and destination'):
+            execute(restored, secrets, payload, operation='restore', environment='staging', source_payload=payload,
+                    source_database_sha256=database_identity(database),
+                    target_database_sha256=database_identity(restored), apply=apply)
+        assert PostgresReceiptRepository(restored, 'alpha', store_kind='s3',
+            store_scope_key=store.scope_key).retained_documents() == repo.retained_documents()
+    assert store.client.calls == before
+
+
 def test_operator_drive_copy_installs_managed_connection_preserving_original_grant(database, tmp_path, monkeypatch):
     from tabula_rasa.infrastructure.postgres.control_plane import PostgresIdentityRepository
     from tabula_rasa.infrastructure.postgres.connections import PostgresConnections

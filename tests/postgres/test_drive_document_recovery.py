@@ -214,6 +214,14 @@ def test_private_binding_rejects_non_object_json(tmp_path, payload):
         read_binding(path)
 
 
+def test_private_binding_rejects_malformed_json_without_private_diagnostics(tmp_path):
+    path = tmp_path / 'binding.json'
+    path.write_text('{"private": "synthetic-secret",', encoding='utf-8')
+    with pytest.raises(DocumentValidationError, match='not valid JSON') as caught:
+        read_binding(path)
+    assert 'synthetic-secret' not in str(caught.value) and caught.value.__suppress_context__
+
+
 def test_offline_archive_verification_and_restore_need_no_lost_source_grant(database, tmp_path, monkeypatch):
     (payloads, secrets), clients = fixture(database, tmp_path, monkeypatch)
     payload = payloads['alpha']['source']

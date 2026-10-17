@@ -11,7 +11,7 @@ from tabula_rasa.application.documents import (
     DocumentValidationError, MAX_RECEIPT_BYTES, ReceiptInventory, validate_receipt_upload,
 )
 from tabula_rasa.document_names import safe_receipt_filename
-from tabula_rasa.receipt_manifest import validate_receipt_filename
+from tabula_rasa.receipt_manifest import ReceiptManifestError, validate_receipt_filename
 
 
 class _ProviderFailure(Exception):
@@ -152,7 +152,10 @@ class S3DocumentStore:
             raise DocumentValidationError('Receipt upload checksum is invalid.')
         key = self._key(upload.document_id)
         name = safe_receipt_filename(upload.original_filename)
-        stored_name = validate_receipt_filename(upload.stored_filename or name, 'Receipt filename')
+        try:
+            stored_name = validate_receipt_filename(upload.stored_filename or name, 'Receipt filename')
+        except ReceiptManifestError:
+            raise DocumentValidationError('Receipt filename metadata is invalid.') from None
         values = {'document-id': upload.document_id, 'filename': _encode(name),
                   'stored-filename': _encode(stored_name),
                   'mime-type': _encode(upload.mime_type), 'sha256': upload.sha256,

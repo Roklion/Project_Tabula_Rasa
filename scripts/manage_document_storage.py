@@ -30,7 +30,10 @@ def read_binding(path):
         raw = source.read(65537)
     if len(raw) > 65536:
         raise DocumentValidationError('Private receipt binding is too large.')
-    payload = json.loads(raw)
+    try:
+        payload = json.loads(raw)
+    except (ValueError, UnicodeError):
+        raise DocumentValidationError('Private receipt binding is not valid JSON.') from None
     if not isinstance(payload, dict):
         raise DocumentValidationError('Private receipt binding must be a JSON object.')
     return payload
@@ -65,6 +68,9 @@ def execute(database, secrets, payload, *, operation, environment, revision=0, a
                 or source_database_sha256 == target_database_sha256
                 or database_sha256 != target_database_sha256):
             raise DocumentValidationError('Restore requires an isolated staging database and explicit source/target fingerprints.')
+        source = provider_store({**source_payload, 'store_scope_key': source_payload['scope_key']}, source_payload, validate=True)
+        if source.scope_key == target.scope_key:
+            raise DocumentValidationError('Restore requires distinct source and destination storage bindings.')
     with database.transaction(read_only=True) as connection:
         rows = connection.execute(text('SELECT * FROM documents WHERE entity_id=:entity ORDER BY id'),
                                   {'entity': entity}).mappings().all()
@@ -105,7 +111,6 @@ def execute(database, secrets, payload, *, operation, environment, revision=0, a
                     secret_ref=reference, expected_revision=revision)
         return {'verified': count, 'applied': apply, 'plan_sha256': plan}
     if operation == 'restore':
-        source = provider_store({**source_payload, 'store_scope_key': source_payload['scope_key']}, source_payload, validate=True)
         repository = PostgresReceiptRepository(database, entity, store_kind='s3', store_scope_key=source.scope_key)
         binding = None if not apply else dict(organization_id=payload['organization_id'], profile_key=payload['profile_key'],
             secret_ref=secrets.put(payload), expected_revision=revision, recovery_source_scope=source.scope_key)
