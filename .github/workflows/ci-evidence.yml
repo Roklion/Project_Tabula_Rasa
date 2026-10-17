@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: false
 env:
   EVIDENCE_SOURCE_SHA: 84f427e1ec0f9bb38baf63b7b4c6a6b0bb98f6db
-  EVIDENCE_SAMPLE: '1'
+  EVIDENCE_SAMPLE: '2'
 jobs:
   partitioned-python-suite:
     name: Partitioned | Python suite (Linux + PostgreSQL)
