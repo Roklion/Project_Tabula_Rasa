@@ -30,7 +30,10 @@ def read_binding(path):
         raw = source.read(65537)
     if len(raw) > 65536:
         raise DocumentValidationError('Private receipt binding is too large.')
-    return json.loads(raw)
+    payload = json.loads(raw)
+    if not isinstance(payload, dict):
+        raise DocumentValidationError('Private receipt binding must be a JSON object.')
+    return payload
 
 
 def execute(database, secrets, payload, *, operation, environment, revision=0, apply=False,

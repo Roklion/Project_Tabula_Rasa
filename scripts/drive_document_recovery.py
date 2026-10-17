@@ -47,6 +47,8 @@ def execute_drive(database, secrets, payload, *, operation, environment, revisio
             environment != 'staging' or not re.fullmatch('[0-9a-f]{64}', source_database_sha256 or '')
             or target_database_sha256 != fingerprint or source_database_sha256 == fingerprint):
         raise DocumentValidationError('Restore requires an isolated staging database and explicit source/target fingerprints.')
+    if operation == 'restore' and payload['scope_key'] == archive.scope_key:
+        raise DocumentValidationError('Restore requires separate source and destination database/Drive bindings.')
     current = create_postgres_export_service(database, entity).export()
     with database.transaction(read_only=True) as connection:
         row = connection.execute(text("""SELECT * FROM external_connections
@@ -88,8 +90,6 @@ def execute_drive(database, secrets, payload, *, operation, environment, revisio
     if operation == 'backup':
         result = archive_documents(repo, target, archive_path, current, dry_run=not apply, progress=progress)
         return {**result, 'plan_sha256': plan}
-    if source_database_sha256 == fingerprint or target.scope_key == archive.scope_key:
-        raise DocumentValidationError('Restore requires separate source and destination database/Drive bindings.')
     if apply and secrets is None:
         raise DocumentValidationError('Configure protected connection secret custody before restored binding installation.')
     repo = PostgresReceiptRepository(database, entity, store_kind='google_drive', store_scope_key=archive.scope_key)

@@ -186,6 +186,34 @@ def test_drive_only_snapshot_backup_and_isolated_restore_preserve_ids_links_byte
     assert all(client.uploads == 2 for client in clients.values())
 
 
+@pytest.mark.parametrize('apply', [False, True])
+def test_restore_rejects_original_drive_folder_before_completed_shortcut(database, tmp_path, monkeypatch, apply):
+    (payloads, secrets), clients = fixture(database, tmp_path, monkeypatch)
+    source, path = payloads['alpha']['source'], tmp_path / 'archive'
+    backup(database, secrets, source, path)
+    uploads = {folder: client.uploads for folder, client in clients.items()}
+    with cloned_database(database) as restored:
+        def no_provider_access(*args, **kwargs):
+            raise AssertionError('Reject source-folder restore before accessing the provider.')
+        monkeypatch.setattr('scripts.drive_document_recovery.google_store', no_provider_access)
+        with pytest.raises(DocumentValidationError, match='separate source and destination'):
+            execute(restored, secrets, source, operation='restore', environment='staging', archive_path=path,
+                    source_database_sha256=database_identity(database),
+                    target_database_sha256=database_identity(restored), apply=apply)
+        with restored.transaction(read_only=True) as connection:
+            assert connection.scalar(text("SELECT store_scope_key FROM external_connections WHERE entity_id='alpha'")) == source['scope_key']
+            assert connection.scalar(text("SELECT count(*) FROM document_locations WHERE entity_id='alpha'")) == 0
+    assert {folder: client.uploads for folder, client in clients.items()} == uploads
+
+
+@pytest.mark.parametrize('payload', [None, [], 'invalid', 42, True])
+def test_private_binding_rejects_non_object_json(tmp_path, payload):
+    path = tmp_path / 'binding.json'
+    path.write_text(json.dumps(payload), encoding='utf-8')
+    with pytest.raises(DocumentValidationError, match='JSON object'):
+        read_binding(path)
+
+
 def test_offline_archive_verification_and_restore_need_no_lost_source_grant(database, tmp_path, monkeypatch):
     (payloads, secrets), clients = fixture(database, tmp_path, monkeypatch)
     payload = payloads['alpha']['source']
