@@ -18,6 +18,7 @@ from tabula_rasa.errors import StorageConflictError
 from tabula_rasa.http.connections import google_store, provider_store
 from tabula_rasa.infrastructure.connection_secrets import ConnectionSecrets
 from tabula_rasa.infrastructure.postgres.config import DatabaseSettings
+from tabula_rasa.infrastructure.postgres.composition import create_postgres_export_service
 from tabula_rasa.infrastructure.postgres.documents import PostgresReceiptRepository
 from tabula_rasa.infrastructure.postgres.managed_documents import install_managed_connection
 from tabula_rasa.infrastructure.postgres.runtime import Database
@@ -81,7 +82,10 @@ def execute(database, secrets, payload, *, operation, environment, revision=0, a
         # Exact snapshot digest includes links, so a changed linking decision invalidates approval.
         links = connection.execute(text('SELECT * FROM document_links WHERE entity_id=:entity ORDER BY document_id,entry_id,mixed_use_source_id,position'),
                                    {'entity': entity}).mappings().all()
+    point_sha256 = (create_postgres_export_service(database, entity).export()['manifest']['content_sha256']
+                    if operation in {'copy', 'restore'} else None)
     plan = digest({'payload_sha256': digest(payload), 'operation': operation, 'revision': revision,
+                   'recovery_point_sha256': point_sha256,
                    'database_sha256': database_sha256,
                    'documents': [{key: serialized(value) for key, value in row.items()} for row in rows],
                    'links': [{key: serialized(value) for key, value in row.items()} for row in links],
@@ -115,7 +119,8 @@ def execute(database, secrets, payload, *, operation, environment, revision=0, a
         binding = None if not apply else dict(organization_id=payload['organization_id'], profile_key=payload['profile_key'],
             secret_ref=secrets.put(payload), expected_revision=revision, recovery_source_scope=source.scope_key)
         result = copy_entity_documents(repository, source, target, dry_run=not apply, promote=apply,
-                                       connection_binding=binding, recovery_snapshot=True, progress=progress)
+                                       connection_binding=binding, recovery_snapshot=True, progress=progress,
+                                       expected_point_sha256=point_sha256)
         return {**asdict(result), 'plan_sha256': plan}
     if (source_row is None or source_row['organization_id'] != payload['organization_id']
             or source_row['status'] != 'connected'):
@@ -134,7 +139,7 @@ def execute(database, secrets, payload, *, operation, environment, revision=0, a
                        secret_ref=secrets.put(payload), expected_revision=revision,
                        source_revision=source_row['revision'], source_scope=source.scope_key)
     result = copy_entity_documents(repository, source, target, dry_run=not apply, promote=apply,
-                                   connection_binding=binding, progress=progress)
+                                   connection_binding=binding, progress=progress, expected_point_sha256=point_sha256)
     return {**asdict(result), 'plan_sha256': plan}
 
 

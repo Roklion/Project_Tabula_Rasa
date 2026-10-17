@@ -293,6 +293,50 @@ def test_operator_drive_copy_installs_managed_connection_preserving_original_gra
     assert source.delete_calls == 0
 
 
+def test_s3_restore_rechecks_approved_link_point_at_promotion(database, tmp_path, monkeypatch):
+    from tests.postgres.document_restore_support import cloned_database
+    from tabula_rasa.infrastructure.postgres.identity import database_identity
+    from tabula_rasa.infrastructure.postgres.control_plane import PostgresIdentityRepository
+    from tests.postgres.test_identity import verified
+    services, drive, source = setup(database)
+    copy_entity_documents(services.receipts.repository, drive, source, dry_run=False, promote=True)
+    identity = PostgresIdentityRepository(database)
+    org = identity.create_organization(identity.resolve_user(verified()).id, 'Synthetic')
+    identity.bind_entity(org, 'alpha')
+    secrets = ConnectionSecrets(tmp_path, Fernet.generate_key().decode())
+    source_payload = dict(environment='staging', organization_id=org, entity_id='alpha', provider='s3',
+                          profile_key='alpha', scope_key=source.scope_key, s3={'synthetic': True})
+    with database.transaction() as connection:
+        install_managed_connection(connection, 'alpha', source.scope_key, organization_id=org,
+            profile_key='alpha', secret_ref=secrets.put(source_payload), expected_revision=0)
+    target = s3_store(namespace='staging/' + '2' * 32)
+    payload = {**source_payload, 'scope_key': target.scope_key}
+    monkeypatch.setattr('scripts.manage_document_storage.provider_store',
+        lambda row, payload, **kw: source if payload['scope_key'] == source.scope_key else target)
+    with cloned_database(database) as restored:
+        kwargs = dict(operation='restore', environment='staging', source_payload=source_payload, revision=1,
+            source_database_sha256=database_identity(database), target_database_sha256=database_identity(restored))
+        plan = execute(restored, secrets, payload, **kwargs)
+        repo = PostgresReceiptRepository(restored, 'alpha', store_kind='s3', store_scope_key=source.scope_key)
+        expected = repo.retained_documents()
+        original_upload = target.upload
+        def change_link(*args):
+            destination = original_upload(*args)
+            document, = repo.references('alpha', 'txn')
+            repo.unlink('alpha', 'txn', document.storage_key)
+            monkeypatch.setattr(target, 'upload', original_upload)
+            return destination
+        monkeypatch.setattr(target, 'upload', change_link)
+        with pytest.raises(StorageConflictError, match='recovery point changed'):
+            execute(restored, secrets, payload, **kwargs, apply=True,
+                    expected_plan=plan['plan_sha256'], approval_sha256='a' * 64)
+        assert repo.retained_documents() == expected
+        with restored.transaction(read_only=True) as connection:
+            assert connection.scalar(text('SELECT count(*) FROM document_locations')) == 2
+            assert connection.scalar(text("SELECT store_scope_key FROM external_connections WHERE provider='s3'")) == source.scope_key
+        assert len(target.inventory('alpha').documents) == 2
+
+
 def test_full_isolated_snapshot_byte_restore_drill_with_fake_provider_boundary(database, tmp_path, monkeypatch):
     from tests.postgres.test_s3_staging import run_drill
     from tabula_rasa.infrastructure.s3_documents import create_s3_document_store
