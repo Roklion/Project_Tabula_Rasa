@@ -1,0 +1,1085 @@
+{
+  "sample": 3,
+  "source_sha": "84f427e1ec0f9bb38baf63b7b4c6a6b0bb98f6db",
+  "workflow_head_sha": "7d580b73a6209925f81dfe526ff0bfdc41a61228",
+  "run_id": 39002104472,
+  "attempt": 1,
+  "event": "push",
+  "url": "https://github.com/Roklion/Project_Tabula_Rasa/actions/runs/39002104472",
+  "created_at": "2026-10-17T04:19:03Z",
+  "conclusion": "success",
+  "layouts": {
+    "baseline": {
+      "timing_complete": true,
+      "head_sha": "7d580b73a6209925f81dfe526ff0bfdc41a61228",
+      "attempt": 1,
+      "elapsed_seconds": 1077.0,
+      "runner_seconds": 1831.0,
+      "jobs": [
+        {
+          "name": "Baseline | Combined frontend, UI and native browser",
+          "conclusion": "success",
+          "seconds": 1077.0,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1.0
+            },
+            {
+              "name": "Initialize containers",
+              "conclusion": "success",
+              "seconds": 14.0
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "conclusion": "success",
+              "seconds": 2.0
+            },
+            {
+              "name": "Verify fixed source and record runtime",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "conclusion": "success",
+              "seconds": 2.0
+            },
+            {
+              "name": "Install development dependencies",
+              "conclusion": "success",
+              "seconds": 20.0
+            },
+            {
+              "name": "Run actions/setup-node@v4",
+              "conclusion": "success",
+              "seconds": 2.0
+            },
+            {
+              "name": "Run npm --prefix web ci",
+              "conclusion": "success",
+              "seconds": 3.0
+            },
+            {
+              "name": "Run python -m tabula_rasa.http.export_openapi --output contracts/http/openapi.json",
+              "conclusion": "success",
+              "seconds": 3.0
+            },
+            {
+              "name": "Run npm --prefix web run api:generate",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Run git diff --exit-code -- contracts/http/openapi.json web/src/api/schema.d.ts",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Run npm --prefix web run build",
+              "conclusion": "success",
+              "seconds": 5.0
+            },
+            {
+              "name": "Run npm --prefix web run lint",
+              "conclusion": "success",
+              "seconds": 5.0
+            },
+            {
+              "name": "Run npm --prefix web test",
+              "conclusion": "success",
+              "seconds": 11.0
+            },
+            {
+              "name": "Restore pre-partition execution ownership",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Install Node browser engines",
+              "conclusion": "success",
+              "seconds": 44.0
+            },
+            {
+              "name": "Run unsharded UI and repeated contracts",
+              "conclusion": "success",
+              "seconds": 480.0
+            },
+            {
+              "name": "Build and inspect commercial runtime image (no runtime secrets)",
+              "conclusion": "success",
+              "seconds": 22.0
+            },
+            {
+              "name": "Run python -m playwright install --with-deps chromium firefox webkit",
+              "conclusion": "success",
+              "seconds": 2.0
+            },
+            {
+              "name": "Run native browser concurrency and core workflow tests",
+              "conclusion": "success",
+              "seconds": 453.0
+            },
+            {
+              "name": "Upload combined reports and overlay proof",
+              "conclusion": "success",
+              "seconds": 3.0
+            },
+            {
+              "name": "Post Run actions/setup-node@v4",
+              "conclusion": "success",
+              "seconds": 1.0
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Stop containers",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "name": "Baseline | Windows environment setup",
+          "conclusion": "success",
+          "seconds": 126.0,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1.0
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "conclusion": "success",
+              "seconds": 7.0
+            },
+            {
+              "name": "Verify fixed source and record runtime",
+              "conclusion": "success",
+              "seconds": 1.0
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "conclusion": "success",
+              "seconds": 8.0
+            },
+            {
+              "name": "Install development dependencies",
+              "conclusion": "success",
+              "seconds": 71.0
+            },
+            {
+              "name": "Run Windows-only setup coverage",
+              "conclusion": "success",
+              "seconds": 31.0
+            },
+            {
+              "name": "Upload Windows results",
+              "conclusion": "success",
+              "seconds": 2.0
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "conclusion": "success",
+              "seconds": 2.0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "name": "Baseline | Python suite (Linux + PostgreSQL)",
+          "conclusion": "success",
+          "seconds": 628.0,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 3.0
+            },
+            {
+              "name": "Initialize containers",
+              "conclusion": "success",
+              "seconds": 11.0
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "conclusion": "success",
+              "seconds": 1.0
+            },
+            {
+              "name": "Verify fixed source and record runtime",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "conclusion": "success",
+              "seconds": 2.0
+            },
+            {
+              "name": "Install development dependencies",
+              "conclusion": "success",
+              "seconds": 26.0
+            },
+            {
+              "name": "Build NAS backup client image",
+              "conclusion": "success",
+              "seconds": 21.0
+            },
+            {
+              "name": "Verify synthetic NAS TLS backup and isolated restore",
+              "conclusion": "success",
+              "seconds": 3.0
+            },
+            {
+              "name": "Lint Python",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Run complete Python suite",
+              "conclusion": "success",
+              "seconds": 556.0
+            },
+            {
+              "name": "Upload Python results",
+              "conclusion": "success",
+              "seconds": 1.0
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "conclusion": "success",
+              "seconds": 1.0
+            },
+            {
+              "name": "Stop containers",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0.0
+            }
+          ]
+        }
+      ],
+      "runner_seconds_by_os": {
+        "ubuntu-latest": 1705.0,
+        "windows-latest": 126.0
+      },
+      "start_delay_seconds": {
+        "Baseline | Combined frontend, UI and native browser": 2.0,
+        "Baseline | Windows environment setup": 3.0,
+        "Baseline | Python suite (Linux + PostgreSQL)": 3.0
+      }
+    },
+    "partitioned": {
+      "timing_complete": true,
+      "head_sha": "7d580b73a6209925f81dfe526ff0bfdc41a61228",
+      "attempt": 1,
+      "elapsed_seconds": 696.0,
+      "runner_seconds": 2440.0,
+      "jobs": [
+        {
+          "name": "Partitioned | Browser UI (shard 2/2)",
+          "conclusion": "success",
+          "seconds": 396.0,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1.0
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "conclusion": "success",
+              "seconds": 1.0
+            },
+            {
+              "name": "Verify fixed source and record runtime",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Run actions/setup-node@v4",
+              "conclusion": "success",
+              "seconds": 4.0
+            },
+            {
+              "name": "Run npm --prefix web ci",
+              "conclusion": "success",
+              "seconds": 6.0
+            },
+            {
+              "name": "Run npm --prefix web exec -- playwright install --with-deps chromium firefox webkit",
+              "conclusion": "success",
+              "seconds": 49.0
+            },
+            {
+              "name": "Run npm --prefix web run test:browser -- --shard=2/2",
+              "conclusion": "success",
+              "seconds": 329.0
+            },
+            {
+              "name": "Upload browser UI results",
+              "conclusion": "success",
+              "seconds": 3.0
+            },
+            {
+              "name": "Post Run actions/setup-node@v4",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "name": "Partitioned | Browser UI (shard 1/2)",
+          "conclusion": "success",
+          "seconds": 437.0,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1.0
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "conclusion": "success",
+              "seconds": 1.0
+            },
+            {
+              "name": "Verify fixed source and record runtime",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Run actions/setup-node@v4",
+              "conclusion": "success",
+              "seconds": 1.0
+            },
+            {
+              "name": "Run npm --prefix web ci",
+              "conclusion": "success",
+              "seconds": 5.0
+            },
+            {
+              "name": "Run npm --prefix web exec -- playwright install --with-deps chromium firefox webkit",
+              "conclusion": "success",
+              "seconds": 56.0
+            },
+            {
+              "name": "Run npm --prefix web run test:browser -- --shard=1/2",
+              "conclusion": "success",
+              "seconds": 366.0
+            },
+            {
+              "name": "Upload browser UI results",
+              "conclusion": "success",
+              "seconds": 5.0
+            },
+            {
+              "name": "Post Run actions/setup-node@v4",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "name": "Partitioned | Windows environment setup",
+          "conclusion": "success",
+          "seconds": 116.0,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1.0
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "conclusion": "success",
+              "seconds": 6.0
+            },
+            {
+              "name": "Verify fixed source and record runtime",
+              "conclusion": "success",
+              "seconds": 2.0
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "conclusion": "success",
+              "seconds": 10.0
+            },
+            {
+              "name": "Install development dependencies",
+              "conclusion": "success",
+              "seconds": 62.0
+            },
+            {
+              "name": "Run Windows-only setup coverage",
+              "conclusion": "success",
+              "seconds": 29.0
+            },
+            {
+              "name": "Upload Windows results",
+              "conclusion": "success",
+              "seconds": 1.0
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "conclusion": "success",
+              "seconds": 2.0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 1.0
+            }
+          ]
+        },
+        {
+          "name": "Partitioned | Python suite (Linux + PostgreSQL)",
+          "conclusion": "success",
+          "seconds": 686.0,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Initialize containers",
+              "conclusion": "success",
+              "seconds": 10.0
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "conclusion": "success",
+              "seconds": 1.0
+            },
+            {
+              "name": "Verify fixed source and record runtime",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "conclusion": "success",
+              "seconds": 5.0
+            },
+            {
+              "name": "Install development dependencies",
+              "conclusion": "success",
+              "seconds": 27.0
+            },
+            {
+              "name": "Build NAS backup client image",
+              "conclusion": "success",
+              "seconds": 18.0
+            },
+            {
+              "name": "Verify synthetic NAS TLS backup and isolated restore",
+              "conclusion": "success",
+              "seconds": 4.0
+            },
+            {
+              "name": "Lint Python",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Run complete Python suite",
+              "conclusion": "success",
+              "seconds": 615.0
+            },
+            {
+              "name": "Upload Python results",
+              "conclusion": "success",
+              "seconds": 1.0
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Stop containers",
+              "conclusion": "success",
+              "seconds": 1.0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "name": "Partitioned | Native browser (HTTP + PostgreSQL)",
+          "conclusion": "success",
+          "seconds": 695.0,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1.0
+            },
+            {
+              "name": "Initialize containers",
+              "conclusion": "success",
+              "seconds": 12.0
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "conclusion": "success",
+              "seconds": 1.0
+            },
+            {
+              "name": "Verify fixed source and record runtime",
+              "conclusion": "success",
+              "seconds": 1.0
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "conclusion": "success",
+              "seconds": 5.0
+            },
+            {
+              "name": "Install development dependencies",
+              "conclusion": "success",
+              "seconds": 26.0
+            },
+            {
+              "name": "Run actions/setup-node@v4",
+              "conclusion": "success",
+              "seconds": 2.0
+            },
+            {
+              "name": "Run npm --prefix web ci",
+              "conclusion": "success",
+              "seconds": 4.0
+            },
+            {
+              "name": "Run npm --prefix web run build",
+              "conclusion": "success",
+              "seconds": 7.0
+            },
+            {
+              "name": "Run python -m playwright install --with-deps chromium firefox webkit",
+              "conclusion": "success",
+              "seconds": 53.0
+            },
+            {
+              "name": "Run native browser concurrency and core workflow tests",
+              "conclusion": "success",
+              "seconds": 577.0
+            },
+            {
+              "name": "Upload native browser results",
+              "conclusion": "success",
+              "seconds": 1.0
+            },
+            {
+              "name": "Post Run actions/setup-node@v4",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Stop containers",
+              "conclusion": "success",
+              "seconds": 1.0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "name": "Partitioned | Frontend, contracts and runtime image",
+          "conclusion": "success",
+          "seconds": 110.0,
+          "steps": [
+            {
+              "name": "Set up job",
+              "conclusion": "success",
+              "seconds": 1.0
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "conclusion": "success",
+              "seconds": 1.0
+            },
+            {
+              "name": "Verify fixed source and record runtime",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "conclusion": "success",
+              "seconds": 2.0
+            },
+            {
+              "name": "Install development dependencies",
+              "conclusion": "success",
+              "seconds": 29.0
+            },
+            {
+              "name": "Run actions/setup-node@v4",
+              "conclusion": "success",
+              "seconds": 3.0
+            },
+            {
+              "name": "Run npm --prefix web ci",
+              "conclusion": "success",
+              "seconds": 6.0
+            },
+            {
+              "name": "Run python -m tabula_rasa.http.export_openapi --output contracts/http/openapi.json",
+              "conclusion": "success",
+              "seconds": 3.0
+            },
+            {
+              "name": "Run npm --prefix web run api:generate",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Run git diff --exit-code -- contracts/http/openapi.json web/src/api/schema.d.ts",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Run npm --prefix web run build",
+              "conclusion": "success",
+              "seconds": 8.0
+            },
+            {
+              "name": "Run npm --prefix web run lint",
+              "conclusion": "success",
+              "seconds": 6.0
+            },
+            {
+              "name": "Run npm --prefix web test",
+              "conclusion": "success",
+              "seconds": 16.0
+            },
+            {
+              "name": "Run npm --prefix web run test:contracts",
+              "conclusion": "success",
+              "seconds": 2.0
+            },
+            {
+              "name": "Build and inspect commercial runtime image (no runtime secrets)",
+              "conclusion": "success",
+              "seconds": 29.0
+            },
+            {
+              "name": "Upload run-once contract results",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Post Run actions/setup-node@v4",
+              "conclusion": "success",
+              "seconds": 1.0
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "conclusion": "success",
+              "seconds": 0.0
+            },
+            {
+              "name": "Complete job",
+              "conclusion": "success",
+              "seconds": 0.0
+            }
+          ]
+        }
+      ],
+      "runner_seconds_by_os": {
+        "ubuntu-latest": 2324.0,
+        "windows-latest": 116.0
+      },
+      "start_delay_seconds": {
+        "Partitioned | Browser UI (shard 2/2)": 2.0,
+        "Partitioned | Browser UI (shard 1/2)": 2.0,
+        "Partitioned | Windows environment setup": 4.0,
+        "Partitioned | Python suite (Linux + PostgreSQL)": 3.0,
+        "Partitioned | Native browser (HTTP + PostgreSQL)": 3.0,
+        "Partitioned | Frontend, contracts and runtime image": 2.0
+      }
+    }
+  },
+  "runtime_observations": [
+    {
+      "job": "Partitioned | Browser UI (shard 2/2)",
+      "fixed_source_verified": true,
+      "cache_hit_lines": [
+        "Cache hit for: node-cache-Linux-x64-npm-ef5c2e30fa2c695eaf7b2a1ea93222df889457a6367001048991c3c649d6a3f1",
+        "Cache restored successfully"
+      ],
+      "runtime_lines": [
+        "Version: 20261012.601",
+        "Image: ubuntu-24.04",
+        "Version: 20261012.334.1",
+        "Python 3.12.3"
+      ],
+      "configured_runtime_lines": [
+        "node: v24.21.0",
+        "npm: 11.19.0"
+      ],
+      "pytest_duration_seconds": {},
+      "pytest_duration_note": "Top-20 duration entries only; not total fixture time"
+    },
+    {
+      "job": "Partitioned | Browser UI (shard 1/2)",
+      "fixed_source_verified": true,
+      "cache_hit_lines": [
+        "Cache hit for: node-cache-Linux-x64-npm-ef5c2e30fa2c695eaf7b2a1ea93222df889457a6367001048991c3c649d6a3f1",
+        "Cache restored successfully"
+      ],
+      "runtime_lines": [
+        "Version: 20261012.601",
+        "Image: ubuntu-24.04",
+        "Version: 20261012.334.1",
+        "Python 3.12.3"
+      ],
+      "configured_runtime_lines": [
+        "node: v24.21.0",
+        "npm: 11.19.0"
+      ],
+      "pytest_duration_seconds": {},
+      "pytest_duration_note": "Top-20 duration entries only; not total fixture time"
+    },
+    {
+      "job": "Partitioned | Windows environment setup",
+      "fixed_source_verified": true,
+      "cache_hit_lines": [
+        "Cache hit for: setup-python-Windows-x64-python-3.12.10-pip-fef30862ff5a0d89e2b4e439fb3c157a976abdd6de1e18b63de3226c66587283",
+        "Cache restored successfully"
+      ],
+      "runtime_lines": [
+        "Version: 20261002.596",
+        "Image: windows-2025-vs2026",
+        "Version: 20261007.264.1",
+        "Python 3.12.10"
+      ],
+      "configured_runtime_lines": [
+        "Successfully set up CPython (3.12.10)"
+      ],
+      "pytest_duration_seconds": {},
+      "pytest_duration_note": "Top-20 duration entries only; not total fixture time"
+    },
+    {
+      "job": "Partitioned | Python suite (Linux + PostgreSQL)",
+      "fixed_source_verified": true,
+      "cache_hit_lines": [
+        "Cache hit for: setup-python-Linux-x64-24.04-Ubuntu-python-3.12.15-pip-fef30862ff5a0d89e2b4e439fb3c157a976abdd6de1e18b63de3226c66587283",
+        "Cache restored successfully"
+      ],
+      "runtime_lines": [
+        "Version: 20261012.601",
+        "Image: ubuntu-24.04",
+        "Version: 20261012.334.1",
+        "Python 3.12.3"
+      ],
+      "configured_runtime_lines": [
+        "Successfully set up CPython (3.12.15)"
+      ],
+      "pytest_duration_seconds": {
+        "call": 59.92
+      },
+      "pytest_duration_note": "Top-20 duration entries only; not total fixture time"
+    },
+    {
+      "job": "Partitioned | Native browser (HTTP + PostgreSQL)",
+      "fixed_source_verified": true,
+      "cache_hit_lines": [
+        "Cache hit for: setup-python-Linux-x64-24.04-Ubuntu-python-3.12.15-pip-fef30862ff5a0d89e2b4e439fb3c157a976abdd6de1e18b63de3226c66587283",
+        "Cache restored successfully",
+        "Cache hit for: node-cache-Linux-x64-npm-ef5c2e30fa2c695eaf7b2a1ea93222df889457a6367001048991c3c649d6a3f1",
+        "Cache restored successfully"
+      ],
+      "runtime_lines": [
+        "Version: 20261012.601",
+        "Image: ubuntu-24.04",
+        "Version: 20261012.334.1",
+        "Python 3.12.3"
+      ],
+      "configured_runtime_lines": [
+        "Successfully set up CPython (3.12.15)",
+        "node: v24.21.0",
+        "npm: 11.19.0"
+      ],
+      "pytest_duration_seconds": {
+        "call": 161.17
+      },
+      "pytest_duration_note": "Top-20 duration entries only; not total fixture time"
+    },
+    {
+      "job": "Baseline | Combined frontend, UI and native browser",
+      "fixed_source_verified": true,
+      "cache_hit_lines": [
+        "Cache hit for: setup-python-Linux-x64-24.04-Ubuntu-python-3.12.15-pip-fef30862ff5a0d89e2b4e439fb3c157a976abdd6de1e18b63de3226c66587283",
+        "Cache restored successfully",
+        "Cache hit for: node-cache-Linux-x64-npm-ef5c2e30fa2c695eaf7b2a1ea93222df889457a6367001048991c3c649d6a3f1",
+        "Cache restored successfully"
+      ],
+      "runtime_lines": [
+        "Version: 20261012.601",
+        "Image: ubuntu-24.04",
+        "Version: 20261012.334.1",
+        "Python 3.12.3"
+      ],
+      "configured_runtime_lines": [
+        "Successfully set up CPython (3.12.15)",
+        "node: v24.21.0",
+        "npm: 11.19.0"
+      ],
+      "pytest_duration_seconds": {
+        "call": 132.97
+      },
+      "pytest_duration_note": "Top-20 duration entries only; not total fixture time"
+    },
+    {
+      "job": "Baseline | Windows environment setup",
+      "fixed_source_verified": true,
+      "cache_hit_lines": [
+        "Cache hit for: setup-python-Windows-x64-python-3.12.10-pip-fef30862ff5a0d89e2b4e439fb3c157a976abdd6de1e18b63de3226c66587283",
+        "Cache restored successfully"
+      ],
+      "runtime_lines": [
+        "Version: 20261002.596",
+        "Image: windows-2025-vs2026",
+        "Version: 20261007.264.1",
+        "Python 3.12.10"
+      ],
+      "configured_runtime_lines": [
+        "Successfully set up CPython (3.12.10)"
+      ],
+      "pytest_duration_seconds": {},
+      "pytest_duration_note": "Top-20 duration entries only; not total fixture time"
+    },
+    {
+      "job": "Partitioned | Frontend, contracts and runtime image",
+      "fixed_source_verified": true,
+      "cache_hit_lines": [
+        "Cache hit for: setup-python-Linux-x64-24.04-Ubuntu-python-3.12.15-pip-fef30862ff5a0d89e2b4e439fb3c157a976abdd6de1e18b63de3226c66587283",
+        "Cache restored successfully",
+        "Cache hit for: node-cache-Linux-x64-npm-ef5c2e30fa2c695eaf7b2a1ea93222df889457a6367001048991c3c649d6a3f1",
+        "Cache restored successfully"
+      ],
+      "runtime_lines": [
+        "Version: 20261012.601",
+        "Image: ubuntu-24.04",
+        "Version: 20261012.334.1",
+        "Python 3.12.3"
+      ],
+      "configured_runtime_lines": [
+        "Successfully set up CPython (3.12.15)",
+        "node: v24.21.0",
+        "npm: 11.19.0"
+      ],
+      "pytest_duration_seconds": {},
+      "pytest_duration_note": "Top-20 duration entries only; not total fixture time"
+    },
+    {
+      "job": "Baseline | Python suite (Linux + PostgreSQL)",
+      "fixed_source_verified": true,
+      "cache_hit_lines": [
+        "Cache hit for: setup-python-Linux-x64-24.04-Ubuntu-python-3.12.15-pip-fef30862ff5a0d89e2b4e439fb3c157a976abdd6de1e18b63de3226c66587283",
+        "Cache restored successfully"
+      ],
+      "runtime_lines": [
+        "Version: 20261012.601",
+        "Image: ubuntu-24.04",
+        "Version: 20261012.334.1",
+        "Python 3.12.3"
+      ],
+      "configured_runtime_lines": [
+        "Successfully set up CPython (3.12.15)"
+      ],
+      "pytest_duration_seconds": {
+        "call": 52.83999999999999
+      },
+      "pytest_duration_note": "Top-20 duration entries only; not total fixture time"
+    }
+  ],
+  "junit": [
+    {
+      "artifact_report": "baseline-combined-results/native-browser-results.xml",
+      "cases": 131,
+      "failures": 0,
+      "skipped": 0,
+      "case_seconds": 449.272,
+      "max_case_seconds": 13.228,
+      "median_case_seconds": 2.667
+    },
+    {
+      "artifact_report": "baseline-combined-results/web/test-results/browser/results.xml",
+      "cases": 160,
+      "failures": 0,
+      "skipped": 0,
+      "case_seconds": 945.899,
+      "max_case_seconds": 42.619,
+      "median_case_seconds": 3.424
+    },
+    {
+      "artifact_report": "baseline-python-results/python-results.xml",
+      "cases": 2976,
+      "failures": 0,
+      "skipped": 141,
+      "case_seconds": 541.424,
+      "max_case_seconds": 7.779,
+      "median_case_seconds": 0.003
+    },
+    {
+      "artifact_report": "baseline-windows-results/windows-results.xml",
+      "cases": 10,
+      "failures": 0,
+      "skipped": 0,
+      "case_seconds": 28.309,
+      "max_case_seconds": 6.707,
+      "median_case_seconds": 0.603
+    },
+    {
+      "artifact_report": "partitioned-browser-ui-1/results.xml",
+      "cases": 70,
+      "failures": 0,
+      "skipped": 0,
+      "case_seconds": 716.691,
+      "max_case_seconds": 63.782,
+      "median_case_seconds": 6.661
+    },
+    {
+      "artifact_report": "partitioned-browser-ui-2/results.xml",
+      "cases": 70,
+      "failures": 0,
+      "skipped": 0,
+      "case_seconds": 643.69,
+      "max_case_seconds": 39.613,
+      "median_case_seconds": 5.911
+    },
+    {
+      "artifact_report": "partitioned-frontend-contract-results/results.xml",
+      "cases": 5,
+      "failures": 0,
+      "skipped": 0,
+      "case_seconds": 0.358,
+      "max_case_seconds": 0.12,
+      "median_case_seconds": 0.062
+    },
+    {
+      "artifact_report": "partitioned-native-browser-results/native-browser-results.xml",
+      "cases": 131,
+      "failures": 0,
+      "skipped": 0,
+      "case_seconds": 569.228,
+      "max_case_seconds": 15.291,
+      "median_case_seconds": 3.473
+    },
+    {
+      "artifact_report": "partitioned-python-results/python-results.xml",
+      "cases": 2976,
+      "failures": 0,
+      "skipped": 141,
+      "case_seconds": 600.204,
+      "max_case_seconds": 11.252,
+      "median_case_seconds": 0.003
+    },
+    {
+      "artifact_report": "partitioned-windows-results/windows-results.xml",
+      "cases": 10,
+      "failures": 0,
+      "skipped": 0,
+      "case_seconds": 26.13,
+      "max_case_seconds": 6.016,
+      "median_case_seconds": 0.583
+    }
+  ],
+  "overlay_proof": {
+    "source_sha": "84f427e1ec0f9bb38baf63b7b4c6a6b0bb98f6db",
+    "contract_body_sha256": "4e03a8d7d009a753cc50a84c9c57ee0152de0f665bd68286966337817bd69a06",
+    "ui_body_sha256": "b96b85bf1bcc4f4acb031d8fc5855ebb9aeba1ff2e15f716bd759c89d4b363a4",
+    "contract_tests": 5,
+    "page_tests": 2,
+    "treatment": "unchanged five contract bodies restored to four UI projects"
+  }
+}
