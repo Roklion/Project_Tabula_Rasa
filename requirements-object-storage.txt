@@ -1,0 +1,2 @@
+# Optional S3 adapter; the Drive/API runtime does not need this dependency.
+boto3==1.43.97

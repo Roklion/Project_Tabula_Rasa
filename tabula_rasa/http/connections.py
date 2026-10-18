@@ -7,7 +7,7 @@ class TenantConnections:
     def __init__(self, database, environment, secrets, *, store_factory=None):
         self.repository = PostgresConnections(database)
         self.environment, self.secrets = environment, secrets
-        self.store_factory = store_factory or google_store
+        self.store_factory = store_factory or provider_store
 
     def _store(self, row, *, validate=False):
         if self.secrets is None:
@@ -27,12 +27,30 @@ class TenantConnections:
         raise IdentityError('unavailable')
 
     def document_store(self, context):
-        row = self.repository.grant(context, require_connected=False)
-        return None if row is None else AuthorizedDocumentStore(self, context, row['store_scope_key'])
+        row = self.repository.document_grant(context)
+        return None if row is None else AuthorizedDocumentStore(self, context, row['store_scope_key'], row['provider'])
 
     def change(self, context, session, *, revision, connect):
         return self.repository.change(context, authenticated_at=session.authenticated_at,
             expected_revision=revision, connect=connect, validate=lambda row: self._store(row, validate=True))
+
+
+def provider_store(row, payload, *, validate=False):
+    if row['provider'] == 'google_drive':
+        return google_store(row, payload, validate=validate)
+    if row['provider'] != 's3':
+        raise IdentityError('unavailable')
+    from tabula_rasa.infrastructure.s3_documents import create_s3_document_store
+    if (payload.get('provider') != 's3' or payload.get('entity_id') != row['entity_id']
+            or payload.get('environment') not in {'staging', 'production'}
+            or not payload.get('s3', {}).get('namespace', '').startswith(payload['environment'] + '/')):
+        raise IdentityError('unavailable')
+    store = create_s3_document_store(row['entity_id'], payload['s3'])
+    if store.scope_key != row['store_scope_key']:
+        raise IdentityError('unavailable')
+    if validate:
+        store.validate()
+    return store
 
 
 def google_store(row, payload, *, validate=False):
@@ -55,14 +73,16 @@ def google_store(row, payload, *, validate=False):
 
 class AuthorizedDocumentStore:
     """Resolve fresh connection/membership before each byte operation, no grant cache."""
-    def __init__(self, manager, context, scope_key):
+    def __init__(self, manager, context, scope_key, store_kind='google_drive'):
         self.manager, self.context, self.scope_key = manager, context, scope_key
+        self.store_kind = store_kind
 
     def _call(self, method, entity_id, *args, **kwargs):
         from tabula_rasa.google_drive.errors import GoogleDriveAuthorizationError
         if entity_id != self.context.entity_id:
             raise IdentityError('forbidden')
-        row = self.manager.repository.grant(self.context, action='write' if method in {'upload', 'delete'} else 'read')
+        row = self.manager.repository.grant(self.context, provider=self.store_kind,
+            action='write' if method in {'upload', 'delete'} else 'read')
         if row is None or row['store_scope_key'] != self.scope_key:
             raise IdentityError('unavailable')
         reconnect = False
@@ -71,7 +91,7 @@ class AuthorizedDocumentStore:
         except Exception as error:
             # Existing Drive facade wraps authorization failures in DocumentError.
             reconnect = isinstance(error, GoogleDriveAuthorizationError) or isinstance(error.__cause__, GoogleDriveAuthorizationError)
-        if reconnect:
+        if reconnect and self.store_kind == 'google_drive':
             self.manager.repository.require_reconnect(row)
         raise IdentityError('unavailable')
 

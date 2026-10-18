@@ -60,11 +60,10 @@ def _receipt_identity_query(
     profile_key: str,
     folder_id: str,
     receipt_id: str,
-    content_sha256: str,
+    content_sha256: str | None,
 ) -> str:
     """Return the single Drive identity used for upload reconciliation."""
-    return " and ".join(
-        [
+    clauses = [
             f"'{_escape_query_value(folder_id)}' in parents",
             "trashed = false",
             "appProperties has { key='tabulaRasaKind' and value='receipt' }",
@@ -76,12 +75,16 @@ def _receipt_identity_query(
                 "appProperties has { key='tabulaRasaReceiptId' and "
                 f"value='{receipt_id}' }}"
             ),
-            (
-                "appProperties has { key='tabulaRasaSha256' and "
-                f"value='{content_sha256}' }}"
-            ),
         ]
-    )
+    if content_sha256 is not None:
+        clauses.append("appProperties has { key='tabulaRasaSha256' and " + f"value='{content_sha256}' }}")
+    return " and ".join(clauses)
+
+
+def _validate_recovery_identity(matches, filename, checksum):
+    if matches and (len(matches) != 1 or matches[0].get('name') != filename
+                    or matches[0].get('appProperties', {}).get('tabulaRasaSha256') != checksum):
+        raise GoogleDriveConflictError('Inspect conflicting receipt identities or metadata before recovery.')
 
 
 
@@ -97,12 +100,20 @@ class _ReceiptOperationsMixin:
         content: bytes,
         mime_type: str,
         receipt_id: str | None = None,
+        stored_filename: str | None = None,
     ) -> dict[str, Any]:
         """Create one receipt without replacing a same-named Drive file."""
         validate_receipt_upload(original_name, content)
         folder_id = self._valid_folder_id(folder_id)
-        base_filename = safe_receipt_filename(original_name)
-        original_filename = safe_receipt_filename(original_name)
+        # Explicit recovery preserves both canonical names; ordinary uploads
+        # retain basename normalization and automatic collision suffixes.
+        try:
+            base_filename = (validate_receipt_filename(stored_filename, 'Receipt stored filename')
+                             if stored_filename is not None else safe_receipt_filename(original_name))
+            original_filename = (validate_receipt_filename(original_name, 'Receipt original filename')
+                                 if stored_filename is not None else safe_receipt_filename(original_name))
+        except ReceiptManifestError:
+            raise GoogleDriveAccessError('Receipt recovery filename metadata is invalid.') from None
         content_sha256 = hashlib.sha256(content).hexdigest()
         receipt_id = str(receipt_id or secrets.token_hex(16))
         if not RECEIPT_ID_PATTERN.fullmatch(receipt_id):
@@ -111,7 +122,7 @@ class _ReceiptOperationsMixin:
             profile_key=profile_key,
             folder_id=folder_id,
             receipt_id=receipt_id,
-            content_sha256=content_sha256,
+            content_sha256=None if stored_filename is not None else content_sha256,
         )
         try:
             existing_by_identity = self._list(identity_query, page_size=2)
@@ -122,6 +133,8 @@ class _ReceiptOperationsMixin:
                 upload_attempted=False,
             ) from error
         if existing_by_identity:
+            if stored_filename is not None:
+                _validate_recovery_identity(existing_by_identity, stored_filename, content_sha256)
             uploaded = existing_by_identity[0]
             filename = str(uploaded.get("name") or base_filename)
         else:
@@ -148,6 +161,8 @@ class _ReceiptOperationsMixin:
                     upload_attempted=False,
                 ) from error
             filename = ""
+            if stored_filename is not None and base_filename.casefold() in existing_names:
+                raise GoogleDriveConflictError('A different receipt already uses the recovery filename.')
             for occurrence in range(1, 1001):
                 candidate = suffixed_receipt_filename(
                     base_filename,
@@ -189,6 +204,8 @@ class _ReceiptOperationsMixin:
                 except GoogleDriveError as reconciliation_error:
                     raise error from reconciliation_error
                 if committed:
+                    if stored_filename is not None:
+                        _validate_recovery_identity(committed, stored_filename, content_sha256)
                     uploaded = committed[0]
                 else:
                     uploaded = self._multipart_create(

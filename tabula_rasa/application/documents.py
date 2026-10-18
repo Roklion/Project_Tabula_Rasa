@@ -88,6 +88,7 @@ class DocumentUpload:
     mime_type: str
     sha256: str
     content: bytes = field(repr=False)
+    stored_filename: str = ''  # Explicit byte migration preserves provider-era display names.
 
 
 class DocumentStore(Protocol):

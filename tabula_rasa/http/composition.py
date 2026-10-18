@@ -133,7 +133,7 @@ def open_runtime(settings):
             if connections is not None:
                 store = connections.document_store(context)
                 return create_postgres_services(database, context.entity_id,
-                    document_store=store, document_store_kind='google_drive' if store is not None else None)
+                    document_store=store, document_store_kind=store.store_kind if store is not None else None)
             if document_store is None:
                 return create_postgres_services(database, context.entity_id)
             if context.entity_id != document_store.entity_id or not context.trusted_development:
