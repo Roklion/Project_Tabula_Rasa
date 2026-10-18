@@ -12,6 +12,10 @@ Revision `0009_external_connections` adds external-connection and legacy-claim
 control records, also excluded from the same complete v1 bookkeeping inventory.
 Revision `0011_control_plane_join` marks the integrated forward head without changing data.
 Revision `0012_operations` adds private job/audit history, excluded from ordinary v1 exports.
+Revision `0013_accounting_controls` adds restricted recurring/period policy and
+correction relationships/reasons outside v1. Reversing journals remain ordinary
+portable entries/postings. A v1 snapshot alone does not restore period or
+correction immutability controls; use full database recovery for those guarantees.
 Authorized audit export remains owned by #345; see [jobs and audit operations](OPERATIONS_JOBS_AUDIT.md).
 Existing v1 exports from
 `0004_mileage_order` remain valid; the exporter reports the observed supported
@@ -87,7 +91,7 @@ completeness, relationships and accounting meaning beyond JSON Schema.
 | Manifest field | Meaning |
 | --- | --- |
 | `format`, `format_version` | `tabula-rasa-bookkeeping`, integer `1`; independent of Sheets/archive format 13 |
-| `database_schema_version` | Observed supported PostgreSQL revision (`0004_mileage_order` through `0012_operations`; all have the same v1 bookkeeping inventory, excluding identity/session/connection/claim/lifecycle/job/audit records) |
+| `database_schema_version` | Observed supported PostgreSQL revision (`0004_mileage_order` through `0013_accounting_controls`; all have the same v1 financial inventory, excluding identity/session/connection/claim/lifecycle/job/audit and period/correction control records) |
 | `entity_id` | Explicit selected business entity; also present on every entity-local record |
 | `snapshot_at` | Database transaction-start instant in UTC; all reads use that transaction's coherent snapshot |
 | `counts` | Count for every included canonical collection, including zero counts |

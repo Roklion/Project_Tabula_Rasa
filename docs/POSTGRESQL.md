@@ -38,6 +38,13 @@ See [Durable jobs and bookkeeping history](OPERATIONS_JOBS_AUDIT.md) for trusted
 actor attribution, worker registration, operator commands, integrity checks,
 retention/recovery limits and the explicit hosted scheduling setup checkpoint.
 
+Forward revision `0013_accounting_controls` adds opt-in recurring generation
+authority, monthly period state and immutable correction relationships. It
+activates no entity policy. Follow [jobs operations](OPERATIONS_JOBS_AUDIT.md)
+and [accounting periods](ACCOUNTING_PERIODS.md) for separate adoption/rollback
+procedures. Complete database recovery must preserve these controls and audit
+history; the financial v1 export retains its narrower portability boundary.
+
 ## Access and migration tools
 
 Use synchronous **SQLAlchemy Core 2.0 + Psycopg 3**, with **Alembic** for

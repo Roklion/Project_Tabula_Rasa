@@ -79,6 +79,7 @@ The documentation index is this section of the root README. Go directly to:
 | Start PostgreSQL, run migrations, and test database infrastructure | [PostgreSQL development and operations](docs/POSTGRESQL.md) |
 | Implement PostgreSQL mutations and carry loaded-record baselines | [PostgreSQL concurrency convention](docs/POSTGRESQL_CONCURRENCY.md) |
 | Run durable jobs and inspect atomic audit-history contracts | [Jobs and bookkeeping history](docs/OPERATIONS_JOBS_AUDIT.md) |
+| Adopt monthly accounting locks and linked reversing journals | [Accounting periods and corrections](docs/ACCOUNTING_PERIODS.md) |
 | Dry-run and rehearse a final-format Sheets migration | [Sheets to PostgreSQL migration](docs/SHEETS_POSTGRES_MIGRATION.md) |
 | Accept a whole migrated profile and control backend cutover | [Bookkeeping acceptance and cutover](docs/BOOKKEEPING_CUTOVER.md) |
 | Export complete PostgreSQL bookkeeping privately | [Complete entity export](docs/BOOKKEEPING_EXPORT.md) |

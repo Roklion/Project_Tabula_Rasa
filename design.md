@@ -658,6 +658,21 @@ Generate due occurrences is an explicit confirmed command. Commercial page
 loads never reconcile recurring schedules; the internal edition's on-load
 behavior below remains specific to Streamlit.
 
+With the entity's durable-worker authority explicitly enabled under #334,
+Generate due occurrences queues the same bounded schedule jobs as the timer.
+The result states the queued schedule count and directs the user to refresh
+later for occurrences/attention. Otherwise it retains synchronous generated and
+attention counts. The worker uses the approved business time zone and cannot
+generate future business dates. [Jobs operations](docs/OPERATIONS_JOBS_AUDIT.md)
+owns activation/catchup/rollback; page visits remain read-only.
+
+Opt-in PostgreSQL monthly locks (#336) reject prohibited accounting mutations
+with a safe conflict and guidance to reverse in an open month or request Owner
+unlock. Draft/baseline behavior remains unchanged. The narrow authorized
+close/unlock/reversal API is documented in [accounting periods](docs/ACCOUNTING_PERIODS.md);
+no broad administrative screen is included. Source-owned accounting retains its
+existing workflows and stricter history rules. Streamlit/Sheets remains unchanged.
+
 Assets provides a register, create/detail/edit, retirement and guarded deletion.
 Server-calculated quarterly schedules show override reasons, Posted/Pending and
 ledger IDs. Protected override/removal and Post due depreciation require

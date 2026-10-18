@@ -1,6 +1,8 @@
 """Secondary bookkeeping transport contracts; rules remain service-owned."""
 
-from pydantic import Field
+from typing import Literal
+
+from pydantic import Field, model_serializer
 
 from tabula_rasa.reference_data import normalize_tag_ids
 from .accounts import DecimalString
@@ -144,8 +146,18 @@ class ReconcileRequest(DTO):
 
 
 class ReconcileResult(DTO):
+    queued_count: int = 0
+    execution_mode: Literal['explicit', 'worker'] = 'explicit'
     generated_count: int
     attention_count: int
+
+    @model_serializer(mode='wrap')
+    def preserve_explicit_response(self, handler):
+        result = handler(self)
+        if self.execution_mode == 'explicit':
+            result.pop('queued_count', None)
+            result.pop('execution_mode', None)
+        return result
 
 
 class AssetFields(DTO):

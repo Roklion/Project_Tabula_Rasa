@@ -16,6 +16,7 @@ export function SuccessNotice({ children }: { children: ReactNode }) {
 const messages = {
   validation: 'Check the highlighted fields and try again.',
   conflict: 'This record changed or conflicts with another record. Your draft is preserved.',
+  period_closed: 'This accounting month is closed. Your draft is preserved. Use an authorized reversal in an open month or ask the Owner to unlock it.',
   identity: 'Business access is unavailable. Sign in again or check your membership.',
   read: 'The requested data could not be loaded. Reload to try again.',
   unexpected: 'The request could not be completed. Your draft is preserved. Check the latest record before trying a save again.',
@@ -23,7 +24,7 @@ const messages = {
 
 export function ErrorNotice({ error, onReview, operation = 'write', reauthenticationPath }: { error: unknown; onReview?: () => void; operation?: 'read' | 'write'; reauthenticationPath?: '/invitations' }) {
   const failure = error instanceof ApiError ? error : new ApiError('unexpected');
-  const conflict = ['stale', 'conflict', 'duplicate', 'concurrent_write'].includes(failure.code);
+  const conflict = ['stale', 'conflict', 'duplicate', 'concurrent_write', 'period_closed'].includes(failure.code);
   const validation = ['validation', 'reference', 'invariant', 'required', 'baseline_required', 'baseline_invalid'].includes(failure.code);
   const identity = ['unauthorized', 'forbidden'].includes(failure.code);
   const invitationMessages: Record<string, string> = {
@@ -33,7 +34,7 @@ export function ErrorNotice({ error, onReview, operation = 'write', reauthentica
     invitation_expired: 'This invitation expired. Ask your administrator for a new one.',
   };
   return <div role="alert" className={'notice ' + (conflict ? 'warning' : 'error')}>
-    <p>{invitationMessages[failure.code] ?? messages[conflict ? 'conflict' : validation ? 'validation' : identity ? 'identity' : operation === 'read' ? 'read' : 'unexpected']}</p>
+    <p>{failure.code === 'period_closed' ? messages.period_closed : invitationMessages[failure.code] ?? messages[conflict ? 'conflict' : validation ? 'validation' : identity ? 'identity' : operation === 'read' ? 'read' : 'unexpected']}</p>
     {failure.fields.length > 0 && <ul>{failure.fields.map(field =>
       <li key={field.field}>{field.field}: Check this value.</li>)}</ul>}
     {failure.requestId && <p className="muted">Request reference: {failure.requestId}</p>}
