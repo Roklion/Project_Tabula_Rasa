@@ -28,7 +28,7 @@ from .errors import (
 )
 from .models.common import Health, Version
 from .routes import accounting, accounts, auth, documents, financial_csv, imports, mileage, mileage_imports, references, reporting, secondary, session
-from .routes import connections
+from .routes import connections, periods
 
 logger = logging.getLogger("tabula_rasa.http")
 
@@ -191,6 +191,7 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
     app.include_router(financial_csv.router)
     app.include_router(reporting.router)
     app.include_router(secondary.router)
+    app.include_router(periods.router)
     assets = Path(static_dir) if static_dir is not None else Path(__file__).resolve().parents[2] / "web" / "dist"
     if not schema_only and assets.is_dir():
         @app.api_route('/assets', methods=['GET', 'HEAD'], include_in_schema=False, operation_id='asset_register')

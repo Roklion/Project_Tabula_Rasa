@@ -27,6 +27,7 @@ from .mixed_use import MixedUseService
 from .mixed_use_contracts import MixedUseRepository
 from .recurring import RecurringService
 from .recurring_contracts import RecurringRepository
+from .periods import PeriodService
 
 
 @dataclass(frozen=True)
@@ -53,6 +54,7 @@ class ApplicationServices:
     assets: AssetService | None = None
     mixed_use: MixedUseService | None = None
     recurring: RecurringService | None = None
+    periods: PeriodService | None = None
 
 
 def assemble_application_services(

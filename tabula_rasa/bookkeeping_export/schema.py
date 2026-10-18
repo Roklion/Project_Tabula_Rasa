@@ -16,14 +16,14 @@ FORMAT_VERSION = 1
 # intentionally do not travel in entity exports or restore artifacts.
 # Operations history is private and has a separate authorized export owner (#345).
 # 0012 changes no v1 bookkeeping field; audit/job tables are deliberately excluded.
-# 0013 retains recovery-only provider locations and managed connections; the
-# canonical current location remains in documents. No v1 bookkeeping field changes.
-SUPPORTED_DATABASE_REVISION = "0013_document_locations"
+# 0013 adds separately protected operational policy/correction relationships.
+# Reversing journals use existing entries/postings; those remain portable v1 data.
+# 0014 retains recovery-only provider locations; documents keeps the current location.
+SUPPORTED_DATABASE_REVISION = "0014_document_locations"
 SUPPORTED_DATABASE_REVISIONS = ("0004_mileage_order", "0005_bookkeeping_cutover",
                                 "0006_identity_control_plane", "0007_identity_sessions", "0008_owner_lock_scope",
                                 "0009_external_connections", "0010_workspace_lifecycle",
-                                "0010_onboarding_routes", "0011_control_plane_join",
-                                "0012_operations",
+                                "0010_onboarding_routes", "0011_control_plane_join", "0012_operations", "0013_accounting_controls",
                                 SUPPORTED_DATABASE_REVISION)
 ROOT = "id:text created_at:instant updated_at:instant incarnation_id:text version:integer"
 

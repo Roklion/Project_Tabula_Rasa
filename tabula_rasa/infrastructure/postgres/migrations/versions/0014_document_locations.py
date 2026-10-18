@@ -1,8 +1,8 @@
 """Managed byte connections and retained source locators, never receipt blobs."""
 from alembic import op
 
-revision = '0013_document_locations'
-down_revision = '0012_operations'
+revision = '0014_document_locations'
+down_revision = '0013_accounting_controls'
 branch_labels = None
 depends_on = None
 

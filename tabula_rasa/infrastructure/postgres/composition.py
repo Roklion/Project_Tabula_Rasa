@@ -2,11 +2,13 @@
 
 from dataclasses import replace
 
-from tabula_rasa.application.recurring import RecurringService
+from tabula_rasa.application.periods import PeriodService
 from tabula_rasa.application.services import assemble_application_services
 from .assets import PostgresAssetRepository
 from .mixed_use import PostgresMixedUseRepository
 from .recurring import PostgresRecurringRepository
+from .recurring_jobs import DurableRecurringService
+from .periods import PostgresPeriodRepository
 from .accounting import PostgresTransactionRepository, PostgresJournalRepository
 from .documents import PostgresReceiptRepository
 from .imports import PostgresTransactionImportRepository
@@ -51,7 +53,8 @@ def create_postgres_services(database, entity_id, *, document_store=None, docume
     recurring = PostgresRecurringRepository(
         database, entity_id, transactions=services.transactions, mixed_use=services.mixed_use,
     )
-    return replace(services, recurring=RecurringService(recurring,
+    return replace(services, periods=PeriodService(PostgresPeriodRepository(database, entity_id)),
+                   recurring=DurableRecurringService(recurring,
                    transactions=services.transactions, mixed_use=services.mixed_use))
 
 

@@ -53,7 +53,17 @@ date. Its response reports confirmed generated and attention counts. Repeating
 the action uses existing stable schedule/date identities and does not duplicate
 occurrences. Listing schedules, loading details, visiting other pages and loading
 the runtime never invoke reconciliation. This technical command is not a durable
-scheduler, queue, retry policy or run-history platform; #223 owns those concerns.
+scheduler itself. [Jobs operations](OPERATIONS_JOBS_AUDIT.md) owns #334's opt-in
+durable authority: when enabled, this same explicit command queues bounded jobs
+and reports queued schedules; the browser asks the user to refresh later.
+Timer/explicit requests share the service/idempotency path. Cutoffs cannot exceed
+the approved zone's current business date in worker mode. Existing synchronous
+generation remains available when worker authority is disabled.
+
+[Accounting periods](ACCOUNTING_PERIODS.md) defines #336's independent opt-in
+month lock. Source, generated and import writes encounter the same transactional
+boundary. Missing closed occurrences stop with attention and durable job failure;
+an Owner unlock and eligible retry can recover without partial source pairs.
 
 ## Mixed-use sources and projections
 

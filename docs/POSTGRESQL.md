@@ -38,9 +38,16 @@ See [Durable jobs and bookkeeping history](OPERATIONS_JOBS_AUDIT.md) for trusted
 actor attribution, worker registration, operator commands, integrity checks,
 retention/recovery limits and the explicit hosted scheduling setup checkpoint.
 
+Forward revision `0013_accounting_controls` adds opt-in recurring generation
+authority, monthly period state and immutable correction relationships. It
+activates no entity policy. Follow [jobs operations](OPERATIONS_JOBS_AUDIT.md)
+and [accounting periods](ACCOUNTING_PERIODS.md) for separate adoption/rollback
+procedures. Complete database recovery must preserve these controls and audit
+history; the financial v1 export retains its narrower portability boundary.
+
 ## Access and migration tools
 
-Revision `0013_document_locations` permits managed S3 connection references and
+Revision `0014_document_locations` permits managed S3 connection references and
 retains prior receipt locators separately from canonical metadata and links.
 It stores no receipt bytes or credentials and preserves export v1's 26 domains.
 Follow [Document storage and recovery](DOCUMENT_STORAGE_RECOVERY.md) for explicit

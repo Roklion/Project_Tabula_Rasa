@@ -81,7 +81,7 @@ and evidence hashes only.
 ## Private binding and empty-entity installation
 
 Run from repository root in the API operations environment. Apply forward schema
-revision `0013_document_locations` normally; it preserves the canonical v1 export
+revision `0014_document_locations` normally; it preserves the canonical v1 export
 inventory. Prepare a private JSON file outside Git with these exact fields
 (placeholder values describe the schema):
 

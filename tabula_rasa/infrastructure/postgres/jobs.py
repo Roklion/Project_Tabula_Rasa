@@ -8,7 +8,7 @@ External side effects need their own delivery contract and are not supported.
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from uuid import uuid4
 
 from sqlalchemy import text
@@ -31,6 +31,9 @@ class JobExecution:
     job_id: str
     idempotency_key: str
     service_id: str
+    target_id: str | None = None
+    business_date: date | None = None
+    generation_revision: int | None = None
 
 
 @dataclass(frozen=True)
@@ -76,21 +79,27 @@ class JobQueue:
         self.registry = registry
         self.service_id = service_id
 
-    def enqueue(self, job_type, key, *, due_at=None, max_attempts=3):
+    def enqueue(self, job_type, key, *, due_at=None, max_attempts=3, target_id=None, business_date=None,
+                generation_revision=None):
         self.registry.handler(job_type)
         if not isinstance(key, str) or not key.strip() or len(key) > 200 or not 1 <= max_attempts <= 10:
             raise ValueError('Invalid job identity or attempt budget.')
         with self.database.transaction(require_outer=True) as connection:
-            return self._enqueue(connection, job_type, key, due_at or datetime.now(timezone.utc), max_attempts)
+            return self._enqueue(connection, job_type, key, due_at or datetime.now(timezone.utc), max_attempts,
+                                 target_id=target_id, business_date=business_date, generation_revision=generation_revision)
 
-    def _enqueue(self, connection, job_type, key, due_at, max_attempts=3, definition_id=None):
+    def _enqueue(self, connection, job_type, key, due_at, max_attempts=3, definition_id=None,
+                 target_id=None, business_date=None, generation_revision=None):
         params = {'scope': self.entity_id, 'kind': job_type, 'key': key, 'due': due_at,
-                  'max': max_attempts, 'definition': definition_id}
-        connection.execute(text('''INSERT INTO jobs(entity_id,job_type,idempotency_key,due_at,max_attempts,definition_id)
-            VALUES (:scope,:kind,:key,:due,:max,:definition)
+                  'max': max_attempts, 'definition': definition_id, 'target': target_id, 'date': business_date,
+                  'revision': generation_revision}
+        connection.execute(text('''INSERT INTO jobs(entity_id,job_type,idempotency_key,due_at,max_attempts,definition_id,target_id,business_date,generation_revision)
+            VALUES (:scope,:kind,:key,:due,:max,:definition,:target,:date,:revision)
             ON CONFLICT (entity_id,idempotency_key) DO NOTHING'''), params)
         row = connection.execute(text('SELECT * FROM jobs WHERE entity_id=:scope AND idempotency_key=:key'), params).mappings().one()
-        if row['job_type'] != job_type or row['definition_id'] != definition_id:
+        if (row['job_type'] != job_type or row['definition_id'] != definition_id
+                or row['target_id'] != target_id or row['business_date'] != business_date
+                or row['generation_revision'] != generation_revision):
             raise JobError('identity_conflict')
         return str(row['id'])
 
@@ -184,7 +193,8 @@ class JobQueue:
                     # This connection legitimately idles while its participant
                     # works. Keep the row-lock fence until that service returns.
                     connection.execute(text("SET LOCAL idle_in_transaction_session_timeout='0'"))
-                execution = JobExecution(self.entity_id, job_id, row['idempotency_key'], self.service_id)
+                execution = JobExecution(self.entity_id, job_id, row['idempotency_key'], self.service_id,
+                                         row['target_id'], row['business_date'], row['generation_revision'])
                 self._invoke(registration, execution)
                 # The lock remains held even past lease expiry. Reclaimers skip it;
                 # a process crash rolls back both effects and this status update.
@@ -196,7 +206,7 @@ class JobQueue:
         except Exception as error:
             # No exception messages or arbitrary handler content enter diagnostics.
             code = 'transient' if isinstance(error, (DatabaseError, StorageError)) and error.code in {
-                'unavailable', 'concurrent_write'} else 'poison'
+                'unavailable', 'concurrent_write', 'database_exhausted'} else 'poison'
         return self._fail(params, code)
 
     def _invoke(self, registration, execution):
@@ -206,7 +216,8 @@ class JobQueue:
         # Keep the job-row fence on the orchestration connection. A separate
         # one-connection participant preserves existing service require_outer
         # boundaries against the exact same DB, with no browser context.
-        participant = Database(DatabaseSettings(self.database.engine.url, pool_size=1, max_overflow=0))
+        participant = Database(DatabaseSettings(self.database.engine.url, pool_size=1, max_overflow=0),
+                               statement_timeout_ms=30000)
         try:
             with audit_context(participant, AuditContext('worker', self.service_id, 'job', self.entity_id,
                                                        correlation_id=execution.job_id)):
@@ -255,7 +266,7 @@ class JobQueue:
             raise ValueError('Invalid diagnostic budget.')
         with self.database.transaction(read_only=True) as connection:
             return tuple(dict(row) for row in connection.execute(text('''SELECT id,job_type,state,attempts,max_attempts,
-                due_at,lease_until,failure_code,finished_at FROM jobs WHERE entity_id=:scope
+                due_at,lease_until,failure_code,finished_at,target_id,business_date,generation_revision FROM jobs WHERE entity_id=:scope
                 ORDER BY created_at DESC,id LIMIT :limit'''), {'scope': self.entity_id, 'limit': limit}).mappings())
 
     def attempts(self, job_id):

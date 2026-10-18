@@ -71,7 +71,7 @@ canonical entity; the existing entity adapter preserves that mapping.
 
 Install normal API/PostgreSQL dependencies. Drive needs no
 `requirements-object-storage.txt`. Apply the forward schema normally;
-`0013_document_locations` retains prior locators without SQL receipt blobs.
+`0014_document_locations` retains prior locators without SQL receipt blobs.
 Supply the approved private DB URL/TLS and connection-secret settings.
 
 ```powershell
