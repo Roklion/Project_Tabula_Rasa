@@ -26,9 +26,10 @@ or reuse DSM's internal PostgreSQL binaries. If unavailable or resource-limited,
 record the concrete blocker and obtain an operator decision on an alternative.
 
 The client-only image in `deploy/nas/Dockerfile` uses PostgreSQL 18.6, Python,
-age and timezone/CA data. The pinned upstream manifest supports ARM64. The
+the distribution's `python3-psycopg` (using system libpq), age and timezone/CA data.
+The pinned upstream manifest supports ARM64. The
 runner also works with a separately maintained Python 3.9+ installation and
-matching client tools, but installing a new native toolchain is not automatic.
+matching client tools and Psycopg 3, but installing a new native toolchain is not automatic.
 Python compatibility here is separate from the application's Python 3.12 dev
 environment. Do not install application dependencies on the NAS. Confirm all
 three PostgreSQL clients match the actual server major version; the runner
@@ -36,7 +37,7 @@ refuses mismatches. Rebuild the reviewed image for a server-major change.
 
 From a clean checkout, build on the NAS, or build ARM64 on an authorized build
 host and import the image. No database server is started by this image's
-entrypoint. Its dedicated Docker ignore file sends only the runner to the
+entrypoint. Its dedicated Docker ignore file sends only the runner and private metadata helper to the
 builder; never put credentials or backups in a build context.
 
 ```sh
@@ -141,6 +142,105 @@ Run `wrapper preflight` on the NAS. It checks real TLS, schema revision, client
 major versions, age availability and reports free bytes, without publishing
 connection details. It performs read-only source queries, not a dump or restore.
 Then authorize and execute a controlled `wrapper run` and isolated restore.
+
+### Client TLS and Neon proxy troubleshooting
+
+Neon may terminate TLS at its proxy: a verified client connection can coexist
+with `ssl = false` in backend `pg_stat_ssl`. That backend view describes the
+proxy-to-PostgreSQL link and cannot validate the NAS-to-proxy TLS session.
+The runner uses a private Psycopg subprocess with the same sanitized libpq
+service/password environment as the dump. It reads `connection.pgconn.ssl_in_use`
+(libpq `PQsslInUse()`) on the **same connection** that reads server/schema
+metadata in a read-only transaction. It refuses a non-TLS connection. Both
+configuration validation and the metadata connection require
+`sslmode=verify-full` and `channel_binding=require`; certificate/hostname and
+authentication failures remain fatal. The dump continues using those required
+service settings. No production credentials or endpoint are printed.
+
+Successful preflight exits zero and emits JSON with this shape (version,
+schema and free-space values depend on the selected database and NAS):
+
+```json
+{"free_bytes": 123456789, "schema_version": "0005_bookkeeping_cutover", "server_version_num": 180006, "status": "compatible", "tls": true, "tools": {"pg_dump": "18.6", "pg_restore": "18.6", "psql": "18.6"}}
+```
+
+`compatible` means client TLS, required schema-revision syntax, all three
+client/server majors, age availability and minimum free space passed. It does
+not establish archive or restore acceptance. The schema need not equal the
+example: compare it privately to the intended source release.
+
+If `code` is `source`, privately check the selected direct endpoint, CA bundle,
+hostname, role/password, channel-binding support and `public.alembic_version`.
+Do not weaken TLS/channel binding or substitute backend `pg_stat_ssl` for the
+client check. Missing/inaccessible Alembic metadata or malformed/empty revisions
+fail. For `client`, check all three client versions against the server major.
+For a newly imported image, verify its immutable ID and helper hashes below;
+reusing an old wrapper image ID still runs the old check. Missing Psycopg or
+helper files also fail closed as `source`; rebuild the complete image. Provider
+diagnostics stay private; the runner intentionally returns only fixed guidance.
+
+### Build and import the corrected ARM64 image
+
+Use a development machine or CI runner with Docker Buildx and ARM64 execution
+support (native or emulated), avoiding a build on the 512 MB NAS. From the
+reviewed fix checkout, these PowerShell commands produce a single-platform
+Docker archive; record the commit, image ID and both hashes privately:
+
+```powershell
+git rev-parse HEAD
+docker buildx build --platform linux/arm64 --load -f deploy/nas/Dockerfile -t tabula-nas-backup:neon-tls .
+if ($LASTEXITCODE -ne 0) { throw 'Image build failed' }
+docker image inspect --format '{{.Id}} {{.Os}}/{{.Architecture}}' tabula-nas-backup:neon-tls
+Get-FileHash scripts/nas_postgres_backup.py,scripts/nas_postgres_source.py -Algorithm SHA256
+docker image save --output tabula-nas-backup-neon-tls-arm64.tar tabula-nas-backup:neon-tls
+if ($LASTEXITCODE -ne 0) { throw 'Image export failed' }
+Get-FileHash tabula-nas-backup-neon-tls-arm64.tar -Algorithm SHA256
+```
+
+The inspect result must say `linux/arm64`. Package security updates are resolved
+at build time, so subsequent rebuilds can produce different IDs. Transfer this
+exact archive to `/volume1/Tabula_Rasa_Postgres/` using the authorized NAS file
+transfer route; keep it outside the source tree and backup-generation namespace.
+Compare `sha256sum /volume1/Tabula_Rasa_Postgres/tabula-nas-backup-neon-tls-arm64.tar`
+with the recorded archive hash. In Synology **Container Manager → Image → Add →
+Import**, select that archive and wait for import to finish. Do not create a
+database container or alter scheduled tasks.
+
+In the authorized NAS shell, retrieve the imported immutable image ID, verify
+the architecture and check the shipped scripts against the recorded hashes:
+
+```sh
+docker image inspect --format '{{.Id}} {{.Os}}/{{.Architecture}}' tabula-nas-backup:neon-tls
+IMAGE_ID=$(docker image inspect --format '{{.Id}}' tabula-nas-backup:neon-tls) || exit 1
+docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
+  --user 1027:100 --entrypoint sha256sum "$IMAGE_ID" \
+  /opt/tabula/nas_postgres_backup.py /opt/tabula/nas_postgres_source.py
+docker run --rm --read-only --user 1027:100 --entrypoint python3 "$IMAGE_ID" \
+  -c 'import psycopg; from psycopg import pq; print("psycopg", psycopg.__version__, "libpq", pq.version())'
+```
+
+The image ID must match the build-host ID, both script hashes must match the
+reviewed checkout, and libpq must support PostgreSQL 18. These inspection
+containers have no credentials or archive mounts.
+
+After these checks, the **operator** updates
+`/volume1/Tabula_Rasa_Postgres/config/bin/run-production.sh`: preserve an
+owner-only copy, edit only the existing `sha256:...` image reference to the
+verified new `IMAGE_ID`, and retain `--user 1027:100`, current hardened flags,
+production config mount and `/volume1/Tabula_Rasa_Postgres/archives` mount.
+Keep the existing container mount targets, since `backup.json` uses them.
+Do not change credentials, keys, UAT settings or scheduler registration. Check
+the replacement image ID privately in the wrapper, then run:
+
+```sh
+/volume1/Tabula_Rasa_Postgres/config/bin/run-production.sh preflight
+```
+
+Require exit zero, `status: compatible`, `tls: true`, the intended schema
+revision and matching major-18 tool/server values. This is a read-only source
+check, not a backup. Keep #294 open: controlled backup execution, scheduling,
+retention, failure drills and retained-archive isolated restore acceptance
+remain separate operator work. These instructions do not perform deployment.
 
 Configure **DSM Task Scheduler** with a known `America/New_York` local timezone
 and working NTP; verify the displayed timezone and next-run dates. Do not
@@ -309,7 +409,7 @@ Focused unit tests are in `tests/test_nas_postgres_backup.py`. The self-containe
 synthetic client drill starts a new private PostgreSQL cluster inside the image,
 uses verified TLS/SCRAM channel binding, backs up two entities with overlapping
 IDs, decrypts/restores to a new database, compares content and broader objects,
-then checks a real authentication failure and ciphertext corruption. It publishes
+then checks real certificate/hostname/authentication failures and ciphertext corruption. It publishes
 no port and cleans only its own fresh synthetic fixture. It does not substitute
 for canonical application bookkeeping verification or real NAS/provider evidence.
 

@@ -76,7 +76,7 @@ channel_binding=require
 connect_timeout=15
 """)
         passfile = root / "pgpass"
-        passfile.write_text(f"localhost:5432:ledger:postgres:{password}\n")
+        passfile.write_text(f"localhost:5432:ledger:postgres:{password}\n127.0.0.1:5432:ledger:postgres:{password}\n")
         configfile = root / "backup.json"
         configfile.write_text(json.dumps({"environment": "production", "storage": str(storage), "storage_marker": marker,
                                         "source_sha256": hashlib.sha256(b"localhost:5432/ledger").hexdigest(),
@@ -87,6 +87,22 @@ connect_timeout=15
         stage = "source"
         info = nas.source_info(nas.child_environment(config))
         assert info["tls"] is True
+        # Real libpq failures must stay closed with no provider diagnostics.
+        original_service = service.read_text()
+        execute(["openssl", "req", "-new", "-x509", "-nodes", "-days", "1", "-subj", "/CN=untrusted",
+                 "-keyout", str(root / "untrusted.key"), "-out", str(root / "untrusted.crt")])
+        for stage, invalid_service in (
+            ("hostname_rejection", original_service.replace("host=localhost", "host=127.0.0.1")),
+            ("certificate_rejection", original_service.replace("/server.crt", "/untrusted.crt")),
+        ):
+            service.write_text(invalid_service)
+            try:
+                nas.source_info(nas.child_environment(config))
+            except nas.BackupError as error:
+                assert str(error) == "source"
+            else:
+                raise AssertionError
+        service.write_text(original_service)
         stage = "backup"
         result = nas.backup(config)
         generation = nas.namespace(config) / "complete" / result["generation"]
