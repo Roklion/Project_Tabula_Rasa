@@ -99,6 +99,8 @@ gh run view $promotionRun --repo Roklion/Project_Tabula_Rasa --json jobs
 python scripts/verify_postgres_recovery.py inspect
 
 # Explicit TABULA_RASA_DATABASE_URL, environment and entity injected privately.
+# PowerShell child processes inherit $env: variables, not ordinary $variables.
+# Use the approved secret injector; do not type credential values into history.
 python -m tabula_rasa.infrastructure.postgres.job_cli inspect --entity $entity --service-id incident-operator
 python -m tabula_rasa.infrastructure.postgres.job_cli attempts --entity $entity --service-id incident-operator --id $jobId
 ```
@@ -142,7 +144,11 @@ For an approved staging operation, dispatch the existing workflow on main:
 ```powershell
 # $rollbackImage is the reviewed repository@sha256 digest, never a mutable tag.
 gh workflow run commercial-staging.yml --repo Roklion/Project_Tabula_Rasa --ref main -f "image=$rollbackImage"
-# Capture the new run URL/ID; inspect it before any subsequent dispatch.
+# Use the dispatch URL when supplied, or list candidate runs if it is absent.
+gh run list --repo Roklion/Project_Tabula_Rasa --workflow commercial-staging.yml --branch main --event workflow_dispatch --limit 5 --json databaseId,createdAt,status,url
+# Verify the dispatch time/actor and requested image in the run's Actions details.
+# Select that exact run, not merely the newest run; stop if it is ambiguous.
+$rollbackRun = Read-Host 'Verified rollback run ID'
 gh run view $rollbackRun --repo Roklion/Project_Tabula_Rasa --json status,conclusion,jobs,url
 ```
 
