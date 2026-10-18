@@ -82,6 +82,9 @@ def execute(database, secrets, payload, *, operation, environment, revision=0, a
         # Exact snapshot digest includes links, so a changed linking decision invalidates approval.
         links = connection.execute(text('SELECT * FROM document_links WHERE entity_id=:entity ORDER BY document_id,entry_id,mixed_use_source_id,position'),
                                    {'entity': entity}).mappings().all()
+    if managed is not None and (managed['organization_id'] != payload['organization_id']
+                                or managed['profile_key'] != payload['profile_key']):
+        raise DocumentValidationError('The installed receipt connection has different organization/profile ownership.')
     point_sha256 = (create_postgres_export_service(database, entity).export()['manifest']['content_sha256']
                     if operation in {'copy', 'restore'} else None)
     plan = digest({'payload_sha256': digest(payload), 'operation': operation, 'revision': revision,
@@ -95,8 +98,7 @@ def execute(database, secrets, payload, *, operation, environment, revision=0, a
     if apply and (expected_plan != plan or not re.fullmatch('[0-9a-f]{64}', approval_sha256 or '')):
         raise DocumentValidationError('Apply requires the exact reviewed plan and a private operator approval digest.')
     repository = PostgresReceiptRepository(database, entity, store_kind='s3', store_scope_key=target.scope_key)
-    already_managed = (managed is not None and managed['organization_id'] == payload['organization_id']
-                       and managed['store_scope_key'] == target.scope_key)
+    already_managed = managed is not None and managed['store_scope_key'] == target.scope_key
     if operation == 'verify' or operation in {'copy', 'restore'} and already_managed:
         count = verify_entity_documents(repository, target)
         return {'verified': count, 'applied': False, 'already_managed': already_managed, 'plan_sha256': plan}

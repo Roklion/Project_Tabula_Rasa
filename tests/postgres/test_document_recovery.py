@@ -196,7 +196,7 @@ def test_managed_binding_two_org_fresh_authorization_disconnect_and_no_drive_fal
 
 
 def test_operator_plan_new_entity_binding_and_restart_verifier(database, tmp_path, monkeypatch):
-    _, _, _, org, _ = identity_setup(database)
+    _, _, _, org, other_org = identity_setup(database)
     secrets = ConnectionSecrets(tmp_path, Fernet.generate_key().decode())
     target = s3_store()
     monkeypatch.setattr('scripts.manage_document_storage.provider_store', lambda *args, **kw: target)
@@ -219,6 +219,13 @@ def test_operator_plan_new_entity_binding_and_restart_verifier(database, tmp_pat
     repo = PostgresReceiptRepository(database, 'alpha', store_kind='s3', store_scope_key=target.scope_key)
     document = target.upload('alpha', upload())
     repo.register_document(document)
+    before_calls = list(target.client.calls)
+    for changed in ({'profile_key': 'beta'}, {'organization_id': other_org}):
+        for operation in ('copy', 'verify', 'rotate'):
+            with pytest.raises(DocumentValidationError, match='organization/profile ownership'):
+                execute(database, secrets, {**payload, **changed}, operation=operation, environment='staging')
+    assert target.client.calls == before_calls
+    assert repo.retained_documents() == (document,)
     rotation = execute(database, secrets, payload, operation='rotate', environment='staging', revision=1)
     assert rotation['verified'] == 1 and not rotation['applied']
     result = execute(database, secrets, payload, operation='rotate', environment='staging', revision=1, apply=True,
