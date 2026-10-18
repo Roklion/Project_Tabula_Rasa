@@ -6,10 +6,13 @@ import json
 import os
 from pathlib import Path
 import subprocess
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
 from scripts import nas_postgres_backup as nas
+from scripts import nas_postgres_source as source
 
 
 NOW = datetime(2026, 10, 15, 2, 0, tzinfo=timezone.utc)  # Wednesday 22:00 EDT
@@ -62,7 +65,7 @@ def clients(monkeypatch):
         output = b""
         if "--version" in args:
             output = f"{args[0]} (PostgreSQL) 18.6\n".encode()
-        elif args[0] == "psql":
+        elif args[-1].endswith("nas_postgres_source.py"):
             output = json.dumps({"server_version_num": 180006, "schema_version": "0005_bookkeeping_cutover", "tls": True}).encode()
         elif args[0] == "pg_dump":
             Path(args[-1]).write_bytes(b"PGDMP" + SENTINEL.encode())
@@ -91,7 +94,7 @@ def test_complete_generation_is_encrypted_scoped_and_verifiable(configured, clie
     assert manifest["tools"] == {"pg_dump": "18.6", "pg_restore": "18.6", "psql": "18.6"}
     assert SENTINEL not in (folder / "manifest.json").read_text()
     assert nas.health(config, NOW)["status"] == "healthy"
-    assert [a[0] for a, _ in clients] == ["pg_dump", "pg_restore", "psql", "psql", "pg_dump", "pg_restore", "age"]
+    assert [a[0] for a, _ in clients] == ["pg_dump", "pg_restore", "psql", nas.sys.executable, "pg_dump", "pg_restore", "age"]
     assert all("PGHOST" not in kw["env"] and "PGOPTIONS" not in kw["env"] for _, kw in clients)
     assert not (nas.namespace(config) / ".lock").exists()
 
@@ -213,13 +216,14 @@ def test_production_uat_and_two_databases_do_not_share_archives_or_guards(config
     assert observed_passfiles == {str(value["passfile"]) for value in (config, uat, second_db)}
 
 
-@pytest.mark.parametrize("mutation", ["pooler", "tls", "identity", "password", "defaults", "dbname", "permissions", "marker"])
+@pytest.mark.parametrize("mutation", ["pooler", "tls", "channel_binding", "identity", "password", "defaults", "dbname", "permissions", "marker"])
 def test_invalid_or_unsafe_configuration_never_connects(configured, clients, capsys, mutation):
     path, config = configured
     service = Path(config["service_file"])
     text = service.read_text()
     changes = {"pooler": ("production.example", "production-pooler.example"),
-               "tls": ("verify-full", "require"), "dbname": ("dbname=ledger", "dbname=postgresql://secret@wrong/db")}
+               "tls": ("verify-full", "require"), "channel_binding": ("channel_binding=require", "channel_binding=prefer"),
+               "dbname": ("dbname=ledger", "dbname=postgresql://secret@wrong/db")}
     if mutation in changes:
         service.write_text(text.replace(*changes[mutation]))
     elif mutation == "password":
@@ -252,23 +256,96 @@ def test_disk_capacity_blocks_dump_and_health_is_actionable(configured, clients,
     assert nas.health(config, NOW)["status"] == "capacity"
 
 
-@pytest.mark.parametrize("failure", ["version", "tls", "schema", "timeout"])
+@pytest.mark.parametrize("failure", ["version", "tls", "schema", "invalid_schema", "empty_revision", "timeout",
+                                   "certificate", "hostname", "authentication"])
 def test_preflight_rejects_incompatible_source_without_exposing_output(configured, clients, monkeypatch, capsys, failure):
     original_run = nas.subprocess.run
     def invalid(args, **kwargs):
         if failure == "timeout":
             raise subprocess.TimeoutExpired(args, 30, output=SENTINEL)
+        if failure in {"certificate", "hostname", "authentication"} and args[-1].endswith("nas_postgres_source.py"):
+            raise subprocess.CalledProcessError(1, args, stderr=SENTINEL + " production.example.invalid")
         result = original_run(args, **kwargs)
         if failure == "version" and args[0] == "pg_dump":
             result.stdout = b"pg_dump (PostgreSQL) 17.1"
-        elif failure in {"tls", "schema"} and args[0] == "psql" and "--version" not in args:
+        elif failure in {"tls", "schema", "invalid_schema", "empty_revision"} and args[-1].endswith("nas_postgres_source.py"):
             data = json.loads(result.stdout)
-            data["tls" if failure == "tls" else "schema_version"] = False if failure == "tls" else ""
+            data["tls" if failure == "tls" else "schema_version"] = {
+                "tls": False, "schema": None, "invalid_schema": "private://invalid", "empty_revision": ","
+            }[failure]
             result.stdout = json.dumps(data).encode()
         return result
     monkeypatch.setattr(nas.subprocess, "run", invalid)
     assert nas.main(["preflight", "--config", str(configured[0])]) == 1
-    assert SENTINEL not in capsys.readouterr().out
+    captured = capsys.readouterr()
+    assert SENTINEL not in captured.out + captured.err
+    assert "production.example.invalid" not in captured.out + captured.err
+    assert json.loads(captured.out)["code"] == ("client" if failure in {"version", "timeout"} else "source")
+
+
+@pytest.fixture
+def metadata_connection(monkeypatch):
+    import psycopg
+
+    connection = MagicMock()
+    connection.__enter__.return_value = connection
+    connection.pgconn.ssl_in_use = True
+    connection.info.server_version = 180006
+    connection.execute.return_value.fetchone.return_value = ("0005_bookkeeping_cutover",)
+    connect = MagicMock(return_value=connection)
+    monkeypatch.setattr(psycopg, "connect", connect)
+    return connect, connection
+
+
+@pytest.mark.parametrize("backend_tls", [False, True])
+def test_metadata_uses_client_tls_on_same_connection(metadata_connection, backend_tls):
+    connect, connection = metadata_connection
+    # A provider may terminate client TLS before its PostgreSQL backend.
+    def execute(query):
+        if "pg_stat_ssl" in query:
+            return SimpleNamespace(fetchone=lambda: (backend_tls,))
+        return SimpleNamespace(fetchone=lambda: ("0005_bookkeeping_cutover",))
+    connection.execute.side_effect = execute
+    assert source.source_metadata() == {
+        "server_version_num": 180006, "schema_version": "0005_bookkeeping_cutover", "tls": True
+    }
+    connect.assert_called_once_with("service=backup", sslmode="verify-full", channel_binding="require", connect_timeout=15)
+    queries = [call.args[0] for call in connection.execute.call_args_list]
+    assert queries[0] == "SET TRANSACTION READ ONLY"
+    assert len(queries) == 2 and "public.alembic_version" in queries[1]
+    connection.__exit__.assert_called_once()
+
+
+def test_metadata_plaintext_is_rejected_before_query(metadata_connection):
+    _, connection = metadata_connection
+    connection.pgconn.ssl_in_use = False
+    with pytest.raises(ValueError, match="source"):
+        source.source_metadata()
+    connection.execute.assert_not_called()
+    connection.__exit__.assert_called_once()
+
+
+@pytest.mark.parametrize("stage", ["certificate", "hostname", "authentication", "missing_table"])
+def test_metadata_errors_are_silent(metadata_connection, capsys, stage):
+    import psycopg
+
+    connect, connection = metadata_connection
+    error = psycopg.OperationalError(stage + SENTINEL + " production.example.invalid")
+    if stage == "missing_table":
+        connection.execute.side_effect = [MagicMock(), error]
+    else:
+        connect.side_effect = error
+    assert source.main() == 1
+    assert capsys.readouterr() == ("", "")
+
+
+def test_metadata_subprocess_emits_only_safe_metadata(metadata_connection, capsys):
+    assert source.main() == 0
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    assert json.loads(captured.out) == {
+        "server_version_num": 180006, "schema_version": "0005_bookkeeping_cutover", "tls": True
+    }
 
 
 def test_status_failure_after_publication_preserves_archive(configured, clients, monkeypatch):

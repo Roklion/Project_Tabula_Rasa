@@ -2,3 +2,4 @@
 **
 !scripts/
 !scripts/nas_postgres_backup.py
+!scripts/nas_postgres_source.py

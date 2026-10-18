@@ -15,6 +15,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import uuid
 from zoneinfo import ZoneInfo
 
@@ -22,12 +23,6 @@ from zoneinfo import ZoneInfo
 UTC = timezone.utc
 GRACE = timedelta(hours=2)
 CATCH_UP = timedelta(hours=24)
-METADATA_SQL = """BEGIN READ ONLY;
-SELECT json_build_object(
- 'server_version_num', current_setting('server_version_num')::int,
- 'schema_version', (SELECT string_agg(version_num, ',' ORDER BY version_num) FROM public.alembic_version),
- 'tls', (SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()));
-COMMIT;"""
 GUIDANCE = {
     "configuration": "Check the protected configuration, service identity and file permissions.",
     "storage": "Check the protected storage mount, marker and available capacity.",
@@ -184,11 +179,11 @@ def source_info(env):
         if not match:
             raise BackupError("client")
         versions[tool] = match[1]
-    raw = command(["psql", "-X", "-w", "-A", "-t", "-q", "-v", "ON_ERROR_STOP=1", "-c", METADATA_SQL],
+    raw = command([sys.executable, str(Path(__file__).with_name("nas_postgres_source.py"))],
                   env, "source", capture=True, timeout=60)
     metadata = json.loads(raw)
     if (metadata.get("tls") is not True
-            or not re.fullmatch(r"[A-Za-z0-9_,]+", metadata.get("schema_version") or "")):
+            or not re.fullmatch(r"[A-Za-z0-9_]+(?:,[A-Za-z0-9_]+)*", metadata.get("schema_version") or "")):
         raise BackupError("source")
     server_major = metadata["server_version_num"] // 10000
     if any(int(value.split(".")[0]) != server_major for value in versions.values()):
