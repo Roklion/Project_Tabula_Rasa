@@ -198,6 +198,11 @@ use. Hosted mode must be explicit; missing named configuration never falls back.
 
 ## Promotion, failure and rollback
 
+[#340 incident response](INCIDENT_RESPONSE.md) provides severity/ownership,
+containment, safe diagnostics and cross-provider recovery decisions. Its
+[controlled staging drill](INCIDENT_DRILL.md) reuses this lifecycle and preserves
+the named-mode, schema and uncertain-deployment boundaries below.
+
 The ordered lifecycle is mode/image verification -> bound `current`/`upgrade`/`health`
 in a separate migration container -> Render digest deployment -> readiness ->
 real browser smoke. Restricted-alpha smoke checks gate restrictions, release identity,

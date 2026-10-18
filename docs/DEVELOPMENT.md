@@ -44,6 +44,11 @@ remaining hosted/manual prerequisites and Streamlit retirement boundary.
 access mode, named promotion smoke, operator provider/rehearsal checkpoint and
 handoff. Its hosted acceptance remains pending separate from repository tests.
 
+[#340 incident response](INCIDENT_RESPONSE.md), [secret custody/rotation](SECRETS_OPERATIONS.md)
+and the [controlled staging drill](INCIDENT_DRILL.md) coordinate existing tools
+under #223. Retain sanitized observed evidence and explicit gaps; #298's human
+commercial recovery acceptance and #224's release decisions remain separate.
+
 [Identity ADR 0003](adr/0003-commercial-identity-and-tenancy.md) and
 [Commercial identity](COMMERCIAL_IDENTITY.md) freeze #310's provider, session,
 role and tenant-context contract for #311–#321. They are implementation/setup
