@@ -319,6 +319,11 @@ separate operation IDs, expected points, results and measurements.
 
 ## Authority, document recovery and return to service
 
+[#340's service-binding checklist](INCIDENT_RESPONSE.md#database-recovery-and-safe-service-binding)
+coordinates containment, exact target/role checks, restored-session revocation
+and full-service evidence. It preserves the unsupported new-endpoint authority
+rebind stop below; it adds no bypass or generic authority rewrite command.
+
 An isolated restored database remains offline from ordinary requests/jobs.
 #258 binds active authority to an endpoint fingerprint. A clone on another
 endpoint can therefore pass bookkeeping verification while ordinary PostgreSQL

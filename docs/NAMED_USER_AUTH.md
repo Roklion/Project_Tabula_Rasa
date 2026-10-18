@@ -136,6 +136,11 @@ it does not claim a copied credential was revoked.
 
 ## Revocation and owner recovery
 
+[#340 security response](INCIDENT_RESPONSE.md#security-and-identity-incidents)
+defines immediate-revocation incident classes; [secret operations](SECRETS_OPERATIONS.md#named-identity-and-restored-session-revocation)
+coordinates custody, worker drain, this epoch command and restored-session
+invalidation. Provider recovery and local app revocation remain separate.
+
 Membership roles are Owner, Admin, Editor, Accountant and Read-only. Role/state
 changes increment the authorization version. Missing/inactive membership,
 suspended organizations, inactive ownership, disabled users and unknown roles

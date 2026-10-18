@@ -160,7 +160,8 @@ thresholds. Record those accepted limitations or choose approved continuous
 capacity; monitoring itself can consume free compute hours. Do not mask an
 outage or claim paid availability from a personal free allowance. For request
 alerts, no traffic is zero, not an incident. For uptime/backup absence it is an
-incident. The future #340 runbook should consume these safe trails and the
+incident. The [#340 incident runbook](INCIDENT_RESPONSE.md) consumes these safe
+trails and the
 existing [deployment](COMMERCIAL_DEPLOYMENT.md),
 [NAS health/notification](NAS_POSTGRESQL_BACKUP.md#nas-command-and-schedule) and
 [recovery](POSTGRESQL_RECOVERY.md) procedures. NAS status output contains its

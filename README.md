@@ -73,6 +73,7 @@ The documentation index is this section of the root README. Go directly to:
 | Use or validate commercial entity setup, entries, ledger and reports | [Commercial core workflows](docs/COMMERCIAL_WORKFLOWS.md) |
 | Configure technical Render/Neon environments and deploy a tested image | [Technical deployment and operator checkpoint](docs/COMMERCIAL_DEPLOYMENT.md) |
 | Configure tenant-safe diagnostics, alerts and operational triage | [Operational observability](docs/OBSERVABILITY.md) |
+| Respond to incidents, roll back compatible images and rotate secrets | [Incident response](docs/INCIDENT_RESPONSE.md), [secret operations](docs/SECRETS_OPERATIONS.md) and [staging drill](docs/INCIDENT_DRILL.md) |
 | Review commercial visual, responsive and accessibility evidence | [Integrated UI acceptance](docs/COMMERCIAL_UI_ACCEPTANCE.md) |
 | Verify technical alpha and track the Streamlit transition | [Alpha release gate and retirement boundary](docs/TECHNICAL_ALPHA.md) |
 | Implement the commercial PostgreSQL accounting model | [Canonical schema ADR](docs/adr/0001-canonical-accounting-schema.md) |
