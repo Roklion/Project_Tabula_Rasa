@@ -164,6 +164,19 @@ runner time, phase costs, retries, JUnit counts/skips/failures and shard imbalan
 No overall speedup or cost reduction is claimed. Adjust partitions from evidence;
 broader visual scheduling requires an explicit coverage/fallback policy.
 
+## Visual-preview optimizer isolation (#384)
+
+The shared `startVisualPreview` fixture gives every live test preview a unique
+Vite optimizer cache under `web/node_modules/.vite-visual-*` and removes it on
+close or startup failure. A worker identifier alone is insufficient because
+preview lifetimes can overlap within one worker. This prevents the normal dev
+server or another preview from deleting/replacing a preview's optimized files.
+The run-once HTTP/Git suite includes a deterministic dependency-URL regression;
+all four browser/device projects retain their existing preview assertions.
+[Diagnosis and validation boundaries](evidence/ci-384-preview-cache.md) preserve
+the original failed sample, explain the reproduced lifecycle and distinguish
+local fix validation from #376's unchanged-source measurement pairs.
+
 ## Focused local commands and reporting
 
 From the repository root with Python 3.12/Node 24 and pinned dependencies:
