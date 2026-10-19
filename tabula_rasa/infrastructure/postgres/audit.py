@@ -54,6 +54,7 @@ def configure_audit(connection, context, operation_id):
 
 # Key inventories match the audited canonical tables, never caller SQL names.
 AUDITED_KEYS = {
+    'support_actions': ('id',),
     'accounting_period_policy': ('entity_id',), 'accounting_periods': ('period_start',),
     'entry_corrections': ('id',), 'recurring_generation_policy': ('entity_id',),
     'accounting_period_actions': ('id',),
@@ -96,11 +97,16 @@ class AuditReader:
 
     def query(self, *, since=None, until=None, organization_id=None, actor_id=None, action=None,
               source=None, target_type=None, target_id=None, batch_id=None, operation_id=None,
-              after_sequence=0, limit=100):
+              after_sequence=0, through_sequence=None, limit=100):
         if not isinstance(limit, int) or not 1 <= limit <= 1000 or after_sequence < 0:
             raise ValueError('Invalid audit page.')
+        if through_sequence is not None and (type(through_sequence) is not int or not 0 <= through_sequence <= 9223372036854775807):
+            raise ValueError('Invalid audit snapshot boundary.')
         clauses = ['entity_id=:scope', 'sequence>:cursor']
         params = {'scope': self.entity_id, 'cursor': after_sequence, 'limit': limit}
+        if through_sequence is not None:
+            clauses.append('sequence<=:through')
+            params['through'] = through_sequence
         for field, value in locals().copy().items():
             if field in {'organization_id', 'actor_id', 'action', 'source', 'target_type', 'batch_id', 'operation_id'} and value is not None:
                 clauses.append(f'{field}=:{field}')

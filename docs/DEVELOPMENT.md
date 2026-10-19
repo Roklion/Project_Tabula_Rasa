@@ -81,6 +81,9 @@ source-owned mixed-use receipts and optional Maps mileage. Native regression
 tests exercise the compiled application with disposable PostgreSQL and synthetic
 providers; hosted dependency checks remain separate #133/#303 operator evidence.
 
+[Support operations](SUPPORT_OPERATIONS.md) documents #341's scoped operator API/CLI,
+manual provisioning, immutable administrative history and incident handoff.
+
 ## Local main-branch push guard
 
 The tracked .githooks/pre-push hook blocks pushes that would update remote

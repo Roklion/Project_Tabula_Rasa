@@ -15,6 +15,9 @@ scope/privileges, dependent services/jobs, custodian/alternate, creation/last
 rotation/review date, expiry if applicable, revocation method, recovery-access
 reference and last verified exercise. Record absent/unused secrets explicitly.
 Review before releases, operator departure, provider changes and incidents.
+For named support grant provisioning/revocation and bounded session containment,
+follow [Support operations](SUPPORT_OPERATIONS.md); support staff receive no SQL
+or secret-store access.
 Do not claim a working alternate merely because the inventory has a blank field.
 
 | Secret/control | Least privilege and custody owner | Rotation/revocation boundary |

@@ -305,8 +305,11 @@ grant it. `query` supports time range, organization, actor, action, source, targ
 type/ID, batch and operation filters, with bounded keyset pages. For consistent
 multi-page inspection, keep calls within `reader.operation()`'s repeatable-read
 snapshot. A sequence cursor alone is not a live change-feed guarantee: concurrent
-transactions can commit in a different order. #341 owns the restricted UI and
-ongoing caller authorization; #345 owns permitted customer export. Ordinary
+transactions can commit in a different order. [Support operations](SUPPORT_OPERATIONS.md)
+implements #341's restricted CLI/API, expiring scoped grants, redacted bounded
+inspection and immutable administrative records. Its sequence upper bound prevents
+inspection from chasing its own events; it does not promise a multi-request
+transactional snapshot. #345 owns permitted customer export. Ordinary
 telemetry and canonical v1 exports exclude audit content and job tables.
 
 Database triggers reject event update/delete/truncate and direct inserts.

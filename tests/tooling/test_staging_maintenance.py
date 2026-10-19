@@ -7,6 +7,12 @@ import yaml
 from tabula_rasa.deployment import staging_maintenance as maintenance
 
 
+@pytest.fixture(autouse=True)
+def reviewed_image_head(monkeypatch):
+    # The bridge executes inside its retained immutable 0014 image.
+    monkeypatch.setattr(maintenance, 'head_revision', lambda: maintenance.TARGET)
+
+
 def environment():
     return {**maintenance.SCOPE, 'MAINTENANCE_RECOVERY_SHA256': '1' * 64,
             'TABULA_RASA_RELEASE_ID': maintenance.RELEASE, 'RENDER_API_KEY': 'synthetic-private',
