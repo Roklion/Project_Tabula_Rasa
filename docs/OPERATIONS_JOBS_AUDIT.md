@@ -337,11 +337,12 @@ Attention timestamps are operational fields, not bookkeeping edits. The verifier
 must preserve this exclusion when comparing current-state evidence.
 
 Retain all audit/baseline/activation and job history by default; no expiry, pruning
-or deletion API is installed. Pending #346 owns accepted retention/legal holds
-and any separately approved redaction process. A hold therefore has no automatic
-expiry path to override in this version. Sensitive-field minimization happens
-before storage; do not silently rewrite old events for future redaction requests.
-Customer content/access policy and storage capacity require #346's acceptance.
+or deletion API is installed. The [audit policy](AUDIT_POLICY.md) records the
+owner-approved interim operator contract (2026-10-19), existing enforcement,
+manual hold handling and unresolved owner/legal decisions. No in-place redaction
+or pseudonymization and no customer audit export are authorized. Sensitive-field
+minimization happens before storage. #346 retains statutory/commercial review,
+any separately approved privacy mechanism and its broader lifecycle scope.
 
 Database dump/PITR recovery must retain these tables, functions, triggers, sequences,
 policies and the original activation watermark. An older recovery point loses
