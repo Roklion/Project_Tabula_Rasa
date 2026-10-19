@@ -1,4 +1,5 @@
 """Mounted grants keep the same containment and tenant boundaries as regular files."""
+import errno
 import json
 import os
 from pathlib import Path
@@ -84,6 +85,35 @@ def test_fifo_is_refused_without_blocking(tmp_path):
     os.mkfifo(tmp_path / (reference + '.grant'))
     with pytest.raises(IdentityError):
         store.get(reference, environment='test', organization_id='org', entity_id='entity', provider='google_drive')
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='Windows refuses directory descriptors before fdopen.')
+def test_directory_rejection_closes_open_descriptor(tmp_path, monkeypatch):
+    store = ConnectionSecrets(tmp_path, Fernet.generate_key().decode())
+    reference = 'a' * 32
+    (tmp_path / (reference + '.grant')).mkdir()
+    descriptors = []
+    real_open = os.open
+
+    def record_open(*args, **kwargs):
+        descriptor = real_open(*args, **kwargs)
+        descriptors.append(descriptor)
+        return descriptor
+
+    monkeypatch.setattr(os, 'open', record_open)
+    with pytest.raises(IdentityError) as error:
+        store.get(reference, environment='test', organization_id='org', entity_id='entity', provider='google_drive')
+    assert error.value.__context__ is None
+    assert len(descriptors) == 1
+    try:
+        with pytest.raises(OSError) as closed:
+            os.fstat(descriptors[0])
+        assert closed.value.errno == errno.EBADF
+    finally:
+        try:
+            os.close(descriptors[0])
+        except OSError:
+            pass
 
 
 @pytest.mark.skipif(not hasattr(os, 'O_NOFOLLOW'), reason='No-follow descriptor flag is a Unix case.')

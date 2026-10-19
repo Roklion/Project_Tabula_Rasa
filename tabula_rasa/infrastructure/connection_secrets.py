@@ -73,7 +73,13 @@ class ConnectionSecrets:
     def get(self, reference, *, environment, organization_id, entity_id, provider):
         try:
             flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0)
-            with os.fdopen(os.open(self._path(reference, reading=True), flags), 'rb') as source:
+            descriptor = os.open(self._path(reference, reading=True), flags)
+            try:
+                source = os.fdopen(descriptor, 'rb')
+            except Exception:
+                os.close(descriptor)
+                raise
+            with source:
                 if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
                     raise ValueError
                 content = source.read(131073)
