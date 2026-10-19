@@ -7,6 +7,10 @@ launch have separate acceptance boundaries. #298 owns the human commercial
 recovery agreement, alternate-operator acceptance and production activation.
 Neither this runbook nor a successful synthetic drill supplies those approvals.
 
+[Support operations](SUPPORT_OPERATIONS.md) provides scoped metadata/audit triage
+and approved access containment; provisioning or wider recovery still needs the
+separately authorized administrator and human incident handoff.
+
 ## Ownership, severity and alert intake
 
 The deployment owner (currently Roklion) is incident commander until an explicitly

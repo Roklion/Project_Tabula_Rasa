@@ -8,6 +8,12 @@ from tests.postgres.core_support import seed_core, expense
 
 def test_reviewed_bridge_preserves_existing_two_business_records(empty_database, monkeypatch):
     database = empty_database
+    # Reproduce the retained immutable candidate, not today's migration head.
+    monkeypatch.setattr(maintenance, 'head_revision', lambda: maintenance.TARGET)
+    def candidate_upgrade(database):
+        with database.engine.begin() as connection:
+            command.upgrade(migration_config(connection), maintenance.TARGET)
+    monkeypatch.setattr(maintenance, 'upgrade', candidate_upgrade)
     with database.engine.begin() as connection:
         command.upgrade(migration_config(connection), maintenance.SOURCE)
     alpha, beta = seed_core(database)

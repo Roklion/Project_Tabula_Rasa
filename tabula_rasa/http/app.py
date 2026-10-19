@@ -28,7 +28,7 @@ from .errors import (
 )
 from .models.common import Health, Version
 from .routes import accounting, accounts, auth, documents, financial_csv, imports, mileage, mileage_imports, references, reporting, secondary, session
-from .routes import connections, periods
+from .routes import connections, periods, support
 
 logger = logging.getLogger("tabula_rasa.http")
 
@@ -84,8 +84,8 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
     app.add_exception_handler(DocumentError, handle_error)
     async def identity_error(request, error):
         response = error_response(request, error.code)
-        request.state.security_event = "identity_denied"
-        request.state.security_reason = "identity"
+        request.state.security_event = getattr(request.state, "security_event", None) or "identity_denied"
+        request.state.security_reason = getattr(request.state, "security_reason", None) or "identity"
         # Passive denials must not delete cookies by name: a delayed response
         # could erase credentials issued by a newer successful callback.
         # Server validation denies stale credentials; explicit logout clears.
@@ -193,6 +193,7 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
     app.include_router(reporting.router)
     app.include_router(secondary.router)
     app.include_router(periods.router)
+    app.include_router(support.router)
     assets = Path(static_dir) if static_dir is not None else Path(__file__).resolve().parents[2] / "web" / "dist"
     if not schema_only and assets.is_dir():
         @app.api_route('/assets', methods=['GET', 'HEAD'], include_in_schema=False, operation_id='asset_register')

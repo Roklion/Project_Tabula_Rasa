@@ -21,6 +21,9 @@ class RoutePolicy:
 # IDs are server route metadata, never request claims. Identity handlers share
 # the session guard; logout retains its documented outage-clearing path.
 ROUTE_POLICIES = MappingProxyType({
+    'support_diagnostics': RoutePolicy('POST', 'diagnostics', 'support'),
+    'support_audit': RoutePolicy('POST', 'audit', 'support'),
+    'support_administer': RoutePolicy('POST', 'administration', 'support'),
     'list_accounting_periods': RoutePolicy('GET', 'read'),
     'close_accounting_period': RoutePolicy('POST', 'period_close'),
     'unlock_accounting_period': RoutePolicy('POST', 'period_unlock'),
@@ -125,7 +128,19 @@ def authorize_request(request: Request):
     from .context import require_named_resolver
     require_named_resolver(request)
     policy = route_policy(request)
-    if policy.scope == 'entity':
+    if policy.scope == 'support':
+        from .context import require_csrf
+        from .identity import NamedIdentity
+        identity = getattr(request.app.state.runtime, 'identity', None)
+        if not isinstance(identity, NamedIdentity) or identity is not request.app.state.runtime.resolve_context:
+            request.state.security_event = 'privileged_denied'
+            request.state.security_reason = 'capability'
+            raise TransportError('forbidden')
+        session = identity.authenticated(request)
+        request.state.security_event = 'privileged_denied'
+        request.state.security_reason = 'capability'
+        require_csrf(request, session.csrf_token)
+    elif policy.scope == 'entity':
         from .context import resolve_context
         resolve_context(request)
     elif policy.scope == 'identity' and policy.action != 'logout':
@@ -161,7 +176,8 @@ def validate_routes(app):
             continue
         policy = ROUTE_POLICIES.get(route.operation_id)
         allowed_actions = {'entity': ACTION_CAPABILITIES, 'identity': {'read', 'session', 'logout'},
-                           'public': {'login', 'callback'}}
+                           'public': {'login', 'callback'},
+                           'support': {'diagnostics', 'audit', 'administration'}}
         if (policy is None or policy.action not in allowed_actions.get(policy.scope, ())
                 or route.operation_id in seen or route.methods != {policy.method}
                 or (policy.scope == 'entity') != ('{entity_id}' in route.path)

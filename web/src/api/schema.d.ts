@@ -1191,6 +1191,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/support/{organization_id}/{business_id}/administration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Administer */
+        post: operations["support_administer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/support/{organization_id}/{business_id}/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Audit */
+        post: operations["support_audit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/support/{organization_id}/{business_id}/diagnostics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Diagnostics */
+        post: operations["support_diagnostics"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/bootstrap": {
         parameters: {
             query?: never;
@@ -1453,11 +1504,46 @@ export interface components {
             /** Items */
             items: components["schemas"]["Account"][];
         };
+        /** AccountMetadata */
+        AccountMetadata: {
+            /** Active */
+            active: boolean;
+            /** Classification */
+            classification: string;
+            /** Id */
+            id: string;
+            /** Type */
+            type: string;
+        };
         /** AccountUpdate */
         AccountUpdate: {
             /** Baseline */
             baseline: string;
             changes: components["schemas"]["AccountChanges"];
+        };
+        /** AdminRequest */
+        AdminRequest: {
+            /** Confirm Plan */
+            confirm_plan?: string | null;
+            /**
+             * Operation
+             * @enum {string}
+             */
+            operation: "revoke_sessions" | "suspend_member" | "suspend_organization";
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "incident" | "access_request" | "job_failure" | "migration_failure" | "connection_failure" | "audit_review";
+            /** Target User Id */
+            target_user_id?: string | null;
+        };
+        /** AdministrativeResult */
+        AdministrativeResult: {
+            /** Applied */
+            applied: boolean;
+            /** Plan Sha256 */
+            plan_sha256: string;
         };
         /** Allocation */
         Allocation: {
@@ -1714,6 +1800,90 @@ export interface components {
             baseline: string;
             changes: components["schemas"]["AssetChanges"];
         };
+        /** AuditPage */
+        AuditPage: {
+            /** Events */
+            events: components["schemas"]["AuditSummary"][];
+            /**
+             * Export Limit
+             * @default 100
+             */
+            export_limit: number;
+            /** Next Sequence */
+            next_sequence: number | null;
+            /** Through Sequence */
+            through_sequence: number;
+        };
+        /** AuditRequest */
+        AuditRequest: {
+            /** Action */
+            action?: ("create" | "update" | "delete") | null;
+            /** Actor Id */
+            actor_id?: string | null;
+            /**
+             * After Sequence
+             * @default 0
+             */
+            after_sequence: number;
+            /** Batch Id */
+            batch_id?: string | null;
+            /**
+             * Limit
+             * @default 100
+             */
+            limit: number;
+            /** Operation Id */
+            operation_id?: string | null;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "incident" | "access_request" | "job_failure" | "migration_failure" | "connection_failure" | "audit_review";
+            /** Since */
+            since?: string | null;
+            /** Source */
+            source?: string | null;
+            /** Target Id */
+            target_id?: string | null;
+            /** Target Type */
+            target_type?: string | null;
+            /** Through Sequence */
+            through_sequence?: number | null;
+            /** Until */
+            until?: string | null;
+        };
+        /** AuditSummary */
+        AuditSummary: {
+            /** Action */
+            action: string;
+            /** Actor Id */
+            actor_id: string;
+            /** Actor Type */
+            actor_type: string;
+            /** Batch Id */
+            batch_id: string | null;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Operation Id */
+            operation_id: string;
+            /** Reason Code */
+            reason_code?: string | null;
+            /** Sequence */
+            sequence: number;
+            /** Source */
+            source: string;
+            /** Support Operation */
+            support_operation?: string | null;
+            /** Target Key */
+            target_key: {
+                [key: string]: string | number;
+            };
+            /** Target Type */
+            target_type: string;
+        };
         /** BalanceRow */
         BalanceRow: {
             /** Balance */
@@ -1820,6 +1990,13 @@ export interface components {
             /** Revision */
             revision: number;
         };
+        /** ConnectionHealth */
+        ConnectionHealth: {
+            /** Provider */
+            provider: string;
+            /** Status */
+            status: string;
+        };
         /** ConnectionInfo */
         ConnectionInfo: {
             /**
@@ -1856,6 +2033,31 @@ export interface components {
             scheduled_date: string;
             /** Sequence */
             sequence: number;
+        };
+        /** Diagnostics */
+        Diagnostics: {
+            /** Accounts */
+            accounts: components["schemas"]["AccountMetadata"][];
+            /** Connections */
+            connections: components["schemas"]["ConnectionHealth"][];
+            /** Entity Id */
+            entity_id: string;
+            /**
+             * Export Status
+             * @default synchronous_not_retained
+             * @constant
+             */
+            export_status: "synchronous_not_retained";
+            /** Jobs */
+            jobs: components["schemas"]["JobStatus"][];
+            /** Members */
+            members: components["schemas"]["MemberStatus"][];
+            /** Migrations */
+            migrations: components["schemas"]["MigrationStatus"][];
+            /** Organization Id */
+            organization_id: string;
+            /** Organization State */
+            organization_state: string;
         };
         /** Document */
         Document: {
@@ -2062,6 +2264,19 @@ export interface components {
              * @enum {string}
              */
             role: "admin" | "editor" | "accountant" | "read_only";
+        };
+        /** JobStatus */
+        JobStatus: {
+            /** Attempts */
+            attempts: number;
+            /** Failure Code */
+            failure_code: string | null;
+            /** Id */
+            id: string;
+            /** Job Type */
+            job_type: string;
+            /** State */
+            state: string;
         };
         /** Journal */
         Journal: {
@@ -2278,6 +2493,26 @@ export interface components {
         MemberList: {
             /** Items */
             items: components["schemas"]["Member"][];
+        };
+        /** MemberStatus */
+        MemberStatus: {
+            /** Active Sessions */
+            active_sessions: number;
+            /** Role */
+            role: string;
+            /** State */
+            state: string;
+            /** User Id */
+            user_id: string;
+            /** User State */
+            user_state: string;
+        };
+        /** MigrationStatus */
+        MigrationStatus: {
+            /** Id */
+            id: string;
+            /** Status */
+            status: string;
         };
         /** Mileage */
         Mileage: {
@@ -3149,6 +3384,14 @@ export interface components {
              * @constant
              */
             trusted_development: false;
+        };
+        /** SupportRequest */
+        SupportRequest: {
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "incident" | "access_request" | "job_failure" | "migration_failure" | "connection_failure" | "audit_review";
         };
         /** Transaction */
         Transaction: {
@@ -11765,6 +12008,276 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionInfo"];
+                };
+            };
+            /** @description Identity required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Operation denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Duplicate or concurrent change */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Transport or domain validation */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unexpected failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    support_administer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: string;
+                business_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdministrativeResult"];
+                };
+            };
+            /** @description Identity required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Operation denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Duplicate or concurrent change */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Transport or domain validation */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unexpected failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    support_audit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: string;
+                business_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuditRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditPage"];
+                };
+            };
+            /** @description Identity required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Operation denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Duplicate or concurrent change */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Transport or domain validation */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unexpected failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    support_diagnostics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: string;
+                business_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Diagnostics"];
                 };
             };
             /** @description Identity required */

@@ -1531,6 +1531,15 @@ Cloud upload, cloud verification, CSV exports, complete backup, all three
 imports, and recovery status remain available. No local Drive Desktop
 dependency is implied for cloud-native backup.
 
+### Internal support operations
+
+**Current behavior:** The commercial support surface is a restricted operator CLI
+and typed API, separately authorized by expiring organization/environment grants.
+It exposes bounded metadata and read-only audit inspection, plus preview/confirm
+access containment. It adds no customer navigation or remote Account settings
+clone. See [Support operations](docs/SUPPORT_OPERATIONS.md). Tenant membership,
+selected business and legacy local administration do not grant support authority.
+
 ### Account settings
 
 #### Purpose and availability

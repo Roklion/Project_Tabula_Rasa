@@ -45,6 +45,11 @@ and [accounting periods](ACCOUNTING_PERIODS.md) for separate adoption/rollback
 procedures. Complete database recovery must preserve these controls and audit
 history; the financial v1 export retains its narrower portability boundary.
 
+Forward revision `0015_support_controls` adds expiring organization/environment
+support grants and immutable support-action records. It provisions no operators
+and changes no financial v1 export fields. See [Support operations](SUPPORT_OPERATIONS.md)
+for human-approved provisioning, revocation and compatible rollback.
+
 ## Access and migration tools
 
 Revision `0014_document_locations` permits managed S3 connection references and
