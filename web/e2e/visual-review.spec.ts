@@ -1,11 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { type ViteDevServer } from 'vite';
 import { startVisualPreview } from './visual-preview-server';
 
-let server: ViteDevServer;
+let close: (() => Promise<void>) | undefined;
 let origin: string;
-test.beforeAll(async () => { ({ server, origin } = await startVisualPreview()); });
-test.afterAll(async () => { await server?.close(); });
+test.beforeAll(async () => { ({ close, origin } = await startVisualPreview()); });
+test.afterAll(async () => { await close?.(); });
 
 test('explicit preview renders journals and opens the same journal from the ledger', async ({ page }) => {
   await page.goto(new URL('/journals', origin).href);
