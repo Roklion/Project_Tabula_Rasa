@@ -200,8 +200,9 @@ python -m pytest tests/postgres/test_drive_document_recovery.py::test_real_drive
 
 Run from the approved hosted staging environment to establish hosted evidence.
 Fresh synthetic folders are required for another run; retained artifacts need
-separate exact cleanup approval. Live inspection/drill remains pending until
-approved and executed. Synthetic tests do not establish an actual NAS schedule,
+separate exact cleanup approval. [#338](https://github.com/Roklion/Project_Tabula_Rasa/issues/338)
+records approved hosted drill results; [#342](https://github.com/Roklion/Project_Tabula_Rasa/issues/342)
+tracks stage-specific remaining evidence. A previous drill never authorizes a new run. Synthetic tests do not establish an actual NAS schedule,
 managed PITR, continuous RPO, full-service RTO or commercial operator acceptance.
 
 ### Dedicated hosted recovery runner
@@ -244,16 +245,20 @@ the encrypted generation to approved durable custody before expiration. Ephemera
 runner storage and expiring Actions artifacts are not long-term retention,
 scheduled protection or proof of alternate-operator/off-device recoverability.
 
-| Owner | Delivered capability | Remaining acceptance |
-| --- | --- | --- |
-| #337/#338, #223 | Drive-first runtime, private byte backup/offline verifier, shared verified Drive/DB isolated restore; optional S3 code is dormant | Effective Drive quota/access/retention inspection and approved hosted real-Drive evidence; no AWS prerequisite |
-| #342 | Current provider-specific runbook and synthetic recovery harness | Actual DB-plus-byte evidence, achieved protection/limitations and pending schedule/NAS controls |
-| #303 | Existing owner Drive path retained, explicit recovery tooling | Exact three-profile live bindings, protection decision and operator execution |
-| #382 / #224 | Commercial provider review and customer Drive self-service requirements | Delivered customer onboarding if Drive retained; selected-provider release approval |
-| #298 | Recovery custody/handoff hooks | Agreed guarantees, human/alternate-operator acceptance and commercial activation |
+Current delivery results and unresolved work belong to the owning issues:
 
-Both engineering issues can progress and reach their selected-Drive acceptance
-without S3 provisioning. External beta (#348) still needs the selected provider's
-applicable protection/connectivity evidence; paid launch (#353) and #298 retain
-their distinct sign-offs. Neither a local implementation nor ticket closure
-substitutes for those approvals.
+- [#338](https://github.com/Roklion/Project_Tabula_Rasa/issues/338): selected-Drive
+  backup/offline verification and isolated hosted DB-plus-byte drill evidence.
+- [#342](https://github.com/Roklion/Project_Tabula_Rasa/issues/342): actual
+  provider capacity/access/retention, scheduled/off-device/alternate-operator
+  protection and stage-specific recovery limitations; NAS controls remain #294.
+- [#303](https://github.com/Roklion/Project_Tabula_Rasa/issues/303): exact live
+  owner bindings, accepted protection limitations and selected execution.
+- [#382](https://github.com/Roklion/Project_Tabula_Rasa/issues/382): provider
+  decision/customer connectivity; #348/#353 consume stage-appropriate results.
+- [#298](https://github.com/Roklion/Project_Tabula_Rasa/issues/298): agreed
+  recovery guarantees, human handoff and commercial activation.
+
+Drive engineering acceptance needs no unused S3 provisioning. A completed
+representative drill is not an operational backup schedule or comprehensive
+recovery guarantee; keep observations, gaps and approvals in the owning issue.

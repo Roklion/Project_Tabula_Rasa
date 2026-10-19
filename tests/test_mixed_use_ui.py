@@ -25,7 +25,7 @@ from tabula_rasa.ledger_reporting import (
     profit_and_loss,
 )
 from tabula_rasa.page_renderers.data_backup.exports import prepare_csv_exports
-from tabula_rasa.page_renderers.transactions.search import filter_transaction_rows
+from tabula_rasa.ledger_records import search_ledger_entries
 from tabula_rasa.storage import decode_receipt_references, StorageValidationError
 from tabula_rasa.page_renderers.transactions.receipts import (
     new_receipt_creation_workflow,
@@ -1041,9 +1041,11 @@ def test_mixed_use_projection_is_counted_once_across_read_paths(default_storage)
     assert len(frame) == 1
     assert frame.iloc[0]["ID"] == source["linked_transaction_id"]
     assert frame.iloc[0]["Amount"] == 25.0
-    matched = filter_transaction_rows(frame.to_dict(orient="records"), "Shared office")
+    matched = search_ledger_entries(
+        transactions, frame.to_dict(orient="records"), accounts, categories, "Shared office"
+    )
     assert len(matched) == 1
-    assert matched[0]["ID"] == source["linked_transaction_id"]
+    assert matched[0]["id"] == source["linked_transaction_id"]
 
     from tabula_rasa.composition import create_sheets_application
     from tests.app_support import profile_config

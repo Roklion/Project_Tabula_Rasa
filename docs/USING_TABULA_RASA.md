@@ -66,8 +66,10 @@ for these additions and their deployment/readiness boundaries, and
 [Commercial mileage and receipts](COMMERCIAL_MILEAGE_RECEIPTS.md) for these browser
 workflows, their recovery behavior and remaining release boundaries.
 The [technical-alpha release guide](TECHNICAL_ALPHA.md) lists the exact staged
-workflow coverage, outstanding hosted receipt/rollback/manual evidence and
-remaining internal-edition workflows during the Streamlit transition.
+workflow coverage, repeatable receipt/rollback/manual procedures and
+internal-edition routing during transition. Current live-owner and hosted-identity
+work is tracked in [#303](https://github.com/Roklion/Project_Tabula_Rasa/issues/303)
+and [#321](https://github.com/Roklion/Project_Tabula_Rasa/issues/321).
 Hosted synthetic receipts require the operator's separate
 [Drive binding setup](ALPHA_DOCUMENT_STORAGE.md); ordinary browser users cannot
 select grants or folders. Configuring that dependency does not establish completed

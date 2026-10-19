@@ -1,7 +1,20 @@
 # Architecture
 
-Project Tabula Rasa is one Streamlit application serving one or more isolated
-business profiles. A profile selects its own Google Sheets workbook,
+Project Tabula Rasa supports two compositions during the #124 transition:
+
+| Composition | Bookkeeping authority and scope | Canonical guide |
+| --- | --- | --- |
+| Internal Streamlit | Selected unmigrated profile's Google Sheets workbook and human Google grant; local administration remains separately restricted | This guide's internal system context, [Setup](SETUP.md) and [legacy administration](EXTERNAL_CONNECTIONS_AND_LEGACY_CLAIMS.md#retained-local-administration-inventory) |
+| React/FastAPI | PostgreSQL services with authorized entity scope; migrated owner authority requires the explicit cutover procedure | [Commercial runtime](COMMERCIAL_WEB.md), [identity](COMMERCIAL_IDENTITY.md) and [cutover](BOOKKEEPING_CUTOVER.md) |
+
+The [issue #377 retirement inventory](https://github.com/Roklion/Project_Tabula_Rasa/issues/377) records callers, shared
+owners, eligible removals and retained internal/operator obligations. Neither
+composition's implementation proves live migration or authorizes retiring the
+other. The system-context, credential and Sheets-ledger sections below describe
+the **internal edition**; later service/adapter sections describe shared seams.
+
+The internal Streamlit application serves one or more isolated business profiles.
+A profile selects its own Google Sheets workbook,
 Google OAuth grant for Sheets and Drive, and recovery
 destinations. The application password and OAuth client are intentionally
 deployment-wide. The optional Google Maps browser and Routes credentials are
@@ -699,8 +712,7 @@ production adapter, migration, UI change, or authority switch.
 #244's optional database runtime and initial canonical migrations live in
 `infrastructure/postgres/`. [PostgreSQL development and operations](POSTGRESQL.md)
 documents the SQLAlchemy Core/Psycopg/Alembic choice, connection/transaction
-boundaries, exact baseline coverage, native test harness, and remaining #253
-integrity work. Current Sheets composition imports none of this infrastructure
+boundaries, baseline coverage, native test harness and shared integrity rules. Current Sheets composition imports none of this infrastructure
 and still works without database configuration or database dependencies.
 
 #254's explicit migration tooling keeps provider-neutral plans in `migration/`,

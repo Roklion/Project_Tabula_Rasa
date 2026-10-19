@@ -21,40 +21,6 @@ def masked_spreadsheet_id(spreadsheet_id: object) -> str:
     return f"…{value[-8:]}" if len(value) > 8 else value
 
 
-def profile_setup_error_message(
-    error: StorageError,
-    settings: Mapping[str, Any],
-) -> str:
-    spreadsheet = masked_spreadsheet_id(settings.get("spreadsheet_id", ""))
-
-    if isinstance(error, StorageAuthenticationError):
-        detail = (
-            "Google OAuth authentication failed. Reconnect this profile; its grant may be "
-            "invalid, disabled, revoked, or no longer active."
-        )
-    elif isinstance(error, StorageWorkbookAccessError):
-        detail = (
-            "Workbook access failed. Verify the spreadsheet ID, enable the "
-            "Google Sheets API in the shared OAuth project, select the "
-            "spreadsheet through Picker, and confirm Google account Editor access."
-        )
-    elif isinstance(error, StorageInitializationError):
-        detail = (
-            "The workbook opened, but initialization failed. Confirm the "
-            "authorized Google account has Editor access and the ledger tabs are not "
-            "protected."
-        )
-    elif isinstance(error, StorageValidationError):
-        detail = f"Workbook structure validation failed: {error}."
-    else:
-        detail = "Google Sheets setup failed unexpectedly. Retry the request."
-
-    return (
-        f"{detail} Spreadsheet: {spreadsheet}. "
-        "No profile was saved."
-    )
-
-
 def initialize_candidate_storage(
     settings: Mapping[str, Any],
 ) -> GoogleSheetsStorage:

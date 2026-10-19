@@ -156,8 +156,9 @@ OIDC plus durable opaque PostgreSQL sessions. [Commercial identity](COMMERCIAL_I
 owns the approved provider/callback/mail/recovery contract. Named login,
 membership enforcement, switching and entity-owned connections are implemented.
 [Authenticated rollout](AUTHENTICATED_ROLLOUT.md) owns the operator setup,
-retained-staging rehearsal, named-image rollback and cross-EPIC handoff. Actual
-hosted provider acceptance remains pending. The setup and Blueprint above
+retained-staging rehearsal, named-image rollback and cross-EPIC handoff.
+[#321](https://github.com/Roklion/Project_Tabula_Rasa/issues/321) records current
+hosted provider results and outstanding acceptance. The setup and Blueprint above
 describe restricted synthetic alpha; they remain supported with explicit
 `TABULA_RASA_ACCESS_MODE=restricted_alpha` in Render and GitHub. Named promotion
 uses `named_user` in both and injects no Basic credentials. Follow the rollout
@@ -292,29 +293,16 @@ Named smoke failure stops for operator inspection rather than restoring an older
 auth implementation automatically. Follow the [named-mode rollback checklist](AUTHENTICATED_ROLLOUT.md#compatible-application-rollback-and-incidents),
 keeping named access and forward schema throughout.
 
-### Digest verification investigation (October 9, 2026)
+### Index and runtime digest verification
 
-The [first staging promotion](https://github.com/Roklion/Project_Tabula_Rasa/actions/runs/37879340937)
-stopped at digest verification before browser smoke, although the operator
-reported Live status and matching readiness/version probes. Read-only GHCR
-inspection confirmed the requested `sha256:fe1b5854f3603826e32e228e0f54bd71036454dd3f93f43b43455b2f72ddd727`
-is an OCI index containing runtime manifest
-`sha256:92a1ede162a837223ea454ae1557a5743623eea2c5db5713371886ceb588d3c8`
-and a separate attestation. The former verifier assumed Render's SHA always
-equaled the requested top-level digest, and did not inspect that relationship.
-[Render's API](https://api-docs.render.com/reference/retrieve-deploy) describes
-`image.ref` as the deployment reference and `image.sha` as its resolved SHA;
-[Buildx](https://docs.docker.com/reference/cli/docker/buildx/imagetools/inspect/)
-provides the registry descriptor and platform relationships used by the fix.
-The operator retrieved the failed deployment's image fields on October 9:
-`image.ref` retained the requested index reference above, while `image.sha`
-was the exact runtime manifest digest above. This confirms an index-versus-
-platform-manifest comparison caused the rejection, rather than a different
-deployed release. Accepting this registry-proven relationship preserves the
-artifact integrity check; attestation and unrelated digests still fail.
-After merge, rerun staging with a current CI-approved immutable image and retain
-successful hosted smoke/repeated-promotion evidence. Subsequent hosted acceptance
-is recorded in closed #279; the investigation alone did not establish it.
+An OCI image index and its selected platform runtime manifest can have distinct
+digests. Validate the registry index-to-platform relationship and compare the
+provider's resolved runtime image as well as its requested reference. Accept only
+that proven relationship; unrelated and attestation digests must still fail.
+Keep the exact index/runtime/release/schema evidence for each promotion.
+[#279](https://github.com/Roklion/Project_Tabula_Rasa/issues/279) records the
+original diagnosis and completed hosted promotion; old image IDs or a local
+readiness observation cannot validate a new release.
 
 For manual recovery of bad application code, inspect the exact service's current
 deploy/status, select its retained schema-compatible image and dispatch that

@@ -19,14 +19,11 @@ from tabula_rasa.local_profile_admin_security import (
 )
 from tabula_rasa.local_profile_admin_support import (
     initialize_candidate_storage,
-    profile_setup_error_message,
 )
 from scripts.export_streamlit_secrets import SecretsExportError
 from tabula_rasa.profile_readiness import ProfileReadiness, profile_settings_fingerprint
 from tabula_rasa.local_profile_store import LocalProfileStoreError
 from tabula_rasa.storage import (
-    StorageAuthenticationError,
-    StorageInitializationError,
     StorageError,
     StorageValidationError,
     StorageWorkbookAccessError,
@@ -35,42 +32,6 @@ SETTINGS = {
     "spreadsheet_id": "abcdefghij1234567890",
     "google_drive": google_grant('ledger@example.test'), "google_drive_oauth": GOOGLE_OAUTH_CONFIG,
 }
-
-
-@pytest.mark.parametrize(
-    ("error", "expected"),
-    (
-        (
-            StorageAuthenticationError("safe"),
-            "Google OAuth authentication failed",
-        ),
-        (
-            StorageWorkbookAccessError("safe"),
-            "Workbook access failed",
-        ),
-        (
-            StorageInitializationError("safe"),
-            "workbook opened, but initialization failed",
-        ),
-        (
-            StorageValidationError("Accounts is missing headers: id"),
-            "Accounts is missing headers: id",
-        ),
-    ),
-)
-def test_profile_setup_error_identifies_stage_without_exposing_secrets(
-    error: Exception,
-    expected: str,
-) -> None:
-    message = profile_setup_error_message(error, SETTINGS)
-
-    assert expected.casefold() in message.casefold()
-    assert "…34567890" in message
-    assert SETTINGS["spreadsheet_id"] not in message
-    assert "credential-content-must-not-leak" not in message
-    assert message.endswith("No profile was saved.")
-
-
 
 
 def test_profile_rows_use_a_safe_fallback_for_null_backup_paths() -> None:
@@ -88,6 +49,8 @@ def test_profile_rows_use_a_safe_fallback_for_null_backup_paths() -> None:
     )
 
     assert rows[0]["Local backup folder"] == "Not configured"
+    assert rows[0]["Spreadsheet"] == "…34567890"
+    assert SETTINGS["spreadsheet_id"] not in repr(rows)
 
 
 def test_profile_rows_allow_clean_install_without_hosted_profiles() -> None:

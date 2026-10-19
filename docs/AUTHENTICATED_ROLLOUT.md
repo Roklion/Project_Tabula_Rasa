@@ -7,30 +7,24 @@ Reuse the existing Render/Neon runtime, ZITADEL/Authlib adapter, durable session
 membership resolver, tenant connections and browser scope boundary. This adds no
 identity system, migration engine, ledger authority mode or recovery backend.
 
-**Current evidence boundary, October 16, 2026:** repository rollout support and
-the operator checklist are prepared. The operator reports that the staging
-ZITADEL client/fixtures are not configured. No hosted named login, provider
-recovery, staging promotion, outage or rollback rehearsal is claimed. #321's
-hosted acceptance remains pending; #320's remaining hosted recovery item also
-remains pending. Do not mark either complete from the deployment smoke alone.
+[Issue #321](https://github.com/Roklion/Project_Tabula_Rasa/issues/321) is the
+source of truth for selected hosted releases, configured fixture bindings,
+observed passes/failures and remaining provider/lifecycle/rollback evidence.
+[#320](https://github.com/Roklion/Project_Tabula_Rasa/issues/320) consumes the
+required recovery/lifecycle result. This reusable procedure does not carry a
+second checklist of live setup status.
 
-Reuse map: `http/config.py` owns mode validation; `deployment/release.py` owns
-immutable promotion, provider uncertainty and schema compatibility;
-`deployment/alpha.py` owns the existing core journey. These owners are extended.
-The new anonymous named smoke differs from alpha because its shell is public
-and its private requests must deny; it shares the promotion lifecycle and does
-not duplicate authentication, accounting, session or recovery logic.
+`http/config.py` owns mode validation; `deployment/release.py` owns immutable
+promotion, bounded provider uncertainty and schema compatibility. Anonymous named
+smoke and the restricted-alpha journey share that promotion lifecycle while
+retaining their distinct authentication boundaries.
 
-**Login defect follow-up (#395, October 19, 2026):** #321 now records later
-operator-hosted results separately from the historical October 16 boundary
-above. A retained provider browser profile exposed a silent callback failure
-despite clean-profile success. The repository recovery path explicitly requests
-provider reauthentication and reports safe failure categories/request references;
-[named-user triage and the retained/clean rehearsal](NAMED_USER_AUTH.md#retained-provider-sessions-and-safe-failure-recovery-395)
-own the procedure. The original hosted rejection boundary and updated-release
-recovery remain unverified. Keep #395 and #321's affected acceptance open until
-approved hosted evidence is recorded. Cookie deletion is not rollout acceptance,
-and this fix does not satisfy unrelated #321/#222/#224/#124 gates.
+For retained-provider-browser login failures, follow
+[named-user triage and retained/clean rehearsal](NAMED_USER_AUTH.md#retained-provider-sessions-and-safe-failure-recovery-395).
+[#395](https://github.com/Roklion/Project_Tabula_Rasa/issues/395) owns diagnosis,
+permanent-fix verification and hosted reproduction/recovery; #321 owns rollout
+impact. Cookie/site-data deletion is not normal rollout acceptance and must not
+substitute for the approved reauthentication flow.
 
 ## Stage and access policy
 
@@ -277,4 +271,4 @@ native gate. Never set it to retained staging/production. The named smoke is
 exercised against real HTTP guards and the compiled browser/disposable
 PostgreSQL; deployment failures use synthetic Render/registry responses.
 Current-revision hosted **Full test suite** remains the publication/review gate,
-separate from these affected checks and the pending real-provider rehearsal.
+separate from local checks and the actual hosted evidence tracked in #321.

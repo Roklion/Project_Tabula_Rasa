@@ -48,7 +48,8 @@ owns #288's staged core workflow matrix, browser release gate, rollback rehearsa
 remaining hosted/manual prerequisites and Streamlit retirement boundary.
 [Authenticated rollout](AUTHENTICATED_ROLLOUT.md) covers #321's explicit hosted
 access mode, named promotion smoke, operator provider/rehearsal checkpoint and
-handoff. Its hosted acceptance remains pending separate from repository tests.
+handoff. [#321](https://github.com/Roklion/Project_Tabula_Rasa/issues/321) owns
+current hosted results and remaining acceptance, separate from repository tests.
 
 [#340 incident response](INCIDENT_RESPONSE.md), [secret custody/rotation](SECRETS_OPERATIONS.md)
 and the [controlled staging drill](INCIDENT_DRILL.md) coordinate existing tools
@@ -65,6 +66,10 @@ The HTTP runtime reuses application services and PostgreSQL adapters. Preserve
 the server-side #222 membership/context seam, #280 loaded-baseline form contract,
 and #223 health/request/job seams. Keep ordinary development and tests synthetic;
 the current Streamlit/Sheets setup and validation gates continue to apply.
+The [retirement inventory in issue #377](https://github.com/Roklion/Project_Tabula_Rasa/issues/377) records
+capability/caller ownership, eligible cleanup and concrete deferred conditions.
+Retain independent adapter/transport tests while both modes are supported;
+[CI suite ownership](CI_TEST_SUITES.md) remains #376's execution contract.
 
 [Existing workflow ports](COMMERCIAL_WORKFLOW_PORTS.md) documents
 #357/#358/#362/#364's transaction/mileage imports, ordinary copy/bulk and

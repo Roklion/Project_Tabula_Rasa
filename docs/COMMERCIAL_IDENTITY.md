@@ -5,10 +5,11 @@ hosted OIDC login, server-owned PostgreSQL sessions and application-owned
 organization memberships/roles for
 [#222](https://github.com/Roklion/Project_Tabula_Rasa/issues/222) under
 [initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124).
-Read its role, session and immutable-context contract before implementing a
-child ticket. This guide owns the operator checklist, threat acceptance cases
-and handoff. **Selection is documented; real identity is not implemented or
-hosted-verified by #310.**
+Read its role, session and immutable-context contract before changing an identity
+workflow. This guide owns reusable operator procedures, threat cases and handoff;
+[#321](https://github.com/Roklion/Project_Tabula_Rasa/issues/321) owns actual hosted
+results. Architecture selection alone proves neither hosted identity acceptance
+nor external-admission readiness.
 
 The #311/#312 local implementation and deployment/revocation procedure are in
 [Named-user authentication](NAMED_USER_AUTH.md). Native and synthetic-provider
@@ -288,21 +289,27 @@ authorize external beta under #124/#224.
 
 ## Evidence and outstanding decisions
 
-Wave 3's executable switching, operator-distributed invitations, membership and
-atomic bootstrap contract is documented in [Workspace lifecycle](WORKSPACE_LIFECYCLE.md).
-Its synthetic native/browser checks do not replace #317's full onboarding,
-#318/#319 connection/mapping work or #320/#321 hosted/initiative acceptance.
+The executable session, membership, invitations, bootstrap and connection
+contracts are described in [Named-user authentication](NAMED_USER_AUTH.md),
+[API authorization](API_AUTHORIZATION.md), [Workspace lifecycle](WORKSPACE_LIFECYCLE.md)
+and [external connections/legacy claims](EXTERNAL_CONNECTIONS_AND_LEGACY_CLAIMS.md).
+This guide defines operator procedures and threat cases; issue/PR records own
+candidate-specific delivery, setup and acceptance status.
 
-#310 supplies the ADR, capability policy, executable-test requirements and
-operator/handoff contract. Local documentation/link validation and regression
-checks verify consistency with existing seams, not real authentication or
-tenant safety. Normal affected-check and current-revision CI/review policy
-remains in [Development](DEVELOPMENT.md).
+[#321](https://github.com/Roklion/Project_Tabula_Rasa/issues/321) owns provider
+accounts/region/plan/instances, approved secrets/callbacks, MFA/recovery/mail,
+fixture users and hosted rehearsal evidence.
+[#320](https://github.com/Roklion/Project_Tabula_Rasa/issues/320) consumes its
+remaining lifecycle/recovery acceptance. [#395](https://github.com/Roklion/Project_Tabula_Rasa/issues/395)
+owns retained-provider-browser login recovery and hosted regression disposition.
+Keep partial observations, missing checks and owner decisions in those trackers.
 
-Outstanding operator work is explicit: provider accounts/region/plan and
-separate instances, approved secrets/callbacks, verified MFA/recovery/mail,
-fixture users and #321 hosted rehearsal. Maintainer review accepts the role
-distinctions, org-wide membership and bounded session policy before downstream
-merge. #223 still owns document durability, secret/incident operations and
-revocation after recovery restores; #224/#298 still own external release,
-privacy/legal and recovery guarantees. None are marked completed by this ADR.
+The approved business-centric access transition is owned by
+[#385](https://github.com/Roklion/Project_Tabula_Rasa/issues/385)–
+[#388](https://github.com/Roklion/Project_Tabula_Rasa/issues/388) under #222/#124;
+current org-scoped implementation must not be mistaken for completed independent
+business-role acceptance. [#348](https://github.com/Roklion/Project_Tabula_Rasa/issues/348)
+consumes selected-release identity/visual/recovery evidence before external beta;
+#224/#298 retain legal/customer and commercial recovery/activation decisions.
+[#342](https://github.com/Roklion/Project_Tabula_Rasa/issues/342) owns operational
+handoff. Documentation selection or synthetic tests cannot supply those approvals.

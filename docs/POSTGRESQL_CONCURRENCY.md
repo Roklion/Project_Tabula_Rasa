@@ -252,19 +252,18 @@ and migration validation/refusal against existing data. Sheets tests cover optio
 baselines, no-baseline compatibility, failure before inline tags, normalization
 and two-workbook isolation.
 
-The shared guards and specialized relational enforcement are implemented.
-#245/#246 integrate the core reference/accounting adapters with these helpers
-and verify native loaded-caller and overlapping-writer behavior; see
-[core repository composition](POSTGRESQL.md#core-repository-composition-245--246).
-#247–#252 own the remaining domain adapters and must verify their actual
-boundary/baseline/read-model integration against these rules as each slice
-lands. #221 owns required commercial load/form/request propagation. These are
-coordinated delivery/verification steps, not prerequisites that prevent #253's
-shared implementation. Contract probes prove the exercised service/SQL commit
-behavior without claiming that absent full adapters or commercial endpoints
-exist. Keep #253's acceptance evidence open where it requires those concrete
-consumer paths; each adapter enforces its invariants from its first release.
-#247 integrates committed, entity-scoped reporting snapshots and verifies a
-bounded concurrent writer; its read models do not carry mutation baselines.
-This slice does not satisfy #258's production activation gate, #257 migration
-acceptance, #259 recovery rehearsal or #260 complete entity export.
+The shared guards and specialized relational enforcement apply to the implemented
+reference/accounting, reporting, recurring/mixed-use/assets, mileage, document
+and import adapters. Every mutation adapter must enforce its supported domain,
+entity/reference and loaded-baseline invariants at the actual boundary; transport
+propagation follows [Commercial concurrency](COMMERCIAL_CONCURRENCY.md).
+Reporting read models do not acquire mutation baselines.
+
+Completed cross-adapter/caller verification is recorded in
+[#253](https://github.com/Roklion/Project_Tabula_Rasa/issues/253) and
+[#280](https://github.com/Roklion/Project_Tabula_Rasa/issues/280).
+Selected live migration and authority acceptance remain with
+[#303](https://github.com/Roklion/Project_Tabula_Rasa/issues/303), while
+[#298](https://github.com/Roklion/Project_Tabula_Rasa/issues/298) retains commercial
+activation. A closed shared-integrity ticket or synthetic contract probe does
+not authorize either operation.

@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from decimal import Decimal
-from fractions import Fraction
+from copy import deepcopy
 
 import pytest
 
-from tabula_rasa.page_renderers.transactions.search import filter_transaction_rows
+from tabula_rasa.ledger_records import search_ledger_entries
 from tabula_rasa.page_renderers.transactions.ledger_filters import (
     transaction_is_source_driven,
     transaction_type_label,
@@ -25,6 +24,12 @@ SEARCH_FIELDS = (
 )
 
 
+def _search_rows(rows, query):
+    """Exercise the live logical-entry search with rendered simple-row summaries."""
+    entries = [{"id": row["ID"]} for row in rows]
+    return search_ledger_entries(entries, rows, [], [], query)
+
+
 @pytest.fixture
 def rows() -> list[dict[str, object]]:
     return [
@@ -39,6 +44,8 @@ def rows() -> list[dict[str, object]]:
             "Description": "January retainer",
             "Amount": 1250.0,
             "Receipt": "📎",
+            "receipt_filename": "receipt-file.pdf",
+            "drive_file_id": "hidden-drive-token",
             "Reference": "INV-1042",
             "ID": "txn-acme-1042",
         },
@@ -64,8 +71,8 @@ def test_search_matches_each_supported_field(
 ) -> None:
     value = next(str(row[field]) for row in rows if row[field])
 
-    assert filter_transaction_rows(rows, f"  {value.upper()}  ") == [
-        row for row in rows if value.casefold() in str(row.get(field, "")).casefold()
+    assert _search_rows(rows, f"  {value.upper()}  ") == [
+        {"id": row["ID"]} for row in rows if value.casefold() in str(row.get(field, "")).casefold()
     ]
 
 
@@ -73,45 +80,30 @@ def test_search_matches_each_supported_field(
 def test_empty_or_whitespace_search_preserves_rows(
     rows: list[dict[str, object]], query: str
 ) -> None:
-    assert filter_transaction_rows(rows, query) == rows
+    assert _search_rows(rows, query) == [{"id": row["ID"]} for row in rows]
 
 
-def test_search_preserves_falsy_visible_values():
-    rows = [{"Type": "Expense", "Reference": 0, "ID": 0}]
+def test_search_preserves_zero_text_in_visible_fields():
+    rows = [{"Type": "Expense", "Reference": "0", "ID": "zero"}]
 
-    assert filter_transaction_rows(rows, "0") == rows
-
-
-@pytest.mark.parametrize(
-    "missing_value", [float("nan"), Decimal("NaN"), Decimal("sNaN")]
-)
-def test_search_ignores_nan_values(missing_value: object):
-    rows = [{"Type": "Expense", "Reference": missing_value, "ID": 1}]
-
-    assert filter_transaction_rows(rows, "nan") == []
+    assert _search_rows(rows, "0") == [{"id": "zero"}]
 
 
-def test_search_handles_non_float_real_values():
-    rows = [{"Type": "Expense", "Reference": Fraction(1, 3), "ID": 1}]
-
-    assert filter_transaction_rows(rows, "1/3") == rows
-
-
-@pytest.mark.parametrize("query", ["2026-01-02", "1250", "📎", "receipt-file.pdf"])
+@pytest.mark.parametrize("query", ["2026-01-02", "1250", "📎", "receipt-file.pdf", "hidden-drive-token"])
 def test_search_excludes_date_amount_receipt_and_drive_metadata(
     rows: list[dict[str, object]], query: str
 ) -> None:
-    assert filter_transaction_rows(rows, query) == []
+    assert _search_rows(rows, query) == []
 
 
 def test_search_returns_all_matching_rows_and_does_not_mutate_input(
     rows: list[dict[str, object]],
 ) -> None:
-    original_rows = list(rows)
+    original_rows = deepcopy(rows)
 
-    result = filter_transaction_rows(rows, "account")
+    result = _search_rows(rows, "account")
 
-    assert [row["ID"] for row in result] == [
+    assert [row["id"] for row in result] == [
         "txn-acme-1042",
         "txn-transfer-7",
     ]
@@ -124,7 +116,7 @@ def test_search_matches_any_displayed_tag() -> None:
         {"ID": "two", "Tags": "Internal"},
     ]
 
-    assert [row["ID"] for row in filter_transaction_rows(rows, "client")] == [
+    assert [row["id"] for row in _search_rows(rows, "client")] == [
         "one"
     ]
 

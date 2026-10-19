@@ -31,10 +31,6 @@ _ENTRY_FIELDS = WORKSHEET_HEADERS["JournalEntries"]
 _POSTING_FIELDS = WORKSHEET_HEADERS["JournalPostings"]
 
 
-def _stored_values(fields: Sequence[str], record: Mapping[str, Any]) -> dict[str, str]:
-    return {field: str(record.get(field, "") or "") for field in fields}
-
-
 class JournalsMixin:
     """Storage operations for one parent journal and its posting set."""
 

@@ -82,38 +82,11 @@ SQL, secrets or customer bookkeeping/downloads. Native tests assert no-store
 error envelopes and correlated, redacted `identity_denied`/`authorization_denied`
 signals for revoked/forbidden requests. These hooks do not complete #332.
 
-Implementation evidence, 2026-10-15: the clean `codex/issue-320-security` worktree
-is based on `d5530d9` from `origin/main`. The implementation commit containing
-this guide records the tested diff. Python 3.12.10 and disposable PostgreSQL 18.4
-were used locally; Repository CI retains its PostgreSQL 18.6 service.
-
-| Affected validation | Result |
-| --- | --- |
-| HTTP, OIDC, retained local administration and CI-policy tests (first command above) | 563 passed |
-| Native PostgreSQL acceptance and lifecycle tests (second command above) | 80 passed |
-| Compiled named-identity/workspace browser tests, Chromium at 1440/390 widths | 6 passed |
-| Frontend Vitest | 92 passed across 22 files |
-| Ruff, ESLint, TypeScript/Vite build, dependency compatibility, generated contract drift and whitespace checks | Passed |
-
-No full local suite, live-provider acceptance or current-head hosted CI result
-is claimed. The HTTP test transport emits a deprecation notice for HTTPX; it
-passes with the declared dependencies. Future transport migration can be handled
-separately from tenant authorization.
-
-Review remediation, 2026-10-16: the two-user history test now traverses every
-entry added after Alice's receipt view and verifies that it actually reaches
-that original URL without rendering Alice's transaction or receipt. Logout
-tests await the confirmed server response before reload or another sign-in.
-All 19 affected native identity-browser/security-acceptance cases passed,
-including both desktop/mobile widths, along with 354 route inventory and
-authorization checks, the SPA build, repository Ruff and whitespace checks.
-These focused local results do not replace fresh CI for the remediation head.
-
-The follow-up browser probe records private text synchronously on `pageshow`
-and in DOM mutations after the second user signs in, preserving any exposure
-even when the DOM clears before a retrying assertion runs. Controlled transient
-insertion/removal and restored-page events both triggered the probe; all 19
-affected native cases and repository Ruff/whitespace checks passed again.
+Reviewed implementation, remediation and validation results are recorded in
+[#320](https://github.com/Roklion/Project_Tabula_Rasa/issues/320) and
+[PR #374](https://github.com/Roklion/Project_Tabula_Rasa/pull/374). Historical local
+counts and the pre-partition browser timeout are not current CI configuration;
+[CI ownership](CI_TEST_SUITES.md) defines the required independent partitions.
 
 The route audit's documentation exemption accepts only concrete Starlette HTTP
 routes at the framework documentation/OpenAPI paths. Mounted applications at
@@ -123,30 +96,18 @@ The factory captures the generated endpoint identities before registering
 application routes; only those endpoints with GET/HEAD methods qualify.
 Arbitrary added handlers and replaced endpoint identities are rejected.
 
-The first hosted run (`38843378193`) passed Python/PostgreSQL, Windows and all
-160 browser E2E cases, then exhausted the combined browser job's 20-minute
-budget during the native browser suite. The job now has a bounded 30-minute
-budget for setup, E2E, image inspection and native browser acceptance. Every
-existing case and the required aggregate gate remain enabled; the updated head
-requires a fresh passing run.
+Current acceptance gaps and their dispositions belong in
+[#320](https://github.com/Roklion/Project_Tabula_Rasa/issues/320), not a duplicated
+status table here. Its outstanding hosted lifecycle/recovery requirement consumes
+[#321](https://github.com/Roklion/Project_Tabula_Rasa/issues/321)'s provider,
+MFA/mail/recovery, logout/revoke/outage and rollback evidence. Approved fixture
+bindings and partial observations do not establish a complete hosted pass.
 
-Integration evidence, 2026-10-16: merged `origin/main` at `ae9d9c5`, including
-**#317 / PR #372** guided onboarding. The shared signed-OIDC login fixture now
-serves both onboarding and security journeys. All 594 affected HTTP/native
-identity, session, workspace, migration, recovery and export tests passed,
-along with all 10 compiled identity/workspace browser cases, 103 frontend tests,
-the SPA build, repository Ruff and whitespace checks. This covers combined
-first-ledger, invitation, failure/resume and prior-user receipt/history paths;
-fresh current-head CI remains required, and hosted acceptance stays downstream.
-
-| Unresolved acceptance | Exact downstream owner / required evidence |
-| --- | --- |
-| Actual ZITADEL MFA, recovery mail/factors, outage, hosted login/logout/switch/revoke and named-mode rollback | **#321**, using [the authenticated rollout checklist](AUTHENTICATED_ROLLOUT.md) and approved provider setup. Staging client/fixtures are not yet configured; hosted acceptance remains pending. Live credentials/accounts are not required or authorized by these tests. |
-| Actor/action security events, retention/sink/alerts and hosted correlation | **#332** under **#223**: extend the safe hooks, then verify delivered telemetry with synthetic denied/revoked requests. Local request/event redaction is covered; operational completeness remains open. |
-| Managed document grant/byte durability and restore evidence | **#337/#338** under **#223**: verify the selected adapter, qualified grants, byte recovery and restoration. Fake-byte success is not this evidence. |
-| Future support/recovery adapters and restored-session invalidation | **#341** owns privileged support adapters; **#223/#340** own recovery/incident procedures, including invalidating restored sessions before ingress. **#298/#303** retain commercial recovery/owner execution approvals. Extend absence/policy checks when operations become exposed. |
-| External-beta and paid activation | **#224/#298** consume combined #320/#321 evidence plus #223 recovery/operations and legal/privacy gates. Parent #222 and initiative #124 remain open; code/test success alone is not admission approval. |
-
-Do not close comprehensive external acceptance until applicable gaps have
-evidence on the combined revision. Verification scaffolding and local vertical
-slices can advance independently of those release gates.
+[#332](https://github.com/Roklion/Project_Tabula_Rasa/issues/332) owns delivered
+security telemetry/retention/alerts; [#342](https://github.com/Roklion/Project_Tabula_Rasa/issues/342)
+consumes stage-specific DB/document recovery evidence. [#348](https://github.com/Roklion/Project_Tabula_Rasa/issues/348)
+owns external-beta admission and the selected-release business-centric access
+requirements from #385–#388. [#303](https://github.com/Roklion/Project_Tabula_Rasa/issues/303)
+retains independent owner execution; #224/#298 retain applicable release and
+commercial approval. Keep each result associated with its actual tested revision
+and supported scope; synthetic success does not waive these issue-owned gates.

@@ -19,10 +19,9 @@ visual review, manual accessibility and release approval are separate results.
 | #331 integrated acceptance | This harness and record; exact tested revisions are in retained manifests | Representative 1440px/390px/320px captures, 720px/320px effective zoom reflow, manual preview and explicit review process |
 
 Sibling issues #325–#330 are closed with their own acceptance evidence. Their
-results do not automatically pass this integrated candidate. The route inventory
-identifies unsupported workflows and #314/#317 identity/onboarding exclusions;
-newly implemented identity routes need their functional owner's visual review
-before external beta.
+results do not automatically pass this integrated candidate. Newly delivered identity/onboarding/business-access routes need their functional
+owner's selected-release visual review before external beta; track that evidence
+in #388/#348 rather than treating an older inventory exclusion as current status.
 
 Reuse map: inspected the mounted router/Shell, RecordList callers, shared fields,
 mileage grids, existing synthetic browser suites and native PostgreSQL journeys.
@@ -128,81 +127,27 @@ filter-backend behavior. Restart ordinary Vite without the preview config when f
 | Contrast and state | Manual reading of essential/secondary/disabled/error text and focus/selected indicators alongside automated axe; state is understandable without color |
 | Result | Pass, defect with owner, or explicit accepted exclusion; observations that were not made stay pending |
 
-October 13, 2026 review: the maintainer reported “visual functionality ok” on
-the synthetic preview, then identified desktop mileage-filter misalignment,
-repeated Categories/Payees/Tags titles and inconsistent main-menu grouping.
-The shared field grid now keeps compact controls at the top, the list owner
-removes repeated visible titles while retaining accessible table names, and
-Categories & contacts owns all three reference routes. Regression checks cover
-desktop/narrow layouts, named tables, edit/empty/read-only states, nested create/
-merge routes and dirty navigation.
-
-Broader form/table appearance was rejected as too bland. The maintainer selected
-**Soft workspace**, explicitly requested a light palette and questioned oversized
-inputs. The implemented direction uses pale blue-gray canvas/forms/controls,
-soft corners and restrained table surfaces, with 40px desktop controls and 44px
-touch/narrow controls. Form/editor width is bounded at 960px. `design.md` records
-the approved commercial palette separately from the internal Streamlit palette.
-Further owner review requested stronger table presentation and clearer secondary
-actions. Primary names/amounts, quiet secondary details, text status/type badges,
-inline row actions and desktop action-column pinning now share existing owners.
-All accounting fields remain available. Writer links to Assets/Recurring/Mixed-use
-details now say Manage; read-only links say View. Route destinations, guarded
-commands and loaded baselines remain unchanged.
-The final spacing/badge feedback adds a 16px gap below mileage CSV download and
-separate Expense / Mixed-use pills, retaining the existing combined accessible
-row name and source-owned mutation boundary.
-The maintainer accepted the revised visual appearance in this chat on October 13,
-2026, after the final spacing and separate-pill feedback. This is retained human
-visual acceptance of the synthetic preview, independently of automated success.
-Post-integration acceptance also includes current main `97dc8d5` (merged PR #367):
-its three import uploaders, mixed-use copy and expense-to-recurring screens reuse
-the current fields/tables. Existing ledger bulk/copy selection, baseline and
-uncertain-write owners were preserved through the ledger conflict resolution.
-The new representative route captures cover desktop/390px/320px; native tests
-remain responsible for imports/copy/bulk success, failure and isolation behavior.
-
-**Visual appearance accepted; detailed device/accessibility and hosted CI/review
-completion remain separate.**
-Actual manual browser/device versions, zoom,
-touch, keyboard and contrast observations have not been supplied, so that
-specific acceptance is also pending. No material visual defect is declared an
-accepted exclusion by automated success alone.
-
 ## Initiative handoff and independent gates
 
-- **#323:** implementation slices are traceable above; #331 stays open until
-  visual/manual results and current-publication review/CI conditions are satisfied.
-- **#288:** the issue's latest acceptance record supersedes older “pending” text
-  in historical guides. It closed October 11, 2026 with restricted synthetic-alpha
-  provider, six-case staging, receipt persistence and compatible rollback evidence
-  for release `808fb84c0a6bcba6bfaaaa55013968a73f4c6f7a`. Its owner-approved
-  screen-reader exclusion applies to that alpha only. This local candidate does
-  not refresh that hosted release or establish a broader accessibility pass.
-- **#224 / #348:** consume accepted current-candidate visual evidence plus newly
-  delivered identity/onboarding screens. Named users/tenant isolation, portability,
-  legal/privacy, recovery, operations and cohort/operator approval remain their
-  owners' independent external-beta requirements. #298 retains any applicable
-  commercial authority/recovery sign-off; #342/#338 retain capacity/byte-recovery
-  work. Screenshots authorize no deployment, provider write, live migration or
-  external admission.
+Completed visual, keyboard/focus/contrast/reflow and maintainer-reported physical
+phone/zoom acceptance, with exact observations and limitations, are recorded in
+[#331](https://github.com/Roklion/Project_Tabula_Rasa/issues/331) and
+[PR #371](https://github.com/Roklion/Project_Tabula_Rasa/pull/371).
+The current presentation contract is in `design.md` and
+[UI foundations](COMMERCIAL_UI_FOUNDATIONS.md); this guide supplies the repeatable
+capture/manual-review process, not a branch progress log. Keep evidence manifests
+and real observations; do not invent missing device/browser metadata or treat
+emulated width as physical touch/zoom evidence.
 
-## PR #368 integration
-
-The candidate also incorporates PR #368: selected/full financial CSV downloads,
-mixed-use receipts and optional Maps mileage. Its extracted `LedgerTable` remains
-the single owner of export/Bulk selection and grouped posting rendering; the
-accepted badges, description emphasis and pinned Actions header move there.
-Export and receipt surfaces reuse existing shared controls. Maps guidance and
-calculation span a complete field-grid row before editable mileage.
-Synthetic configured-Maps capture uses a local test widget, never the real
-provider; native workflow checks own calculation, persistence, receipt recovery
-and CSV semantics. Earlier clean `211eec7` evidence is historical after this
-integration; retain fresh candidate manifests for current sign-off.
-
-Additional maintainer feedback adds an 8px lookup-button gap and a shared
-labeled file drop zone with a styled native chooser for all receipt/import
-selectors. The picker only supplies files to existing owners; it rejects
-multiple files for single-file importers, ignores disabled/text-only drops,
-and preserves receipt reselection/reset behavior. Native workflow and focused
-picker/drop tests cover unchanged explicit write and recovery boundaries.
+For later delivered identity/onboarding/business-access surfaces, record the
+selected candidate's visual/manual evidence with
+[#388](https://github.com/Roklion/Project_Tabula_Rasa/issues/388) and
+[#348](https://github.com/Roklion/Project_Tabula_Rasa/issues/348).
+[#321](https://github.com/Roklion/Project_Tabula_Rasa/issues/321) retains hosted
+identity acceptance and [#342](https://github.com/Roklion/Project_Tabula_Rasa/issues/342)
+retains operational evidence. Passing the earlier #331 scope or a new automated
+capture does not admit customers or establish comprehensive accessibility.
+[#288](https://github.com/Roklion/Project_Tabula_Rasa/issues/288)'s technical-alpha
+screen-reader exclusion remains limited to its accepted scope. #224/#298 retain
+external/commercial decisions; screenshots authorize no provider or live-data
+operation.

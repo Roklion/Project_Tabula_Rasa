@@ -218,12 +218,14 @@ conflicts, and desktop/mobile compiled forms. Synthetic screenshots may be saved
 with `TABULA_RASA_WORKFLOW_SCREENSHOTS` pointing to an ignored artifact directory.
 No live ledger or deployment credentials are used.
 
-This does not close #253, #221 or #124 or certify staging/customer readiness.
-Receipts (#283), recurring/mixed-use (#284), assets (#285), full mileage (#286),
-wider accessibility/browser certification (#287) and staging alpha integration
-(#288) retain their owners. Full report-catalog migration, bulk operations, copy
-and imports are outside this core slice. Streamlit remains the reference/internal
-edition while those release and retirement gates are completed.
+Core, secondary and existing-workflow ports are implemented; follow their
+[workflow guide](COMMERCIAL_WORKFLOW_PORTS.md) for current import/copy/bulk/CSV,
+receipt and Maps behavior. Historical exclusions from this core slice are not
+outstanding implementation tickets. [#303](https://github.com/Roklion/Project_Tabula_Rasa/issues/303)
+owns selected live-owner readiness, [#348](https://github.com/Roklion/Project_Tabula_Rasa/issues/348)
+owns external-beta admission, and [#377](https://github.com/Roklion/Project_Tabula_Rasa/issues/377)
+owns supported-capability retirement. Keep the internal edition until its
+capability-specific retirement conditions are met.
 
 Reuse map: inspected HTTP composition/DTOs, protected editors, loaded-form/cache
 helpers, reference/transaction/journal/reporting services, PostgreSQL repositories,
@@ -241,5 +243,5 @@ Rejected destructive confirmations and failed reloads close and expose the prese
 and review action. Pending operations disable the prompt's actions and Escape.
 Declared field errors identify the affected labeled control without exposing
 submitted values or internal server messages. See the
-[browser-quality gate](COMMERCIAL_BROWSER_QUALITY.md) for coverage and remaining
-receipt, staging and manual acceptance work.
+[browser-quality gate](COMMERCIAL_BROWSER_QUALITY.md) for repeatable coverage
+and links to the release/acceptance owners.

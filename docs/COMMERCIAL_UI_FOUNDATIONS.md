@@ -112,8 +112,8 @@ real-device or full accessibility certification.
 This slice of #323 under #124 consumes the merged #325 foundation. It keeps the
 commercial summary catalog and real route navigation; Streamlit tabs, monthly
 charts, recent-activity widgets, bulk selection and separate as-of controls are
-not implicitly migrated. Identity/session/onboarding remain #314/#317; #329/#330
-own remaining form/secondary presentation and #331 owns integrated acceptance.
+not implicitly migrated. Identity/session/onboarding use #314/#317's implemented owners; #329/#330
+supply form/secondary presentation and #331 records integrated acceptance.
 Hosted alpha, provider/rollback/device and external-beta gates remain independent.
 
 | Design requirement | Shared implementation / preserved owner |
@@ -224,8 +224,8 @@ included even when they have no independent URL.
 | Unknown route / route-error fallback | #329 shared headers and recovery/navigation treatment |
 | Shell/menu/entity selector/Terms/Privacy links | #326 shell; static legal documents keep their existing server owner and content; no legal or authorization change |
 | Signed-out (`/signed-out` or unauthorized route), session-unavailable and setup-required states | #312 `ContextBoundary` retains identity/session ownership; #330 applies shared headers, surfaces and native Sign in/Sign out controls, preserving private-view unmount and receipt-abort guards |
-| Complete authorized workspace/entity switching and first-use onboarding screens | #314/#317 remain open at the integration baseline; unfinished journeys are excluded, and their functional owners must consume the shared primitives when delivered. External OIDC-provider pages retain their provider owner |
-| Maps, internal administration/provider secrets, remaining internal-only report catalogs and source receipt workflows | Unsupported commercial workflows retain their initiative owners; #357/#358/#362/#364 now provide the documented import/copy/bulk/conversion ports, and this visual slice does not retire the internal edition |
+| Complete authorized workspace/entity switching and first-use onboarding screens | Implemented journey contracts are in `WORKSPACE_LIFECYCLE.md`; #385–#388 own the approved business-centric transition and its selected-release visual/security acceptance. External OIDC-provider pages retain their provider owner |
+| Maps, internal administration/provider secrets, remaining internal-only report catalogs and source receipt workflows | Maps and source receipt workflows are implemented under #363/#361; all seven existing-workflow ports are documented in `COMMERCIAL_WORKFLOW_PORTS.md`. Internal operator administration retains its separate #319 boundary; #377 owns retirement eligibility |
 
 ### Evidence and affected checks
 
