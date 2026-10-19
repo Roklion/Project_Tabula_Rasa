@@ -214,8 +214,13 @@ Measure database RTO from incident declaration through full database validation,
 including access/operator delay. Full-service RTO additionally includes secure
 binding, auth, bytes and smoke. Record observed recovery point/loss independently
 from approved objectives; proposals in #298 are not accepted commitments.
-NAS policy remains Sunday/Wednesday 22:00 America/New_York with indefinite
-successful-generation retention; no automatic prune or plan purchase is implied.
+NAS scheduled captures are Sunday/Wednesday at 22:00 for production and 22:30
+for UAT in `America/New_York`, following DST; the runner's due slot remains
+22:00 for both environments. Use the selected generation's manifest capture
+time to measure the actual recovery point, and follow the
+[NAS schedule and catch-up phases](NAS_POSTGRESQL_BACKUP.md#nas-command-and-schedule).
+Successful-generation retention remains indefinite; no automatic prune or
+plan purchase is implied.
 
 ## Provider, worker and document cases
 
