@@ -91,7 +91,7 @@ def test_login_callback_cookie_contract_and_no_entity_setup(database, return_pat
         assert session['state'] == 'needs_setup' and session['entity'] is None and not session['capabilities']
         assert client.get('/api/v1/entities/alpha/accounts').status_code == 403
         replay = client.get('/api/v1/auth/callback', params={'code': 'synthetic-code', 'state': transaction.state}, follow_redirects=False)
-        assert replay.headers['location'].endswith('login_failed')
+        assert '/signed-out?reason=login_failed&category=login_transaction&reference=' in replay.headers['location']
         headers = {'origin': auth.settings.public_origin, 'x-csrf-token': session['csrf_token']}
         assert client.post('/api/v1/auth/activity', headers=headers).status_code == 204
         assert client.post('/api/v1/auth/logout', headers=headers).status_code == 204

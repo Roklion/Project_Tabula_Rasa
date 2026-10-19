@@ -1,12 +1,26 @@
 from fastapi import APIRouter, Request
 from starlette.responses import RedirectResponse, Response
 
-from tabula_rasa.application.identity import IdentityError
+from tabula_rasa.application.identity import IdentityError, LOGIN_FAILURE_REASONS
 from ..context import require_csrf
 from ..errors import ERROR_RESPONSES, TransportError, error_response
 from ..models.common import LogoutContext
 
 router = APIRouter(responses=ERROR_RESPONSES, tags=["Authentication"])
+
+
+def login_failure(request, error, reason):
+    # Only server-owned classifications and a fresh request reference reach the
+    # browser. Never reflect provider errors, descriptions or callback values.
+    reason = error.login_reason or reason
+    if reason not in LOGIN_FAILURE_REASONS:
+        reason = 'token_validation'
+    outcome = 'unavailable' if error.code == 'unavailable' else 'login_failed'
+    request.state.failure_code = error.code
+    request.state.security_reason = reason
+    request.state.security_event = 'login_failed'
+    return RedirectResponse('/signed-out?reason=' + outcome + '&category=' + reason
+                            + '&reference=' + request.state.request_id, status_code=303)
 
 
 def identity(request):
@@ -19,24 +33,36 @@ def identity(request):
 @router.get("/api/v1/auth/login", operation_id="begin_login")
 def login(request: Request, return_path: str = "/"):
     auth = identity(request)
-    raw, transaction = auth.sessions.begin_login(return_path, request.cookies.get(auth.login_cookie))
-    response = RedirectResponse(auth.provider.authorization_url(transaction), status_code=303)
+    request.state.login_request_id = request.state.request_id
+    try:
+        raw, transaction = auth.sessions.begin_login(return_path, request.cookies.get(auth.login_cookie))
+        response = RedirectResponse(auth.provider.authorization_url(transaction), status_code=303)
+        auth.set_cookie(response, auth.login_cookie, raw, 300)
+        auth.set_cookie(response, auth.login_reference_cookie, request.state.request_id, 300)
+        request.state.security_event = "login_started"
+    except IdentityError as error:
+        if error.code == 'forbidden':
+            raise  # Preserve return-path validation; never broaden redirects.
+        response = login_failure(request, error, 'login_start')
+        auth.clear(response, login_only=True)
     response.headers['Referrer-Policy'] = 'no-referrer'
-    auth.set_cookie(response, auth.login_cookie, raw, 300)
-    request.state.security_event = "login_started"
     return response
 
 
 @router.get("/api/v1/auth/callback", operation_id="complete_login")
 def callback(request: Request):
     auth = identity(request)
+    request.state.login_request_id = request.cookies.get(auth.login_reference_cookie)
+    reason = 'login_transaction'
     # Consume even provider-denied/invalid callbacks. Exchange failures cannot be replayed.
     try:
         transaction = auth.sessions.consume_login(request.cookies.get(auth.login_cookie, ""),
                                                  request.query_params.get("state", ""))
         if "error" in request.query_params:
-            raise IdentityError("unauthorized")
+            raise IdentityError("unauthorized", login_reason='provider_authorization')
+        reason = 'token_validation'
         verified = auth.provider.verify(request.query_params.get("code", ""), transaction)
+        reason = 'session_issue'
         raw, session = auth.sessions.issue(verified, request.cookies.get(auth.session_cookie))
         response = RedirectResponse(transaction.return_path, status_code=303)
         auth.set_cookie(response, auth.session_cookie, raw, 43200)
@@ -44,9 +70,7 @@ def callback(request: Request):
         request.state.named_session = session
         request.state.security_event = "login_succeeded"
     except IdentityError as error:
-        response = RedirectResponse("/signed-out?reason=" + ("unavailable" if error.code == "unavailable" else "login_failed"), status_code=303)
-        request.state.failure_code = error.code
-        request.state.security_event = "login_failed"
+        response = login_failure(request, error, reason)
     auth.clear(response, login_only=True)
     response.headers['Referrer-Policy'] = 'no-referrer'
     return response

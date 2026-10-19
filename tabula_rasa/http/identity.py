@@ -14,6 +14,8 @@ class NamedIdentity:
         self.secure = urlsplit(settings.public_origin).scheme == "https"
         prefix = "__Host-tabula_" if self.secure else "tabula_dev_"
         self.session_cookie, self.login_cookie, self.csrf_cookie = (prefix + name for name in ("session", "login", "csrf"))
+        # Noncredential diagnostic reference; never used for authentication.
+        self.login_reference_cookie = prefix + 'login_reference'
 
     def authenticated(self, request, *, foreground=False):
         session = getattr(request.state, 'named_session', None)
@@ -54,7 +56,8 @@ class NamedIdentity:
                             samesite="lax", path="/")
 
     def clear(self, response, *, login_only=False, preserve_login=False):
-        names = (self.login_cookie,) if login_only else (self.session_cookie, self.login_cookie, self.csrf_cookie)
+        names = (self.login_cookie, self.login_reference_cookie) if login_only else (
+            self.session_cookie, self.login_cookie, self.login_reference_cookie, self.csrf_cookie)
         if preserve_login:
             names = (self.session_cookie, self.csrf_cookie)
         for name in names:

@@ -94,10 +94,10 @@ def test_provider_outage_cannot_create_session_or_replay_callback(database, capl
             callback = dict(state=transaction.state, code='private-code-sentinel')
             result = client.get('/api/v1/auth/callback', params=callback, follow_redirects=False)
             assert result.status_code == 303
-            assert result.headers['location'] == '/signed-out?reason=unavailable'
+            assert result.headers['location'].startswith('/signed-out?reason=unavailable&category=token_validation&reference=')
             assert auth.session_cookie not in client.cookies
             assert client.get('/api/v1/auth/callback', params=callback,
-                              follow_redirects=False).headers['location'] == '/signed-out?reason=login_failed'
+                              follow_redirects=False).headers['location'].startswith('/signed-out?reason=login_failed&category=login_transaction&reference=')
             assert auth.provider.verify.call_count == 1
             safe_denial(client.get('/api/v1/entities/alpha/accounts'), 401)
         assert 'private-code-sentinel' not in caplog.text and transaction.state not in caplog.text

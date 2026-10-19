@@ -291,8 +291,11 @@ membership and claimed profile IDs do not unlock that interface.
 
 - Pending identity displays a loading state before any private feature is
   mounted. Missing/expired/revoked identity offers Sign in through the hosted
-  provider. Failed callbacks show a clean sign-in failure page without provider
-  query values. Authenticated users without active business access see Workspace
+  provider. Failed callbacks show a clean sign-in failure page with an allowlisted
+  explanation, safe request reference and deliberate Sign in action to restart
+  provider reauthentication. The screen never retries automatically or asks users
+  to delete cookies; provider query values are never displayed. An ordinary
+  signed-out visit has no failure warning. Authenticated users without active business access see Workspace
   setup required, an owner-contact instruction and Sign out, not an empty ledger.
 - Named sessions show the existing business shell with a labeled Sign out
   control. Session loss or authorization-storage outage unmounts private queries,

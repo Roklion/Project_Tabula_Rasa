@@ -132,7 +132,8 @@ class OidcProvider:
     def authorization_url(self, transaction):
         with _BoundedOAuthSession(self) as client:
             url, _ = client.create_authorization_url(self.metadata()['authorization_endpoint'],
-                state=transaction.state, nonce=transaction.nonce, code_verifier=transaction.verifier, max_age=0)
+                state=transaction.state, nonce=transaction.nonce, code_verifier=transaction.verifier,
+                max_age=0, prompt='login')
             return url
 
     def _key(self, signature):
@@ -154,6 +155,7 @@ class OidcProvider:
         raise IdentityError('unauthorized')
 
     def verify(self, code, transaction):
+        reason = 'token_exchange'
         try:
             if not isinstance(code, str) or not 1 <= len(code) <= 4096:
                 raise IdentityError('unauthorized')
@@ -162,6 +164,7 @@ class OidcProvider:
             with _BoundedOAuthSession(self) as client:
                 data = client.fetch_token(self.metadata()['token_endpoint'], grant_type='authorization_code',
                     code=code, code_verifier=transaction.verifier)
+            reason = 'token_validation'
             token, access = data.get('id_token'), data.get('access_token')
             if (not isinstance(token, str) or len(token) > 32768 or not isinstance(access, str)
                     or not access or len(access) > 32768 or data.get('token_type', '').lower() != 'bearer'):
@@ -178,13 +181,15 @@ class OidcProvider:
                     raise IdentityError('unauthorized')
             now = time()
             if (not isinstance(claims['sub'], str) or not claims['sub'].strip() or len(claims['sub']) > 1024
-                    or not now - 300 <= claims['auth_time'] <= now + 60
                     or (isinstance(claims['aud'], list) and len(claims['aud']) > 1 and 'azp' not in claims)
                     or ('azp' in claims and claims['azp'] != self.settings.client_id)):
                 raise IdentityError('unauthorized')
+            if not now - 300 <= claims['auth_time'] <= now + 60:
+                raise IdentityError('unauthorized', login_reason='login_freshness')
             if 'at_hash' in claims:
                 if not isinstance(claims['at_hash'], str) or not claims['at_hash']:
                     raise IdentityError('unauthorized')
+            reason = 'userinfo_validation'
             with _BoundedOAuthSession(self) as client:
                 client.token = {'access_token': access, 'token_type': 'Bearer'}
                 info = client.get(self.metadata()['userinfo_endpoint']).json()
@@ -198,6 +203,7 @@ class OidcProvider:
                                     datetime.fromtimestamp(claims['auth_time'], timezone.utc))
         except IdentityError as error:
             code = error.code
+            reason = error.login_reason or reason
         except Exception:
             code = 'unauthorized'
-        raise IdentityError(code)
+        raise IdentityError(code, login_reason=reason)

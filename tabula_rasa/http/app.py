@@ -148,6 +148,7 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
             duration_ms=(perf_counter() - started) * 1000, failure_code=failure,
             security_event=getattr(request.state, "security_event", None),
             security_reason=getattr(request.state, "security_reason", None),
+            login_request_id=getattr(request.state, "login_request_id", None),
             action=policy.action if policy else None, context=context,
             actor_id=getattr(session, "user_id", None), provider=provider,
             provider_status=getattr(request.state, "provider_status", None) or (

@@ -4,7 +4,7 @@ from pathlib import Path
 import json
 import socket
 from threading import Thread
-from time import monotonic, sleep
+from time import monotonic, sleep, time
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 from playwright.sync_api import expect, sync_playwright
@@ -71,6 +71,7 @@ def configure_login(context, origin, claims):
     def authorize(route):
         query = parse_qs(urlsplit(route.request.url).query)
         assert query['code_challenge_method'] == ['S256']
+        assert query['prompt'] == ['login'] and query['max_age'] == ['0']
         claims['nonce'] = query['nonce'][0]
         route.fulfill(status=302, headers={'location': origin + '/api/v1/auth/callback?' + urlencode(
             {'state': query['state'][0], 'code': 'synthetic-code'})})
@@ -93,6 +94,50 @@ def configure_login(context, origin, claims):
 def test_named_deployment_smoke_uses_public_shell_and_denied_http_boundary(named_server):
     from tabula_rasa.deployment.smoke import named_smoke
     named_smoke(named_server[0], 'development')
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+def test_stale_provider_session_has_accessible_deliberate_recovery_and_clean_user_isolation(named_server, width):
+    origin, _, _, _, _, _, claims, info = named_server
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            retained = browser.new_context(viewport={'width': width, 'height': 1000})
+            configure_login(retained, origin, claims)
+            page = retained.new_page()
+            claims['auth_time'] = int(time()) - 600
+            page.goto(origin)
+            page.get_by_role('link', name='Sign in', exact=True).click()
+            expect(page.get_by_role('alert')).to_contain_text('did not confirm a recent sign-in')
+            expect(page.get_by_role('alert')).to_contain_text('Request reference:')
+            expect(page.get_by_text('You do not need to delete browser cookies.', exact=False)).to_be_visible()
+            assert retained.request.get(origin + '/api/v1/session').status == 401
+            assert_accessible(page)
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            # Recovery is a real click. A fresh signed response establishes Alice
+            # without deleting either the app or provider browser state.
+            claims['auth_time'] = int(time())
+            page.get_by_role('link', name='Sign in', exact=True).click()
+            expect(page.get_by_role('button', name='Sign out', exact=True)).to_be_visible()
+            alice = retained.request.get(origin + '/api/v1/session').json()
+            assert alice['entity']['id'] == 'alpha'
+            clean = browser.new_context(viewport={'width': width, 'height': 1000})
+            configure_login(clean, origin, claims)
+            claims['sub'] = info['sub'] = 'bob'
+            other = clean.new_page()
+            other.goto(origin)
+            other.get_by_role('link', name='Sign in', exact=True).click()
+            expect(other.get_by_role('button', name='Sign out', exact=True)).to_be_visible()
+            bob = clean.request.get(origin + '/api/v1/session').json()
+            assert bob['entity']['id'] == 'beta' and bob['actor_id'] != alice['actor_id']
+            assert clean.request.get(origin + '/api/v1/entities/alpha/accounts').status == 403
+            assert retained.request.get(origin + '/api/v1/entities/beta/accounts').status == 403
+            page.get_by_role('button', name='Sign out', exact=True).click()
+            expect(page.get_by_role('link', name='Sign in', exact=True)).to_be_visible()
+            expect(page.get_by_role('alert')).to_have_count(0)
+            assert clean.request.get(origin + '/api/v1/session').status == 200
+        finally:
+            browser.close()
 
 
 @pytest.mark.parametrize('width', [1440, 390])
