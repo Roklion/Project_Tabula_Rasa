@@ -109,8 +109,17 @@ def test_revoked_grant_updates_safe_status_and_member_removal_denies_cached_stor
     secrets.get.assert_not_called()
 
 
-def test_http_owner_freshness_csrf_foreign_scope_logout_and_private_bytes(database, tmp_path, caplog):
+@pytest.mark.parametrize('mounted', [False, True])
+def test_http_owner_freshness_csrf_foreign_scope_logout_and_private_bytes(database, tmp_path, caplog, mounted):
     repo, manager, store, calls, alpha, beta, refs, session = fixture(database, tmp_path)
+    if mounted:
+        from tests.test_connection_secret_mounts import link
+        version = tmp_path / '..version'
+        version.mkdir()
+        for reference in refs:
+            path = tmp_path / (reference + '.grant')
+            path.rename(version / path.name)
+            link(path, version / path.name)
     client, auth, factory = client_for(database)
     doc = DocumentReference('alpha', DocumentMetadata('a' * 32, 'receipt.pdf', 'receipt.pdf',
         'application/pdf', 5, 'a' * 64), 'provider-file', '')
