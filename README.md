@@ -79,7 +79,7 @@ The documentation index is this section of the root README. Go directly to:
 | Respond to incidents, roll back compatible images and rotate secrets | [Incident response](docs/INCIDENT_RESPONSE.md), [secret operations](docs/SECRETS_OPERATIONS.md) and [staging drill](docs/INCIDENT_DRILL.md) |
 | Review commercial visual, responsive and accessibility evidence | [Integrated UI acceptance](docs/COMMERCIAL_UI_ACCEPTANCE.md) |
 | Verify technical alpha and track the Streamlit transition | [Alpha release gate and retirement boundary](docs/TECHNICAL_ALPHA.md) |
-| Review retained capabilities, cleanup evidence and retirement conditions | [Transition retirement inventory](docs/TRANSITION_RETIREMENT.md) |
+| Review retained capabilities, cleanup evidence and retirement conditions | [Issue #377: transition retirement inventory](https://github.com/Roklion/Project_Tabula_Rasa/issues/377) |
 | Implement the commercial PostgreSQL accounting model | [Canonical schema ADR](docs/adr/0001-canonical-accounting-schema.md) |
 | Start PostgreSQL, run migrations, and test database infrastructure | [PostgreSQL development and operations](docs/POSTGRESQL.md) |
 | Implement PostgreSQL mutations and carry loaded-record baselines | [PostgreSQL concurrency convention](docs/POSTGRESQL_CONCURRENCY.md) |

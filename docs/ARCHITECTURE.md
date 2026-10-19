@@ -7,7 +7,7 @@ Project Tabula Rasa supports two compositions during the #124 transition:
 | Internal Streamlit | Selected unmigrated profile's Google Sheets workbook and human Google grant; local administration remains separately restricted | This guide's internal system context, [Setup](SETUP.md) and [legacy administration](EXTERNAL_CONNECTIONS_AND_LEGACY_CLAIMS.md#retained-local-administration-inventory) |
 | React/FastAPI | PostgreSQL services with authorized entity scope; migrated owner authority requires the explicit cutover procedure | [Commercial runtime](COMMERCIAL_WEB.md), [identity](COMMERCIAL_IDENTITY.md) and [cutover](BOOKKEEPING_CUTOVER.md) |
 
-The [retirement inventory](TRANSITION_RETIREMENT.md) records callers, shared
+The [issue #377 retirement inventory](https://github.com/Roklion/Project_Tabula_Rasa/issues/377) records callers, shared
 owners, eligible removals and retained internal/operator obligations. Neither
 composition's implementation proves live migration or authorizes retiring the
 other. The system-context, credential and Sheets-ledger sections below describe

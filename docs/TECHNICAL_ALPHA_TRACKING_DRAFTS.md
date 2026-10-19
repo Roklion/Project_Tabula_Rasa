@@ -14,7 +14,7 @@ documented with validation in [Commercial workflow ports](COMMERCIAL_WORKFLOW_PO
 TA-3 → #359's existing financial CSV, TA-5 → #361 and TA-7 → #363 are also
 implemented and documented there. All seven ports have delivering implementation
 evidence; their selected hosted/provider/owner acceptance remains separate.
-The [retirement inventory](TRANSITION_RETIREMENT.md) records #377's retained
+The [retirement inventory in issue #377](https://github.com/Roklion/Project_Tabula_Rasa/issues/377) records retained
 capabilities and removal eligibility. TA-4/#360 and standalone report downloads
 are excluded by #124/#221's October 11 existing-functionality correction. Historical drafts below
 do not override those decisions or authorize #303 live execution.

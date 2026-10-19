@@ -28,7 +28,7 @@ The supported internal edition is a private, Google Sheets-backed bookkeeping
 tool for one person or a small group of businesses. Its active ledger remains
 Google Sheets-backed. The commercial browser/API contracts later in this guide
 apply to the separate PostgreSQL composition; retirement eligibility is recorded
-in the [transition inventory](docs/TRANSITION_RETIREMENT.md). Architecture, setup,
+in [issue #377](https://github.com/Roklion/Project_Tabula_Rasa/issues/377). Architecture, setup,
 usage, and recovery detail belongs in [Architecture](docs/ARCHITECTURE.md), [Setup](docs/SETUP.md),
 [Using Tabula Rasa](docs/USING_TABULA_RASA.md), and
 [Backup and recovery](docs/BACKUP_RECOVERY.md); this file should specify UI

@@ -65,7 +65,7 @@ The HTTP runtime reuses application services and PostgreSQL adapters. Preserve
 the server-side #222 membership/context seam, #280 loaded-baseline form contract,
 and #223 health/request/job seams. Keep ordinary development and tests synthetic;
 the current Streamlit/Sheets setup and validation gates continue to apply.
-The [transition retirement inventory](TRANSITION_RETIREMENT.md) records #377's
+The [retirement inventory in issue #377](https://github.com/Roklion/Project_Tabula_Rasa/issues/377) records
 capability/caller ownership, eligible cleanup and concrete deferred conditions.
 Retain independent adapter/transport tests while both modes are supported;
 [CI suite ownership](CI_TEST_SUITES.md) remains #376's execution contract.
