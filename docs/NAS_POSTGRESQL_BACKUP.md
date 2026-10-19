@@ -244,14 +244,26 @@ remain separate operator work. These instructions do not perform deployment.
 
 Configure **DSM Task Scheduler** with a known `America/New_York` local timezone
 and working NTP; verify the displayed timezone and next-run dates. Do not
-silently change a shared NAS timezone. Register the same `wrapper scheduled`
-command for **Sunday and Wednesday at 22:00**, following DST. If DSM cannot
-express both days, use two tasks. Also register an hourly `wrapper scheduled`
-tick at minute 5 for bounded catch-up, and a separate hourly `wrapper status`
-health task at minute 15 with nonzero-exit notification to the authorized
-operator. Healthy/no-attempt and in-progress-within-grace results exit zero;
+silently change a shared NAS timezone. Register the production `wrapper scheduled` task for **Sunday and Wednesday
+at 22:00 America/New_York**, following DST. On the 512 MB DS220j, stagger UAT's
+scheduled capture to **22:30 Eastern** to avoid concurrent backup jobs; the
+runner's due-slot calculation for both environments remains 22:00 Eastern.
+If DSM cannot express both weekdays, use separate day-specific tasks. Register
+separate `wrapper scheduled` catch-up and `wrapper status` health-check jobs
+for each environment. The current operator-selected cadence is **every 3 hours
+for production** and **every 6 hours for UAT** to limit container-launch
+pressure on the DS220j; validate their actual execution history. These are
+slower-than-hourly checks, so detection/notification can be delayed by up to
+roughly the check interval plus execution/runtime latency. Neither cadence
+changes the runner's 24-hour catch-up limit nor retries an already attempted
+failed slot. Configure nonzero-exit notification to the authorized operator. Healthy/no-attempt and in-progress-within-grace results exit zero;
 failed, missing, stale, capacity and overdue states exit nonzero. Configure notification on abnormal
-termination, not on every successful tick. Test delivery. The archive task alone
+termination, not on every successful tick. In DSM Control Panel → Notification →
+Email, configure the separate **Sender email** service and authorized recipient
+profiles; Synology Account's successful test email alone does not establish
+Task Scheduler delivery. Test both a synthetic scheduled successful task and an
+`exit 1` failure-only task, verify actual emailed results, and remove the test
+task. Do not test delivery by deliberately breaking real backup jobs. The archive task alone
 cannot detect its own missing registration or a powered-off NAS; use an
 independent external availability/check-in monitor or a recorded operator
 health-check responsibility for that failure boundary. Coordinate future
@@ -393,8 +405,9 @@ readiness, a live authority switch or full-service/document recovery.
   secret/ACL/encryption/remount checks and both key-custody plans are recorded.
 - [ ] Production/UAT bindings are independently checked; all intended databases
   have distinct protected configuration and complete coverage.
-- [ ] Sunday/Wednesday 22:00 Eastern registration, DST next-run dates, controlled
-  scheduled run, hourly catch-up and independently delivered health alerts work
+- [ ] Sunday/Wednesday 22:00 Eastern production and 22:30 Eastern UAT registration,
+  DST next-run dates, controlled scheduled runs, **production 3-hour and UAT
+  6-hour** catch-up/health ticks, and independently delivered health alerts work
   with Windows/application offline.
 - [ ] Failed/interrupted/missed-run tests preserve the last usable archive;
   partials remain quarantined. Capacity visibility and no-prune retention hold.
@@ -402,6 +415,47 @@ readiness, a live authority switch or full-service/document recovery.
 - [ ] A retained NAS archive decrypts/restores into isolation and passes complete
   inventory, entity isolation, accounting integrity/content and alternate-operator
   checks. RTO/age/limitations and additional #259 evidence are recorded.
+
+
+## Operator evidence checkpoint — October 18–19, 2026 (not final acceptance)
+
+The operator confirmed that a genuine DS220j scheduled production backup at
+Sunday 22:00 EDT and UAT backup at Sunday 22:30 EDT each exited `Normal (0)`,
+published a complete encrypted generation and reported healthy status. The
+separate DSM email sender was configured; a synthetic scheduled success email
+and an abnormal-only `exit 1` Task Scheduler email were delivered. The test
+task was removed, and email notifications were enabled on production/UAT
+catch-up and health jobs. This tests DSM email transport, **not** an actual
+NAS backup-health failure or a powered-off NAS; the independent external
+check-in remains outstanding.
+
+Retained UAT generation
+`20261019T023012740769Z-6b2a00acbb1d455faa7c707fab531518`, completed
+`2026-10-19T02:30:24.982350Z`, recorded PostgreSQL 18.6 and revision
+`0014_document_locations`. Its ciphertext digest matched the manifest,
+the privately held age identity matched the NAS public recipient, decryption
+and archive traversal succeeded, and a separate empty Neon recovery database
+accepted `pg_restore --single-transaction --exit-on-error --no-owner
+--no-privileges` with exit zero in **25.6577183 seconds**. The restored
+database has 52 public tables, 2 sequences, 106 foreign keys, 209 check
+constraints (0 unvalidated), and the exact manifest revision. The application
+canonical verifier matched 7 of 8 business entities exactly. The eighth
+had an independently timed post-capture receipt upload (new document/link,
+entry version and update timestamp). Subsequent logins explain differences
+in ephemeral identity records. No unexplained financial-content differences
+were identified. See [#294 operator evidence](https://github.com/Roklion/Project_Tabula_Rasa/issues/294#issuecomment-6259851298).
+
+**Limits:** The 25.66 seconds is SQL restore execution time, **not** end-to-end
+declaration-to-verified database RTO. The target was restored using ownership
+and privilege suppression, so source grants, roles, authority and security
+parity still require verification and recovery-role handling. Expected
+bookkeeping exports were made after capture; a controlled capture with
+independent exports at the recovery point remains the higher-standard test.
+External DocumentStore receipt bytes are not in a PostgreSQL archive.
+Genuine interrupted/missed NAS runs, offline detection, NAS encryption/remount
+and operator custody, capacity/quota headroom, and alternate-operator recovery
+remain open. Do not delete the recovery target or retained archive before
+authorization and evidence acceptance.
 
 ## Developer validation
 
