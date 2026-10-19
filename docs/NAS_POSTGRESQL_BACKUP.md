@@ -197,9 +197,11 @@ Get-FileHash tabula-nas-backup-arm64.tar -Algorithm SHA256
 
 The inspect result must say `linux/arm64`. Package security updates are resolved
 at build time, so subsequent rebuilds can produce different IDs. Transfer this
-exact archive to the approved NAS image-import directory using the authorized file
-transfer route; keep it outside the source tree and backup-generation namespace.
-Compare `sha256sum /approved/image-import/tabula-nas-backup-arm64.tar`
+exact archive to an approved directory on a NAS data volume using the authorized
+file transfer route; keep it outside the source tree and backup-generation
+namespace. Replace the example volume/share with the actual approved location;
+do not store the image archive on DSM's system partition.
+Compare `sha256sum /volume1/approved-image-import/tabula-nas-backup-arm64.tar`
 with the recorded archive hash. In Synology **Container Manager → Image → Add →
 Import**, select that archive and wait for import to finish. Do not create a
 database container or alter scheduled tasks.
