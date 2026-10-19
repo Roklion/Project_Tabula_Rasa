@@ -46,7 +46,8 @@ def test_ci_preserves_complete_python_and_windows_coverage() -> None:
     assert python["env"]["TABULA_RASA_TEST_DATABASE_URL"].startswith(
         "postgresql+psycopg://tabula_test@127.0.0.1:"
     )
-    assert python['env']['TABULA_RASA_TEST_PG_CONTAINER'] == '${{ job.services.postgres.id }}'
+    suite = next(step for step in python['steps'] if step.get('name') == 'Run complete Python suite')
+    assert suite['env']['TABULA_RASA_TEST_PG_CONTAINER'] == '${{ job.services.postgres.id }}'
     commands = [step["run"] for step in python["steps"] if "run" in step]
     assert "python -m pip install -r requirements-dev.txt" in commands
     assert "ruff check ." in commands

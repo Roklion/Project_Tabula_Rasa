@@ -22,9 +22,17 @@ Set the test database URL privately to the synthetic service and set
 Local test output is disposable validation output; do not commit JUnit payloads.
 The current PR's CI preserves JUnit as its normal private Actions artifact.
 
-Final affected validation: **264 passed in 111.34 seconds**, no skips/failures.
+Pre-publication affected validation: **264 passed in 111.34 seconds**, no skips/failures.
 Repository `ruff check --no-cache .`, compilation and `git diff --check` passed.
-The policy PR separately ran 45 native audit/period/authorization checks.
+The policy PR separately ran 45 native audit/period/authorization checks and 394
+support-control/CLI/authorization checks. Review remediation also exercises a
+non-owner restored inspector under RLS, equivalent explicit/default sequence
+ACLs, weakened source policies/capture triggers and reversed PITR controls.
+The final focused recovery/CLI/CI-policy remediation run passed **70 tests in
+34.86 seconds**, with no skips/failures; repository Ruff and diff checks passed.
+The initial publication exposed an invalid job-level service context in CI;
+moving that binding to the pytest step fixed workflow evaluation. The failed
+initial run is not passing evidence for the corrected head.
 
 ## Test and evidence matrix
 

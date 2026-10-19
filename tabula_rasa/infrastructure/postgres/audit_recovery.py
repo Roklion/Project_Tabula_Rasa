@@ -55,9 +55,12 @@ def _inventory(connection, revision):
             WHERE n.nspname='public' AND c.relname=ANY(:tables) ORDER BY c.relname,k.conname""", params),
         'indexes': _rows(connection, """SELECT tablename,indexname,indexdef FROM pg_indexes
             WHERE schemaname='public' AND tablename=ANY(:tables) ORDER BY tablename,indexname""", params),
-        'triggers': _rows(connection, """SELECT c.relname,t.tgname,t.tgenabled,
+        'triggers': _rows(connection, """SELECT c.relname,t.tgname,t.tgenabled,t.tgtype,
+            t.tgdeferrable,t.tginitdeferred,p.proname,pn.nspname AS function_schema,
+            encode(t.tgargs,'hex') AS arguments,
             pg_get_triggerdef(t.oid) AS definition FROM pg_trigger t
             JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+            JOIN pg_proc p ON p.oid=t.tgfoid JOIN pg_namespace pn ON pn.oid=p.pronamespace
             WHERE n.nspname='public' AND c.relname=ANY(:tables) AND NOT t.tgisinternal
             ORDER BY c.relname,t.tgname""", params),
         'policies': _rows(connection, """SELECT tablename,policyname,permissive,roles::text,
@@ -72,21 +75,40 @@ def _inventory(connection, revision):
             WHERE n.nspname='public' AND p.prokind IN ('f','p','w') ORDER BY p.proname,args"""),
         'sequences': _rows(connection, """SELECT s.schemaname,s.sequencename,s.sequenceowner,s.data_type::text,
             s.start_value,s.min_value,s.max_value,s.increment_by,s.cycle,s.cache_size,
-            ARRAY(SELECT a::text FROM unnest(COALESCE(c.relacl,acldefault('S',c.relowner))) a ORDER BY a::text)::text AS acl
+            ARRAY(SELECT a::text FROM unnest(COALESCE(c.relacl,acldefault('s',c.relowner))) a ORDER BY a::text)::text AS acl
             FROM pg_sequences s JOIN pg_namespace n ON n.nspname=s.schemaname
             JOIN pg_class c ON c.relnamespace=n.oid AND c.relname=s.sequencename
             WHERE s.schemaname='public' AND s.sequencename='audit_events_sequence_seq'"""),
     }
-    triggers = {(r['relname'], r['tgname']) for r in inventory['triggers'] if r['tgenabled'] == 'O'}
-    required = {(table, 'audit_capture') for table in keys} | {
-        ('audit_events', 'immutable'), ('audit_events', 'immutable_truncate'), ('audit_events', 'capture_only'),
-        ('audit_baseline', 'immutable'), ('audit_baseline', 'immutable_truncate'), ('audit_baseline', 'immutable_insert'),
-        ('audit_activation', 'immutable'),
-    }
+    triggers = {(r['relname'], r['tgname']): r for r in inventory['triggers']}
+    # Validate supported capture/immutability semantics before trusting a source
+    # oracle; a drifted trigger with the right name is not a valid protection.
+    required = {(table, 'audit_capture'): (
+        5 if table == 'support_actions' else 29, 'capture_bookkeeping_audit',
+        True, True, ('\0'.join(fields)+'\0').encode().hex(),
+    ) for table, fields in keys.items()}
+    required.update({
+        ('audit_events', 'immutable'): (27, 'audit_immutable', False, False, ''),
+        ('audit_events', 'immutable_truncate'): (34, 'audit_immutable', False, False, ''),
+        ('audit_events', 'capture_only'): (7, 'audit_insert_guard', False, False, ''),
+        ('audit_baseline', 'immutable'): (27, 'audit_immutable', False, False, ''),
+        ('audit_baseline', 'immutable_truncate'): (34, 'audit_immutable', False, False, ''),
+        ('audit_baseline', 'immutable_insert'): (7, 'audit_immutable', False, False, ''),
+        ('audit_activation', 'immutable'): (58, 'audit_immutable', False, False, ''),
+    })
+    valid_triggers = all(
+        key in triggers and triggers[key]['tgenabled'] == 'O' and triggers[key]['function_schema'] == 'public'
+        and tuple(triggers[key][field] for field in ('tgtype','proname','tgdeferrable','tginitdeferred','arguments')) == expected
+        for key, expected in required.items()
+    )
+    scoped_policies = [row for row in inventory['policies'] if row['tablename'] in {'audit_events','audit_baseline'}]
+    expected_policies = [{
+        'tablename': table, 'policyname': name, 'permissive': 'PERMISSIVE', 'roles': '{public}', 'cmd': 'SELECT',
+        'qual': "(entity_id = current_setting('tabula.audit_reader_entity'::text, true))", 'with_check': None,
+    } for table, name in [('audit_baseline','scoped_baseline_read'), ('audit_events','scoped_audit_read')]]
     secured = {r['relname'] for r in inventory['tables'] if r['relrowsecurity']}
-    policies = {(r['tablename'], r['policyname']) for r in inventory['policies']}
-    if (not required <= triggers or not {'audit_events', 'audit_baseline'} <= secured
-            or not {('audit_events', 'scoped_audit_read'), ('audit_baseline', 'scoped_baseline_read')} <= policies
+    if (not valid_triggers or not {'audit_events', 'audit_baseline'} <= secured
+            or scoped_policies != expected_policies
             or len(inventory['tables']) != len(tables) or len(inventory['sequences']) != 1):
         raise ExportError('audit_schema_incomplete')
     return inventory
@@ -190,8 +212,10 @@ def verify_audit_recovery(database, entity_id, expected, *, source_database_sha2
     if later is not None:
         validate_audit_manifest(later, entity_id)
         if (later['source_database_sha256'] != source_database_sha256
-                or all(later['state'].get(key) == expected['state'].get(key)
-                       for key in ('events', 'baseline', 'ledger_sha256'))):
+                or any(later['state'].get(key) != expected['state'].get(key)
+                       for key in ('database_schema_version','inventory_sha256','activation','baseline'))
+                or later['state']['events']['count'] <= expected['state']['events']['count']
+                or later['state']['sequence']['last_value'] < expected['state']['sequence']['last_value']):
             raise ExportError('audit_pitr_control_unchanged')
     restored = capture_audit_recovery(database, entity_id, capabilities=capabilities)
     # Sequences are nontransactional: failed writes can consume values, and a

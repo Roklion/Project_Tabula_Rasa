@@ -88,6 +88,8 @@ def test_restore_before_and_after_atomic_commit_excludes_later_tail(database):
     with cloned_database(database) as point_after:
         assert verify(point_after, after)['status'] == 'matched'
         assert reader(point_after).query(target_type='entries', target_id='commit-boundary')
+        with pytest.raises(ExportError, match='audit_pitr_control_unchanged'):
+            verify(point_after, after, later=before)
 
 
 def test_lost_response_then_restore_and_duplicate_retry_preserves_event_ids(database, monkeypatch):
@@ -229,6 +231,64 @@ def test_history_comparison_preserves_exact_financial_json_precision(database):
         assert reader(restored).verify()['status'] == 'matched'
         with pytest.raises(ExportError, match='audit_recovery_mismatch'):
             verify(restored, expected)
+
+
+def test_restored_nonowner_inspector_uses_same_snapshot_and_rls_scope(database):
+    alpha, beta = seed_core(database)
+    for services in (alpha, beta):
+        services.transactions.create(transaction_id='same-id', **expense())
+    role = 'audit_restore_' + uuid4().hex
+    with database.engine.begin() as connection:
+        connection.exec_driver_sql(f'CREATE ROLE "{role}" NOLOGIN')
+        connection.exec_driver_sql(f'GRANT USAGE ON SCHEMA public TO "{role}"')
+        connection.exec_driver_sql(f'GRANT SELECT ON ALL TABLES IN SCHEMA public TO "{role}"')
+        connection.exec_driver_sql(f'GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO "{role}"')
+    try:
+        expected = {scope: capture(database, scope) for scope in ('alpha', 'beta')}
+        with cloned_database(database) as restored:
+            def inspector(connection):
+                connection.exec_driver_sql(f'SET LOCAL ROLE "{role}"')
+            event.listen(restored.engine, 'begin', inspector)
+            try:
+                for scope in expected:
+                    assert verify(restored, expected[scope], scope)['event_count'] == expected[scope]['state']['events']['count']
+                    with reader(restored, scope).operation() as connection:
+                        assert connection.scalar(text('SELECT current_user')) == role
+                        assert set(connection.execute(text('SELECT entity_id FROM audit_events')).scalars()) == {scope}
+            finally:
+                event.remove(restored.engine, 'begin', inspector)
+    finally:
+        with database.engine.begin() as connection:
+            connection.exec_driver_sql(f'DROP OWNED BY "{role}"')
+            connection.exec_driver_sql(f'DROP ROLE "{role}"')
+
+
+def test_equivalent_explicit_and_default_sequence_acls_compare_equal(database):
+    seed_core(database)
+    before = capture(database)
+    with database.engine.begin() as connection:
+        # Converts a NULL ACL into its explicit equivalent without changing
+        # effective sequence privileges. Logical restores may do the reverse.
+        connection.execute(text('REVOKE ALL ON SEQUENCE audit_events_sequence_seq FROM PUBLIC'))
+    assert capture(database)['state'] == before['state']
+
+
+@pytest.mark.parametrize('drift', ['policy','extra-policy','trigger-events','trigger-keys'])
+def test_drifted_source_protections_cannot_be_blessed_as_an_oracle(database, drift):
+    seed_core(database)
+    with database.engine.begin() as connection:
+        if drift == 'policy':
+            connection.execute(text('ALTER POLICY scoped_audit_read ON audit_events USING (true)'))
+        elif drift == 'extra-policy':
+            connection.execute(text('CREATE POLICY unrestricted ON audit_events FOR SELECT USING (true)'))
+        else:
+            connection.execute(text('DROP TRIGGER audit_capture ON entries'))
+            operations, key = ('INSERT', 'id') if drift == 'trigger-events' else ('INSERT OR UPDATE OR DELETE', 'entity_id')
+            connection.execute(text(f'''CREATE CONSTRAINT TRIGGER audit_capture AFTER {operations} ON entries
+                DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION capture_bookkeeping_audit('{key}')'''))
+    assert reader(database).verify()['status'] == 'matched'
+    with pytest.raises(ExportError, match='audit_schema_incomplete'):
+        capture(database)
 
 
 def test_real_pg_dump_restore_retains_audit_archive(database):

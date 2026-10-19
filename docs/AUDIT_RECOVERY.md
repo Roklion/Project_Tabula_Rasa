@@ -28,8 +28,10 @@ contains sensitive scope/binding information and belongs outside Git/logs.
 The schema fingerprint covers audited and audit tables/columns, constraints,
 indexes, enabled triggers, RLS/policies, sequence definition and public functions
 (including capture/period dependencies), owners and effective default/explicit
-table/function ACLs. Audit capture/immutability triggers, scoped-read policies,
-RLS and sequence presence are required even when building the source oracle.
+table/function/sequence ACLs. Source capture checks trigger function/schema,
+operation type, deferral and key arguments, and exact scoped-read policies
+(including refusal of additional permissive audit policies), RLS and sequence
+presence before trusting an oracle. A right name with weakened semantics fails.
 The verifier also runs the shared current-state reconciliation, including #336
 period/correction evidence and #341 support history at applicable revisions.
 Matching an Alembic revision alone is insufficient.
@@ -77,8 +79,10 @@ are not tenant-local; freeze **all** writers/jobs during capture and verificatio
    events. Resume only the approved workload after both captures finish.
 4. For requested-point PITR, retain the intended point/LSN and controlled
    included/excluded commit evidence. After a distinct committed canary, freeze
-   again and capture `alpha-after-point.json` on the **same source**. Failed writes
-   consuming sequence numbers alone do not make a valid later-state control.
+   again and capture `alpha-after-point.json` on the **same source**. The later
+   control must have strictly more entity events, a non-regressing sequence and
+   unchanged schema/protections, baseline and activation. Reversed controls and
+   failed writes consuming sequence numbers alone are refused.
    Restore at the intended point through #259's provider procedure. A logical
    dump/template clone does not establish managed snapshot/PITR behavior.
 5. For NAS, use #294's existing manifest/ciphertext check, protected decryption
