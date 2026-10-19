@@ -37,6 +37,17 @@ recover provider access. Rotate by staging grants in a new key/directory,
 switching configuration coherently and having Owners reconnect. Retention or
 deletion of old recovery material requires separate approval.
 
+New opaque references start with a letter so their filenames can be uploaded
+as Render secret files; existing 32-hex references remain readable. Runtime
+reads also support mounted symlinks into versioned child directories beneath
+the configured secrets root. The resolved target must remain inside that
+operator-controlled root and be a regular file. Links escaping the root,
+missing targets and non-file targets fail closed. Runtime never writes through
+mounted links; operator provisioning still uses exclusive regular-file creation.
+The root and its child directories must not be writable by application users
+or other untrusted actors. Grant envelope checks still bind each read to its
+exact environment, organization, business and provider.
+
 Decrypted envelopes must match environment, organization, entity and provider.
 No default profile, fallback grant, browser-selected secret path or identity
 provider token supplies Google authority. Access tokens remain in the existing

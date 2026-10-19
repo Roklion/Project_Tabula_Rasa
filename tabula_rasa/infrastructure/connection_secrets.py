@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 from uuid import uuid4
 
 from cryptography.fernet import Fernet
@@ -36,17 +37,29 @@ class ConnectionSecrets:
             return None
         return cls(directory, key)
 
-    def _path(self, reference):
+    def _path(self, reference, *, reading=False):
         if not isinstance(reference, str) or not re.fullmatch('[0-9a-f]{32}', reference):
             raise IdentityError('unavailable')
         path = self.directory / (reference + '.grant')
+        if reading:
+            # Mounted secrets can point into a versioned child directory. Resolve
+            # once, retain containment, then open that regular target without
+            # following a replacement leaf symlink. The root is operator-owned.
+            resolved = path.resolve(strict=True)
+            if not resolved.is_relative_to(self.directory.resolve(strict=True)):
+                raise IdentityError('unavailable')
+            return resolved
         if path.is_symlink() or path.resolve().parent != self.directory.resolve():
             raise IdentityError('unavailable')
         return path
 
     def put(self, payload):
         """No replacement/overwrite; failed registration leaves recoverable ciphertext."""
+        # Render secret filenames must start with a letter. Keep the existing
+        # 32-hex format, including support for previously provisioned references.
         reference = uuid4().hex
+        while not reference[0].isalpha():
+            reference = uuid4().hex
         try:
             content = self._cipher.encrypt(json.dumps(payload).encode())
             descriptor = os.open(self._path(reference), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -59,7 +72,10 @@ class ConnectionSecrets:
 
     def get(self, reference, *, environment, organization_id, entity_id, provider):
         try:
-            with self._path(reference).open('rb') as source:
+            flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0)
+            with os.fdopen(os.open(self._path(reference, reading=True), flags), 'rb') as source:
+                if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
+                    raise ValueError
                 content = source.read(131073)
             if len(content) > 131072:
                 raise ValueError
