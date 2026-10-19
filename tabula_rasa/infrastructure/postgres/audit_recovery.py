@@ -1,0 +1,210 @@
+"""Private audit recovery oracle, separate from customer bookkeeping exports.
+
+Read-only, one committed snapshot per capture. Operators freeze source writers
+while capturing the oracle and backup. Hashes detect accidental differences;
+they do not establish provider lineage or resistance to a malicious DBA.
+"""
+
+import hashlib
+import json
+import re
+
+from sqlalchemy import text
+
+from tabula_rasa.application.entity_export import ExportError
+from tabula_rasa.bookkeeping_export.format import build_artifact, canonical_json
+from .audit import audited_keys, AuditReader
+from .cutover import database_identity
+from .entity_export import PostgresEntityExportRepository
+from .migrations import current_revision
+
+FORMAT = 'tabula-rasa-audit-recovery-v1'
+SUPPORTED_REVISIONS = {'0013_accounting_controls', '0014_document_locations', '0015_support_controls'}
+AUDIT_TABLES = ('audit_events', 'audit_baseline', 'audit_activation')
+
+
+def _digest(value):
+    return hashlib.sha256(canonical_json(value).encode('utf-8')).hexdigest()
+
+
+def _rows(connection, query, params=None):
+    return [dict(row) for row in connection.execute(text(query), params or {}).mappings()]
+
+
+def _inventory(connection, revision):
+    """Definitions, enabled protections, owners and ACLs; no ledger contents."""
+    keys = audited_keys(revision)
+    tables = (*AUDIT_TABLES, *keys)
+    params = {'tables': list(tables)}
+    inventory = {
+        'tables': _rows(connection, """SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity,
+            pg_get_userbyid(c.relowner) AS owner,
+            ARRAY(SELECT a::text FROM unnest(COALESCE(c.relacl,acldefault('r',c.relowner))) a ORDER BY a::text)::text AS acl
+            FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+            WHERE n.nspname='public' AND c.relname=ANY(:tables) ORDER BY c.relname""", params),
+        'columns': _rows(connection, """SELECT c.relname,a.attname,a.attnum,
+            format_type(a.atttypid,a.atttypmod) AS type,a.attnotnull,a.attidentity,
+            pg_get_expr(d.adbin,d.adrelid) AS default_value
+            FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+            JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped
+            LEFT JOIN pg_attrdef d ON d.adrelid=c.oid AND d.adnum=a.attnum
+            WHERE n.nspname='public' AND c.relname=ANY(:tables) ORDER BY c.relname,a.attnum""", params),
+        'constraints': _rows(connection, """SELECT c.relname,k.conname,k.convalidated,
+            pg_get_constraintdef(k.oid) AS definition FROM pg_constraint k
+            JOIN pg_class c ON c.oid=k.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+            WHERE n.nspname='public' AND c.relname=ANY(:tables) ORDER BY c.relname,k.conname""", params),
+        'indexes': _rows(connection, """SELECT tablename,indexname,indexdef FROM pg_indexes
+            WHERE schemaname='public' AND tablename=ANY(:tables) ORDER BY tablename,indexname""", params),
+        'triggers': _rows(connection, """SELECT c.relname,t.tgname,t.tgenabled,
+            pg_get_triggerdef(t.oid) AS definition FROM pg_trigger t
+            JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+            WHERE n.nspname='public' AND c.relname=ANY(:tables) AND NOT t.tgisinternal
+            ORDER BY c.relname,t.tgname""", params),
+        'policies': _rows(connection, """SELECT tablename,policyname,permissive,roles::text,
+            cmd,qual,with_check FROM pg_policies WHERE schemaname='public'
+            AND tablename=ANY(:tables) ORDER BY tablename,policyname""", params),
+        # Include dependencies of audit capture/period gates, not just names with
+        # an audit prefix. Function ACL/owner/search_path are part of the oracle.
+        'functions': _rows(connection, """SELECT p.proname,pg_get_function_identity_arguments(p.oid) AS args,
+            pg_get_functiondef(p.oid) AS definition,pg_get_userbyid(p.proowner) AS owner,
+            ARRAY(SELECT a::text FROM unnest(COALESCE(p.proacl,acldefault('f',p.proowner))) a ORDER BY a::text)::text AS acl
+            FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+            WHERE n.nspname='public' AND p.prokind IN ('f','p','w') ORDER BY p.proname,args"""),
+        'sequences': _rows(connection, """SELECT s.schemaname,s.sequencename,s.sequenceowner,s.data_type::text,
+            s.start_value,s.min_value,s.max_value,s.increment_by,s.cycle,s.cache_size,
+            ARRAY(SELECT a::text FROM unnest(COALESCE(c.relacl,acldefault('S',c.relowner))) a ORDER BY a::text)::text AS acl
+            FROM pg_sequences s JOIN pg_namespace n ON n.nspname=s.schemaname
+            JOIN pg_class c ON c.relnamespace=n.oid AND c.relname=s.sequencename
+            WHERE s.schemaname='public' AND s.sequencename='audit_events_sequence_seq'"""),
+    }
+    triggers = {(r['relname'], r['tgname']) for r in inventory['triggers'] if r['tgenabled'] == 'O'}
+    required = {(table, 'audit_capture') for table in keys} | {
+        ('audit_events', 'immutable'), ('audit_events', 'immutable_truncate'), ('audit_events', 'capture_only'),
+        ('audit_baseline', 'immutable'), ('audit_baseline', 'immutable_truncate'), ('audit_baseline', 'immutable_insert'),
+        ('audit_activation', 'immutable'),
+    }
+    secured = {r['relname'] for r in inventory['tables'] if r['relrowsecurity']}
+    policies = {(r['tablename'], r['policyname']) for r in inventory['policies']}
+    if (not required <= triggers or not {'audit_events', 'audit_baseline'} <= secured
+            or not {('audit_events', 'scoped_audit_read'), ('audit_baseline', 'scoped_baseline_read')} <= policies
+            or len(inventory['tables']) != len(tables) or len(inventory['sequences']) != 1):
+        raise ExportError('audit_schema_incomplete')
+    return inventory
+
+
+def _history(connection, table, entity_id):
+    # Server cursors avoid retaining the history in application memory. Full
+    # ordered rows include stable IDs, attribution, summaries and ordering keys.
+    order = 'sequence' if table == 'audit_events' else 'target_type,target_key'
+    result = connection.execution_options(stream_results=True).execute(text(
+        f'SELECT to_jsonb(t)::text AS value FROM {table} t WHERE entity_id=:scope ORDER BY {order}'
+    ), {'scope': entity_id})
+    digest = hashlib.sha256()
+    count = 0
+    for row in result:
+        # PostgreSQL's canonical jsonb text retains exact numeric precision;
+        # decoding JSON through Python floats could hide financial differences.
+        digest.update((row.value + '\n').encode('utf-8'))
+        count += 1
+    result.close()
+    connection.execution_options(stream_results=False)
+    return {'count': count, 'sha256': digest.hexdigest()}
+
+
+def capture_audit_recovery(database, entity_id, *, capabilities):
+    """Capture private evidence; never export events or treat it as a backup."""
+    reader = AuditReader(database, entity_id, capabilities=capabilities)
+    with database.transaction(read_only=True, require_outer=True) as connection:
+        revision = current_revision(connection)
+        if revision not in SUPPORTED_REVISIONS:
+            raise ExportError('audit_history_unavailable' if revision in {
+                '0004_mileage_order', '0005_bookkeeping_cutover', '0006_identity_control_plane',
+                '0007_identity_sessions', '0008_owner_lock_scope', '0009_external_connections',
+                '0010_onboarding_routes', '0010_workspace_lifecycle', '0011_control_plane_join',
+            } else 'audit_schema_unsupported')
+        inventory = _inventory(connection, revision)
+        with reader.operation():
+            integrity = reader.verify()
+            if integrity['status'] != 'matched':
+                raise ExportError('audit_ledger_mismatch')
+            activation = _rows(connection, 'SELECT singleton,activated_at::text FROM audit_activation')
+            if len(activation) != 1 or activation[0]['singleton'] is not True:
+                raise ExportError('audit_activation_missing')
+            sequence = dict(connection.execute(text(
+                'SELECT last_value,is_called FROM audit_events_sequence_seq'
+            )).mappings().one())
+            maximum = connection.scalar(text('SELECT COALESCE(max(sequence),0) FROM audit_events'))
+            if sequence['last_value'] < maximum or (maximum and not sequence['is_called']):
+                raise ExportError('audit_sequence_invalid')
+            # Read canonical bookkeeping in this same snapshot. Period/correction
+            # records outside v1 export are included in the audit integrity scan.
+            ledger = build_artifact(PostgresEntityExportRepository(database, entity_id).read_snapshot(connection))
+            state = {
+                'database_schema_version': revision, 'inventory_sha256': _digest(inventory),
+                'activation': activation[0]['activated_at'], 'sequence': sequence,
+                'events': _history(connection, 'audit_events', entity_id),
+                'baseline': _history(connection, 'audit_baseline', entity_id),
+                'ledger_sha256': ledger['manifest']['content_sha256'],
+                'historical_unavailable': integrity['historical_unavailable'],
+            }
+    body = {'format': FORMAT, 'entity_id': entity_id, 'source_database_sha256': database_identity(database), 'state': state}
+    return {**body, 'sha256': _digest(body)}
+
+
+def validate_audit_manifest(value, entity_id):
+    """All errors are fixed codes, never manifest values or provider messages."""
+    if not isinstance(value, dict) or set(value) != {'format', 'entity_id', 'source_database_sha256', 'state', 'sha256'}:
+        raise ExportError('audit_manifest_invalid')
+    if value['format'] != FORMAT or value['entity_id'] != entity_id:
+        raise ExportError('audit_manifest_scope')
+    if not isinstance(value['source_database_sha256'], str) or not re.fullmatch('[0-9a-f]{64}', value['source_database_sha256']):
+        raise ExportError('audit_manifest_invalid')
+    try:
+        valid = _digest({k: v for k, v in value.items() if k != 'sha256'}) == value['sha256']
+    except (TypeError, ValueError, UnicodeError):
+        valid = False
+    if not valid or not isinstance(value['state'], dict):
+        raise ExportError('audit_manifest_invalid')
+    return value
+
+
+def read_audit_manifest(path, entity_id):
+    try:
+        with open(path, encoding='utf-8') as stream:
+            value = json.load(stream)
+    except (OSError, ValueError, UnicodeError):
+        value = None
+    return validate_audit_manifest(value, entity_id)
+
+
+def verify_audit_recovery(database, entity_id, expected, *, source_database_sha256,
+                          target_database_sha256, capabilities, later=None):
+    """Reject partial history even when latest-event/current-state checks pass."""
+    validate_audit_manifest(expected, entity_id)
+    if (any(not isinstance(v, str) or not re.fullmatch('[0-9a-f]{64}', v)
+            for v in (source_database_sha256, target_database_sha256))
+            or expected['source_database_sha256'] != source_database_sha256
+            or source_database_sha256 == target_database_sha256
+            or database_identity(database) != target_database_sha256):
+        raise ExportError('recovery_target')
+    if later is not None:
+        validate_audit_manifest(later, entity_id)
+        if (later['source_database_sha256'] != source_database_sha256
+                or all(later['state'].get(key) == expected['state'].get(key)
+                       for key in ('events', 'baseline', 'ledger_sha256'))):
+            raise ExportError('audit_pitr_control_unchanged')
+    restored = capture_audit_recovery(database, entity_id, capabilities=capabilities)
+    # Sequences are nontransactional: failed writes can consume values, and a
+    # logical dump may advance cached state. Gaps are valid; regression is not.
+    actual, wanted = restored['state'], expected['state']
+    if (any(actual.get(key) != wanted.get(key) for key in actual if key != 'sequence')
+            or set(actual) != set(wanted)
+            or actual['sequence']['last_value'] < wanted['sequence']['last_value']
+            or wanted['sequence']['is_called'] and not actual['sequence']['is_called']):
+        raise ExportError('audit_recovery_mismatch')
+    return {'status': 'matched', 'scope': 'entity_bookkeeping_and_audit',
+            'database_schema_version': restored['state']['database_schema_version'],
+            'event_count': restored['state']['events']['count'],
+            'baseline_count': restored['state']['baseline']['count'],
+            'history_status': 'pre_activation_unavailable' if restored['state']['baseline']['count'] else 'since_activation_only',
+            'later_state_distinct': later is not None}

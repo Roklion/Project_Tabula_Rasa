@@ -73,6 +73,17 @@ AUDITED_KEYS = {
 }
 
 
+def audited_keys(revision):
+    """Known capture inventories for explicit archived-revision inspection.
+
+    Missing current tables must still fail, never silently shrink coverage.
+    This changes no startup/migration or normal write behavior.
+    """
+    if revision in {'0013_accounting_controls', '0014_document_locations'}:
+        return {table: keys for table, keys in AUDITED_KEYS.items() if table != 'support_actions'}
+    return AUDITED_KEYS
+
+
 class AuditReader:
     """#341/#345 consume this contract after server authorization.
 
@@ -137,8 +148,9 @@ class AuditReader:
         historical = 0
         checked = 0
         with self.operation() as connection:
+            from .migrations import current_revision
             activation = connection.scalar(text('SELECT activated_at FROM audit_activation'))
-            for table, keys in AUDITED_KEYS.items():
+            for table, keys in audited_keys(current_revision(connection)).items():
                 key_sql = ','.join(f"'{key}',to_jsonb(t)->'{key}'" for key in keys)
                 current = {json.dumps(row['key'], sort_keys=True): row['digest'] for row in connection.execute(text(
                     f"SELECT jsonb_build_object({key_sql}) AS key, audit_row_digest(to_jsonb(t),'{table}') AS digest "
