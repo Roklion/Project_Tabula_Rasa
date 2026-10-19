@@ -65,7 +65,7 @@ Local Windows validation is separate from hosted Linux current-candidate CI and
 independent review; those remain required before issue acceptance or merge
 readiness. No hosted result is claimed by this local implementation.
 
-## Local fix validation
+## Initial local validation (head `191a73a`)
 
 From the repository root on 2026-10-18, with the pinned dependencies:
 
@@ -88,3 +88,42 @@ every preview cache is newly allocated regardless of the main dev server's
 cache state. Temporary preview caches were absent after teardown. The original
 checkout stayed clean on `main`. Hosted current-candidate CI and independent
 review have not been run for this local-only branch.
+
+
+## First hosted run and teardown correction
+
+The first ready-state [CI run 39186870676](https://github.com/Roklion/Project_Tabula_Rasa/actions/runs/39186870676)
+on head `191a73a` passed both UI shards but failed the
+[frontend contract job](https://github.com/Roklion/Project_Tabula_Rasa/actions/runs/39186870676/job/117851368910)
+during HTTP-only preview teardown. It reported `ENOTEMPTY` while removing a
+`deps_temp_*` directory. That failure is retained; Windows success above does
+not establish Linux cleanup correctness.
+
+A disposable Linux synthetic browser-test container (Node 24.22.0, pinned npm
+dependencies, Git installed for the existing Git contracts) reproduced the same
+teardown error in two of three diagnostic contract-suite repetitions on the
+original helper. An initial container attempt lacked Git and could not evaluate
+those Git contracts; it is not counted as teardown validation.
+
+Pinned Vite's optimizer can hand a scan's result to a background build while
+shutdown is in progress. Its native close promise alone does not establish that
+all those output writes have stopped. Separately, `restartServer` replaces the
+server's methods with `Object.assign(server, newServer)`, so patching `close`
+does not preserve fixture cleanup across a restart (Codex review finding).
+
+The fixture now returns its own `close()` function; both browser/HTTP fixture
+owners and the cache contracts call that function. It waits for the client's
+request crawl, dependency scan and discovered-dependency processing promises,
+then calls the current server's native close method before removing the cache.
+This keeps lifetime ownership outside Vite's replaceable methods. No sleeps,
+retry-on-error cleanup, timeout changes or suppressed failures were added.
+The contract now covers a real Vite restart and adds an HTTP-only cold-close
+case, with explicit absence checks after fixture teardown.
+
+After correction, all **24 Linux contract executions** (eight contracts, three
+bounded diagnostic repetitions) passed. On Windows, **eight contracts** and all
+**eight affected browser cases** passed with two workers and all four projects;
+TypeScript and ESLint passed. These affected checks validate the remediation;
+fresh hosted CI on its new head remains required. Earlier 140-case browser and
+106-test unit results remain associated with the initial head, not relabeled
+as new-head full-suite evidence. No claim that issue acceptance is complete.

@@ -4,13 +4,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { sourceHash, sourceStatus } from '../e2e/visual-evidence';
 import { expect, test } from '@playwright/test';
-import { type ViteDevServer } from 'vite';
 import { startVisualPreview } from '../e2e/visual-preview-server';
 
-let server: ViteDevServer;
+let close: (() => Promise<void>) | undefined;
 let origin: string;
-test.beforeAll(async () => { ({ server, origin } = await startVisualPreview()); });
-test.afterAll(async () => { await server?.close(); });
+test.beforeAll(async () => { ({ close, origin } = await startVisualPreview()); });
+test.afterAll(async () => { await close?.(); });
 
 test('manual preview serves the shared synthetic financial, form and receipt fixtures', async () => {
   const read = async (path: string) => (await fetch(new URL(path, origin))).json();

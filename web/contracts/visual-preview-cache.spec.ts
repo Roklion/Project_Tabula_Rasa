@@ -5,7 +5,7 @@ import { createServer } from 'vite';
 import { expect, test } from '@playwright/test';
 import { startVisualPreview } from '../e2e/visual-preview-server';
 
-test('concurrent previews retain dependency URLs while the normal optimizer initializes', async () => {
+test('concurrent previews retain dependencies and clean up after a Vite restart', async () => {
   const previews: Awaited<ReturnType<typeof startVisualPreview>>[] = [];
   const normal = await createServer({ configFile: resolve('vite.config.ts'),
     server: { host: '127.0.0.1', port: 0 } });
@@ -39,14 +39,16 @@ test('concurrent previews retain dependency URLs while the normal optimizer init
     const caches = previews.map(({ server }) => server.config.cacheDir);
     expect(new Set([...caches, normal.config.cacheDir]).size).toBe(3);
 
-    await previews[1].server.close();
+    await previews[1].close();
     await expect(access(caches[1])).rejects.toMatchObject({ code: 'ENOENT' });
     await access(caches[0]);
     expect((await fetch(urls[0])).status).toBe(200);
-    await previews[0].server.close();
+    await previews[0].server.restart();
+    expect((await fetch(new URL('/api/v1/session', previews[0].server.resolvedUrls!.local[0]))).status).toBe(200);
+    await previews[0].close();
     await expect(access(caches[0])).rejects.toMatchObject({ code: 'ENOENT' });
   } finally {
-    await Promise.all([...previews.map(({ server }) => server.close()), normal.close()]);
+    await Promise.all([...previews.map(({ close }) => close()), normal.close()]);
   }
 });
 
@@ -64,4 +66,14 @@ test('failed preview startup removes its temporary optimizer cache', async () =>
     process.chdir(previousDirectory);
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test('cold HTTP-only preview drains optimization before cache cleanup', async () => {
+  const preview = await startVisualPreview();
+  const cacheDir = preview.server.config.cacheDir;
+  try {
+    expect((await fetch(new URL('/api/v1/session', preview.origin))).status).toBe(200);
+    await preview.close();
+    await expect(access(cacheDir)).rejects.toMatchObject({ code: 'ENOENT' });
+  } finally { await preview.close(); }
 });

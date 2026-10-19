@@ -168,7 +168,9 @@ broader visual scheduling requires an explicit coverage/fallback policy.
 
 The shared `startVisualPreview` fixture gives every live test preview a unique
 Vite optimizer cache under `web/node_modules/.vite-visual-*` and removes it on
-close or startup failure. A worker identifier alone is insufficient because
+fixture `close()` or startup failure. The fixture drains pending optimization
+before shutdown/removal and retains lifetime ownership across Vite restarts.
+A worker identifier alone is insufficient because
 preview lifetimes can overlap within one worker. This prevents the normal dev
 server or another preview from deleting/replacing a preview's optimized files.
 The run-once HTTP/Git suite includes a deterministic dependency-URL regression;
