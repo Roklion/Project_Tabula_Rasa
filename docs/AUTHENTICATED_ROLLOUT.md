@@ -21,6 +21,17 @@ The new anonymous named smoke differs from alpha because its shell is public
 and its private requests must deny; it shares the promotion lifecycle and does
 not duplicate authentication, accounting, session or recovery logic.
 
+**Login defect follow-up (#395, October 19, 2026):** #321 now records later
+operator-hosted results separately from the historical October 16 boundary
+above. A retained provider browser profile exposed a silent callback failure
+despite clean-profile success. The repository recovery path explicitly requests
+provider reauthentication and reports safe failure categories/request references;
+[named-user triage and the retained/clean rehearsal](NAMED_USER_AUTH.md#retained-provider-sessions-and-safe-failure-recovery-395)
+own the procedure. The original hosted rejection boundary and updated-release
+recovery remain unverified. Keep #395 and #321's affected acceptance open until
+approved hosted evidence is recorded. Cookie deletion is not rollout acceptance,
+and this fix does not satisfy unrelated #321/#222/#224/#124 gates.
+
 ## Stage and access policy
 
 | Stage | Required access and ownership |

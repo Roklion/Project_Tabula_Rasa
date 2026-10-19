@@ -119,7 +119,74 @@ expire after 30 minutes idle or 12 hours absolute, and are freshly checked on
 each protected request. Background session checks do not extend idle lifetime.
 Visible foreground pointer/keyboard activity sends a throttled CSRF-protected
 activity request. Local logout does not terminate provider SSO; fresh login
-requires `max_age=0` rather than silently reusing stale authentication.
+requires `max_age=0` and explicit `prompt=login`. ZITADEL documents `login` as
+requiring reauthentication / a user name in its
+[authorization endpoint contract](https://zitadel.com/docs/apis/openidoauth/endpoints#authorization_endpoint).
+The signed-token freshness policy remains unchanged: `auth_time` must be within
+the preceding five minutes, with at most 60 seconds of future clock skew.
+Provider reauthentication is requested on every new application login, including
+the deliberate restart action; no provider cookie deletion or silent retry is
+part of the normal flow.
+
+### Retained provider sessions and safe failure recovery (#395)
+
+An existing provider SSO session must satisfy the same state/nonce/PKCE, signed
+token, freshness and matching verified-email UserInfo checks as a fresh browser.
+An old provider session is not an application session. A failed callback returns
+to the signed-out screen with a fixed category, a server-generated callback
+request reference and **Sign in** to start a new transaction. No callback code
+is exchanged twice; the screen never restarts login automatically. If the new
+attempt also fails, contact the operator with that reference. An ordinary
+`/signed-out` visit shows no spurious login-failure warning.
+
+The safe `security_reason` categories distinguish the boundary that failed:
+
+| Category | Operator investigation boundary |
+| --- | --- |
+| `login_start` | Transaction creation or provider discovery / authorization URL preparation |
+| `login_transaction` | Missing, unmatched, expired, consumed or configuration-invalid browser transaction |
+| `provider_authorization` | Provider returned an authorization error after transaction validation |
+| `token_exchange` | Authorization code / confidential-client / PKCE exchange |
+| `token_validation` | Missing/malformed token or signature, issuer, audience, nonce or claim validation |
+| `login_freshness` | Verified signed authentication time outside the accepted window |
+| `userinfo_validation` | UserInfo transport, subject or verified account details |
+| `session_issue` | Local user resolution or durable session issuance |
+
+Unavailable failures retain `failure_code=unavailable`; the screen explains the
+temporary service failure. Categories identify rejection boundaries, not a
+diagnosis of provider fault. Raw provider error names/descriptions are never
+displayed, logged or reflected into the clean redirect.
+
+Triage by the screen's request reference in the private application log sink,
+then match stage, release, operation, failure code and `security_reason`.
+`login_ref` correlates `begin_login` with `complete_login` when the existing
+telemetry scope key is configured. Its source is a separate five-minute,
+HttpOnly, host-only diagnostic reference cookie with the login cookie's flags;
+the log contains only a domain-separated HMAC pseudonym. This reference grants
+no authority and is cleared with the transaction cookie. A missing/altered
+reference can affect diagnostics only, never transaction validation. Never
+record cookies, codes, token/claim values, email, provider subject, callback
+queries or screenshots/network exports containing them. Keep operational
+incident notes and provider-specific investigation in approved private custody.
+
+The original #395 retained-browser failure did not retain a rejection category;
+its hosted root cause remains unverified. The implementation explicitly requests
+provider interaction and makes further failures diagnosable without relaxing
+freshness. Signed synthetic provider, disposable PostgreSQL and compiled-browser
+tests cover stale/fresh responses, one-shot failure, deliberate recovery and
+two-user isolation; they do not establish real ZITADEL SSO behavior.
+
+Before closing #395 or counting its remediation for #321, promote an approved
+release and exercise the affected retained profile and a clean profile with
+authorized named staging fixtures. Record only stage, exact release, safe
+request references/categories and outcomes in acceptance evidence. Verify fresh
+login, retained-session reauthentication, a controlled failed attempt followed
+by explicit recovery, ordinary sign-out, session expiry and revocation; no site
+data clearing. If it fails again, stop and inspect the classified boundary
+privately instead of repeating the callback or weakening validation. #321's
+other hosted criteria, #222 isolation/onboarding and initiative #124 / #224
+external-beta approval remain separate and incomplete. Repository implementation
+does not authorize deployment, real fixture credential capture or beta admission.
 
 `GET /api/v1/session` reports `ready` or authenticated `needs_setup`, without
 composing ledger services for an unscoped user. Inspection, authorized entity

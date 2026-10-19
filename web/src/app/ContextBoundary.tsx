@@ -11,6 +11,30 @@ import { Onboarding } from '../features/identity/Onboarding';
 const authorityKey = (session: SessionState) => JSON.stringify([session.actor_id, session.cache_scope,
   session.organization_id, session.entity?.id, session.capabilities]);
 
+function LoginFailure() {
+  const query = new URLSearchParams(window.location.search);
+  const reason = query.get('reason');
+  if (reason !== 'login_failed' && reason !== 'unavailable') return null;
+  const messages: Record<string, string> = {
+    login_start: 'The sign-in service could not start a new login.',
+    login_transaction: 'This sign-in attempt expired, was already used, or could not be matched to this browser.',
+    provider_authorization: 'The sign-in provider did not complete authentication.',
+    token_exchange: 'The sign-in provider could not complete the secure login exchange.',
+    token_validation: 'The sign-in response could not be verified.',
+    login_freshness: 'The provider session did not confirm a recent sign-in. Please authenticate again.',
+    userinfo_validation: 'Your verified account details could not be confirmed with the sign-in provider.',
+    session_issue: 'The application could not establish a new session.',
+  };
+  const category = query.get('category') ?? '';
+  const reference = query.get('reference') ?? '';
+  return <div role="alert">
+    <p>{reason === 'unavailable' ? 'The sign-in service is temporarily unavailable.'
+      : Object.hasOwn(messages, category) ? messages[category] : 'Sign-in did not complete.'}</p>
+    <p>Use Sign in to restart with a new attempt and authenticate with the provider. If it fails again, contact your operator with the request reference. You do not need to delete browser cookies.</p>
+    {/^[a-f0-9]{32}$/.test(reference) && <p>Request reference: <code>{reference}</code></p>}
+  </div>;
+}
+
 export function ContextBoundary({ children, onScopeChange }: { children: ReactNode; onScopeChange?: () => void }) {
   const [state, setState] = useState<{ session?: SessionState; error?: unknown; signedOut?: boolean }>(
     () => window.location.pathname === '/signed-out' ? { signedOut: true } : {});
@@ -133,7 +157,7 @@ export function ContextBoundary({ children, onScopeChange }: { children: ReactNo
   if (state.signedOut || state.error instanceof ApiError && state.error.code === 'unauthorized')
     return <main className="standalone"><section className="surface"><PageHeader title="Project Tabula Rasa" description="You are signed out. Sign in to continue." />
       {state.error !== undefined && <ErrorNotice error={state.error} />}
-      {window.location.pathname === '/signed-out' && <p>Sign-in did not complete. You can try again.</p>}
+      {window.location.pathname === '/signed-out' && <LoginFailure />}
       <p>New here? Create your account with the secure sign-in provider, then set up your workspace. Invited members should sign in with their invited account.</p>
       <div className="actions"><a className="button" href={window.location.pathname === '/invitations' ? '/api/v1/auth/login?return_path=/invitations' : '/api/v1/auth/login'}>Sign in</a></div></section></main>;
   if (state.error) return <main className="standalone"><section className="surface"><PageHeader title="Project Tabula Rasa" />

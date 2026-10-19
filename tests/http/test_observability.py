@@ -271,3 +271,19 @@ def test_system_producer_does_not_import_http_framework():
         "assert 'tabula_rasa.http.app' not in sys.modules and 'fastapi' not in sys.modules"],
         cwd=Path(__file__).resolve().parents[2], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
+
+
+def test_login_diagnostics_are_allowlisted_and_cookie_reference_is_pseudonymized():
+    telemetry = Telemetry('test', 'release', TelemetrySettings(scope_key=KEY))
+    try:
+        event = telemetry.record('http_request', 'complete_login', security_event='login_failed',
+            security_reason='login_freshness', login_request_id='a' * 32)
+        assert event['security_reason'] == 'login_freshness'
+        assert len(event['login_ref']) == 24 and event['login_ref'] != 'a' * 32
+        for injected in (PRIVATE, 'a' * 1025, 'synthetic@example.test'):
+            event = telemetry.record('http_request', 'complete_login', security_reason=injected,
+                                     login_request_id=injected)
+            assert event['security_reason'] is None and event['login_ref'] is None
+            assert injected not in json.dumps(event)
+    finally:
+        telemetry.close()

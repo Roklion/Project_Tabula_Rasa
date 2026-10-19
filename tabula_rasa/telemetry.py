@@ -19,13 +19,15 @@ from time import monotonic
 
 import requests
 
+from tabula_rasa.application.identity import LOGIN_FAILURE_REASONS
+
 logger = logging.getLogger("tabula_rasa.http")
 SECURITY_EVENTS = frozenset({
     "login_started", "login_succeeded", "login_failed", "logout_succeeded",
     "logout_local", "logout_failed", "user_sessions_revoked", "identity_denied",
     "authorization_denied", "privileged_denied",
 })
-REASONS = frozenset({"cross_entity", "capability", "csrf", "policy", "identity"})
+REASONS = frozenset({"cross_entity", "capability", "csrf", "policy", "identity"}) | LOGIN_FAILURE_REASONS
 SIGNALS = frozenset({"http_request", "runtime", "job_run", "backup_run", "deployment"})
 SYSTEM_OPERATIONS = frozenset({"startup", "shutdown", "job_execute", "backup_execute", "deploy"})
 PROVIDERS = frozenset({"application", "postgresql", "identity", "documents", "telemetry"})
@@ -90,7 +92,7 @@ class Telemetry:
     def record(self, event, operation, *, request_id=None, correlation=None, route=None,
                method=None, status=None, duration_ms=None, failure_code=None,
                security_event=None, security_reason=None, action=None, context=None,
-               actor_id=None, job_id=None, provider=None, provider_status=None):
+               actor_id=None, job_id=None, provider=None, provider_status=None, login_request_id=None):
         """Allowlist every field before either sink. Callers never supply a dict.
 
         operation/route/action come from the compiled HTTP registry, not a URL.
@@ -114,6 +116,7 @@ class Telemetry:
             "release": self.release, "level": level, "outcome": "failure" if failed else "success",
             "request_id": request_id if isinstance(request_id, str) and re.fullmatch(r"[a-f0-9]{32}", request_id) else None,
             "correlation_id": self.reference("correlation", correlation),
+            "login_ref": self.reference("login", login_request_id) if isinstance(login_request_id, str) and re.fullmatch(r"[a-f0-9]{32}", login_request_id) else None,
             "route": route, "method": method if method in {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"} else "OTHER",
             "status": status if type(status) is int and 100 <= status <= 599 else None,
             "duration_ms": round(min(max(duration_ms, 0), 86400000), 2) if type(duration_ms) in {float, int} and math.isfinite(duration_ms) else None,

@@ -69,6 +69,7 @@ def test_code_pkce_verified_identity_and_bounded_transport(oidc):
     provider, transaction, _, _, calls = oidc
     query = parse_qs(urlsplit(provider.authorization_url(transaction)).query)
     assert query['code_challenge_method'] == ['S256'] and query['max_age'] == ['0']
+    assert query['prompt'] == ['login']
     assert query['redirect_uri'] == [provider.settings.callback]
     result = provider.verify('synthetic-code', transaction)
     assert result.subject == 'alice'
@@ -93,6 +94,8 @@ def test_invalid_signed_claims_fail_closed_without_provider_material(oidc, chang
     with pytest.raises(IdentityError) as caught:
         provider.verify('synthetic-code', transaction)
     assert caught.value.code == 'unauthorized'
+    assert caught.value.login_reason == ('login_freshness' if change.keys() == {'auth_time'}
+                                        and callable(change['auth_time']) else 'token_validation')
     assert caught.value.__context__ is None
     assert 'synthetic' not in str(caught.value)
 
@@ -101,8 +104,9 @@ def test_invalid_signed_claims_fail_closed_without_provider_material(oidc, chang
 def test_userinfo_requires_same_subject_and_verified_email(oidc, change):
     provider, transaction, _, info, _ = oidc
     info.update(change)
-    with pytest.raises(IdentityError):
+    with pytest.raises(IdentityError) as caught:
         provider.verify('synthetic-code', transaction)
+    assert caught.value.login_reason == 'userinfo_validation'
 
 
 def test_unknown_key_refresh_and_untrusted_endpoint_rejected(oidc):
@@ -178,3 +182,21 @@ def test_authlib_rejects_malformed_claims(oidc, change):
         provider.verify('code', transaction)
     assert caught.value.code == 'unauthorized'
     assert caught.value.__context__ is None
+
+
+@pytest.mark.parametrize('endpoint,reason', [('/token', 'token_exchange'), ('/keys', 'token_validation'),
+                                          ('/userinfo', 'userinfo_validation')])
+def test_provider_outage_classifies_boundary_without_retry_or_private_exception(oidc, endpoint, reason):
+    provider, transaction, _, _, calls = oidc
+    original = provider.transport.request
+    def unavailable(method, url, **kwargs):
+        if url.endswith(endpoint):
+            raise RuntimeError('private-provider-response-and-token')
+        return original(method, url, **kwargs)
+    provider.transport.request = unavailable
+    with pytest.raises(IdentityError) as caught:
+        provider.verify('synthetic-code', transaction)
+    assert caught.value.code == 'unavailable' and caught.value.login_reason == reason
+    assert caught.value.__context__ is None
+    assert 'private' not in str(caught.value) + repr(caught.value)
+    assert sum(method == 'POST' for method, _, _ in calls) <= 1

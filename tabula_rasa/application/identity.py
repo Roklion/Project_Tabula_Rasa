@@ -4,9 +4,16 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 
+LOGIN_FAILURE_REASONS = frozenset({
+    'login_start', 'login_transaction', 'provider_authorization', 'token_exchange',
+    'token_validation', 'login_freshness', 'userinfo_validation', 'session_issue',
+})
+
+
 class IdentityError(Exception):
-    def __init__(self, code):
+    def __init__(self, code, *, login_reason=None):
         self.code = code
+        self.login_reason = login_reason if login_reason in LOGIN_FAILURE_REASONS else None
         super().__init__(code)
 
 

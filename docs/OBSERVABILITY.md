@@ -43,6 +43,16 @@ Login success can include its authenticated actor; failures never infer an actor
 from an email, cookie or submitted claim. Logout does not perform an additional
 session read just to enrich telemetry during an outage.
 
+Named login adds fixed `security_reason` rejection categories and optional
+`login_ref` to correlate start/callback events. This is an HMAC pseudonym of a
+separate noncredential diagnostic reference, never a hash of state, session or
+login credentials. Missing scope key/reference omits it. Treat it as a diagnostic
+hint, never authentication evidence or a metric dimension. The callback's own
+server request ID is safe to show on the signed-out screen for private operator
+triage. [Named-user failure recovery](NAMED_USER_AUTH.md#retained-provider-sessions-and-safe-failure-recovery-395)
+owns the classifications, privacy limits and outstanding retained/clean hosted
+verification under #395/#321.
+
 Never include emails, passwords, tokens, cookies, request/response bodies, raw
 URLs/queries, filenames, workbook IDs, complete document keys, record IDs,
 ledger values or receipt bytes. Caller correlation headers are pseudonymized,
