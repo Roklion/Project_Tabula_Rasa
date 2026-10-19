@@ -18,7 +18,7 @@ permissions:
   packages: read
 jobs:
   migrate:
-    if: github.ref == 'refs/heads/main' && inputs.approval == '0012_to_0014'
+    if: github.ref == 'refs/heads/main' && inputs.approval == '0012_to_0014' && vars.COMMERCIAL_DEPLOY_ENABLED == 'true'
     environment: staging
     concurrency:
       group: commercial-deploy-staging
@@ -37,7 +37,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.sha }}
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with:

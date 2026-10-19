@@ -124,6 +124,8 @@ def test_workflow_is_manual_main_only_and_keeps_credentials_separate():
     job = workflow['jobs']['migrate']
     assert job['environment'] == 'staging'
     assert "github.ref == 'refs/heads/main'" in job['if']
+    assert "vars.COMMERCIAL_DEPLOY_ENABLED == 'true'" in job['if']
+    assert job['steps'][0]['with']['ref'] == '${{ github.sha }}'
     assert job['concurrency'] == {'group': 'commercial-deploy-staging', 'cancel-in-progress': False}
     assert job['env']['IMAGE'] == maintenance.IMAGE
     preflight, upgrade = job['steps'][-2:]
