@@ -1,0 +1,65 @@
+# Explicit isolated recovery only; never deploys or uses retained environment DBs.
+name: Isolated hosted Drive recovery drill
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Reviewed full commit SHA containing the recovery test
+        required: true
+        default: ea8c2de39a171a4010c821edc8648dbf241cd3dd
+permissions:
+  contents: read
+concurrency:
+  group: isolated-drive-recovery-drill
+  cancel-in-progress: false
+jobs:
+  recovery:
+    environment: receipt-recovery-drill
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: python:3.12-bookworm
+    services:
+      postgres:
+        image: postgres:18.6
+        env:
+          POSTGRES_USER: tabula_test
+          POSTGRES_DB: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        options: >-
+          --health-cmd "pg_isready -U tabula_test -d postgres"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha }}
+    steps:
+      - name: Validate immutable source selection
+        run: python -c 'import os,re; assert re.fullmatch("[0-9a-f]{40}",os.environ["SOURCE_SHA"])'
+      - uses: actions/checkout@v4
+        with:
+          path: runner
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require reviewed main history before granting credentials
+        run: git -C source merge-base --is-ancestor "$SOURCE_SHA" origin/main
+      - name: Install test dependencies
+        timeout-minutes: 5
+        working-directory: source
+        run: python -m pip install --quiet -r requirements-dev.txt
+      - name: Run isolated recovery and encrypt private evidence
+        env:
+          DRIVE_RECOVERY_STAGING_BINDING: ${{ secrets.DRIVE_RECOVERY_STAGING_BINDING }}
+          DRIVE_RECOVERY_ARCHIVE_KEY: ${{ secrets.DRIVE_RECOVERY_ARCHIVE_KEY }}
+        run: python runner/scripts/run_hosted_drive_recovery.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: isolated-drive-recovery-${{ github.run_id }}
+          path: ${{ runner.temp }}/drive-recovery-evidence/
+          if-no-files-found: error
+          # Handoff window, subject to repository retention limits.
+          # Owner must retrieve the encrypted archive to durable custody.
+          retention-days: 30

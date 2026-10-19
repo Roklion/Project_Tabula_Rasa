@@ -204,6 +204,46 @@ separate exact cleanup approval. Live inspection/drill remains pending until
 approved and executed. Synthetic tests do not establish an actual NAS schedule,
 managed PITR, continuous RPO, full-service RTO or commercial operator acceptance.
 
+### Dedicated hosted recovery runner
+
+The manual `Isolated hosted Drive recovery drill` Actions workflow runs the same
+test on a GitHub-hosted Linux runner with a disposable PostgreSQL 18 service on
+the job's private container network. It does not deploy an application or inherit
+development/staging/production database credentials. The selected full source
+SHA must belong to `main` history; workflow publication on the default branch is
+required before manual dispatch. Approval/publication alone is not drill evidence.
+
+Provision a separate GitHub environment named `receipt-recovery-drill`, restricted
+to the default branch `main` (not tags). Only this environment receives
+`DRIVE_RECOVERY_STAGING_BINDING`, the approved private JSON for four fresh empty
+synthetic receipt folders, and `DRIVE_RECOVERY_ARCHIVE_KEY`, a Fernet key whose
+independent copy remains in approved operator custody. Existing environment
+secrets, saved profile bindings and Google grants must not be changed. GitHub
+becomes an additional custodian of these copied credentials; folder selection
+does not narrow the underlying Google grant's provider-enforced permissions.
+
+The helper freshly checks actual account identity, private folder ownership,
+write capability, managed profile bindings and complete folder emptiness before
+running the exact opt-in test. It retains generated grant-envelope keys privately,
+verifies archived bytes offline after success, and emits sanitized status only.
+Provider/test tracebacks and private inputs are not printed. Failures retain
+available private artifacts encrypted and do not delete source or target files.
+Python optimization is refused so validation assertions remain active. The test
+has an eight-minute subprocess timeout within the twenty-minute job budget,
+leaving time to encrypt available evidence and upload it on test failure. Private
+diagnostics retain only exception categories and frame locations; exception
+messages, locals and raw pytest output are excluded. Runner termination or a
+provider/preflight failure can still prevent complete evidence capture.
+
+Only sanitized evidence and a Fernet-authenticated encrypted archive are uploaded.
+The archive includes private binding/grant material, canonical manifests and
+receipt bytes; its encryption key is never an artifact. Verify downloaded
+ciphertext and recovered archive hashes before relying on this copy. Actions
+artifact retention is requested for 30 days, subject to repository limits; retrieve
+the encrypted generation to approved durable custody before expiration. Ephemeral
+runner storage and expiring Actions artifacts are not long-term retention,
+scheduled protection or proof of alternate-operator/off-device recoverability.
+
 | Owner | Delivered capability | Remaining acceptance |
 | --- | --- | --- |
 | #337/#338, #223 | Drive-first runtime, private byte backup/offline verifier, shared verified Drive/DB isolated restore; optional S3 code is dormant | Effective Drive quota/access/retention inspection and approved hosted real-Drive evidence; no AWS prerequisite |
