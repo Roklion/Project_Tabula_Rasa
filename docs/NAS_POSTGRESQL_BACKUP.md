@@ -244,16 +244,34 @@ remain separate operator work. These instructions do not perform deployment.
 
 Configure **DSM Task Scheduler** with a known `America/New_York` local timezone
 and working NTP; verify the displayed timezone and next-run dates. Do not
-silently change a shared NAS timezone. Register the production `wrapper scheduled` task for **Sunday and Wednesday
-at 22:00 America/New_York**, following DST. On the 512 MB DS220j, stagger UAT's
+silently change a shared NAS timezone. Register the production `wrapper scheduled`
+task for **Sunday and Wednesday at 22:00 America/New_York**, following DST.
+On the 512 MB DS220j, stagger UAT's
 scheduled capture to **22:30 Eastern** to avoid concurrent backup jobs; the
 runner's due-slot calculation for both environments remains 22:00 Eastern.
 If DSM cannot express both weekdays, use separate day-specific tasks. Register
 separate `wrapper scheduled` catch-up and `wrapper status` health-check jobs
 for each environment. The current operator-selected cadence is **every 3 hours
 for production** and **every 6 hours for UAT** to limit container-launch
-pressure on the DS220j; validate their actual execution history. These are
-slower-than-hourly checks, so detection/notification can be delayed by up to
+pressure on the DS220j; validate their actual execution history.
+
+Give the recurring tasks explicit, distinct local-time phases. For example:
+
+| Environment | Catch-up (`wrapper scheduled`, daily) | Health (`wrapper status`, daily) |
+| --- | --- | --- |
+| Production (3-hour) | 00:05, 03:05, 06:05, 09:05, 12:05, 15:05, 18:05, 21:05 | 00:15, 03:15, 06:15, 09:15, 12:15, 15:15, 18:15, 21:15 |
+| UAT (6-hour) | 02:35, 08:35, 14:35, 20:35 | 02:45, 08:45, 14:45, 20:45 |
+
+These are registration examples, not evidence of deployed minute offsets.
+Do not place a UAT catch-up tick between 22:00 and its 22:30 scheduled capture:
+it would consume the same due slot early and defeat the intended stagger.
+Inspect DSM next-run dates and execution durations for all tasks together,
+including across DST; distinct start times reduce launch contention but do not
+guarantee nonoverlap if a job runs long. The runner's lock is per
+environment/database, not a shared NAS lock. If observed durations overlap,
+review phases and capacity with the operator before accepting the schedule.
+
+These are slower-than-hourly checks, so detection/notification can be delayed by up to
 roughly the check interval plus execution/runtime latency. Neither cadence
 changes the runner's 24-hour catch-up limit nor retries an already attempted
 failed slot. Configure nonzero-exit notification to the authorized operator. Healthy/no-attempt and in-progress-within-grace results exit zero;
