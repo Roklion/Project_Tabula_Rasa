@@ -152,8 +152,9 @@ for inspection under existing #279 rules.
 The October 11 #288 acceptance handoff published the seven remaining ports as
 #357–#359 and #361–#364 under #221/#124. The owner's #303 scope requires the
 applicable existing workflows before live cutover. The
-[transition inventory](TECHNICAL_ALPHA_TRACKING_DRAFTS.md) preserves their owners
-and corrected scope. Local implementation and synthetic checks do not establish
+[workflow-port guide](COMMERCIAL_WORKFLOW_PORTS.md) records the delivered
+behavior; [EPIC #221](https://github.com/Roklion/Project_Tabula_Rasa/issues/221)
+retains implementation ownership and approved exclusions. Local implementation and synthetic checks do not establish
 deployment, real-provider verification or live-cutover approval.
 
 Choose one authoritative backend per entity through the existing cutover contract.
@@ -186,30 +187,28 @@ matrix without adding a release or owner-cutover prerequisite.
 
 ## Acceptance record and outstanding evidence
 
-Use one sanitized record for the exact candidate; refresh affected evidence after
-changes. Reference private records without publishing their contents.
+Use this template for each newly selected candidate; it is not a status board.
+The accepted technical-alpha result and approved exclusions are recorded in
+[issue #288](https://github.com/Roklion/Project_Tabula_Rasa/issues/288#issuecomment-6117319756).
+Do not carry those results forward as acceptance of a different release or stage.
 
-| Evidence field | Current state / required record |
+| Evidence field | Required record for the selected candidate |
 | --- | --- |
-| #279 hosted prerequisites | Closed issue #279 records independently configured Render dev/staging, retained Neon UAT and successful staging promotion [37951248477](https://github.com/Roklion/Project_Tabula_Rasa/actions/runs/37951248477). Reverify the selected alpha candidate. |
-| Release / schema / image / binding | Record exact SHA, both digest forms, forward schema revision and private environment binding reference. |
-| Current required CI / reviews | Link the candidate's successful Full test suite and satisfied review conditions; earlier green heads do not qualify. |
-| Essential staging DocumentStore | Runtime file loader, Drive adapter composition and read-only preflight implemented. Operator grant/folder installation and real-provider verification remain pending. |
-| Staging six-case alpha suite | Pending authorized execution; retain run marker, workflow URL and all case results. |
-| Application rollback rehearsal | Pending compatible prior/candidate staging deployments and smoke links. |
-| Manual browser/device pass | Pending named tester/date, actual browser versions/devices, touch/keyboard, zoom/reflow, visible focus and screen-reader observations per #287. Track material findings before acceptance. |
-| Provider/recovery limits | Record actual selected plan/region, shared project capacity/access, connections, idle/cold starts, quotas, available DB/byte recovery, accepted recovery gaps and owner. Do not invent numbers or treat planned NAS/PITR protection as verified. |
-| Streamlit gaps and routing | Matrix above; narrow follow-up tickets/approved exclusions still required for uncovered paths. |
-| #303 handoff | Link accepted alpha evidence and separately enumerate owner workflows/auth/recovery needs; live migration remains #303. |
+| Candidate | Reviewed release SHA, current required CI/reviews, immutable image/index/runtime digests and forward schema revision |
+| Deployment | Exact approved environment/binding reference, promotion/smoke links and observed version/readiness |
+| Drive custody | Independent staging grant and managed folders, protected installation and preflight; private bindings stay private |
+| Receipt journey | Authorized upload/attach, exact-byte download, reference-only unlink, retained-file relink and restart persistence |
+| Six-case suite | Exact deployed checkout, explicit synthetic-write consent, retained marker, workflow URL and every engine/viewport result |
+| Compatible rollback | Prior/candidate compatible image/schema, maintenance window, both smoke links, retained-data observations and candidate suite rerun |
+| Manual quality | Tester/date, actual browser/device versions, touch/keyboard, zoom/reflow, focus and the accepted accessibility scope; record exclusions explicitly rather than inventing observations |
+| Provider/recovery limits | Actual plan/region/capacity/quota/access, DB/byte protection, observed limitations, accepted gaps and responsible owner |
+| Routing | Every required workflow has a verified implementation/selected-runtime path or an explicit approved exclusion with an issue owner |
+| Owner handoff | Applicable #303 workflow/auth/recovery scope, operator authorization and evidence references; alpha is not live migration |
 
-No hosted alpha execution, real-provider receipt acceptance, rollback rehearsal,
-manual device acceptance, live owner migration, external beta or commercial
-activation is claimed by this implementation.
-
-Reuse map: inspected #279 smoke/promotion/migration and HttpSettings/open_runtime,
-#287 native browser fixtures and journey/failure suites, #281/#282 forms/report
-contracts, #283 ReceiptService/DocumentStore composition, design and canonical
-guides. Reused smoke, main-CI validation, deployment serialization, browser fields,
-loaded-baseline/service contracts and disposable fixtures. New logic is one
-bounded hosted journey plus release evidence/routing documentation; no parallel
-domain, storage provider, authority mode, scheduler or retry workflow is introduced.
+Outstanding selected-release work belongs in [#303](https://github.com/Roklion/Project_Tabula_Rasa/issues/303)
+for live owner use, [#321](https://github.com/Roklion/Project_Tabula_Rasa/issues/321)
+for hosted identity, [#342](https://github.com/Roklion/Project_Tabula_Rasa/issues/342)
+for operational evidence and [#348](https://github.com/Roklion/Project_Tabula_Rasa/issues/348)
+for external-beta acceptance. [#377](https://github.com/Roklion/Project_Tabula_Rasa/issues/377)
+owns the retirement inventory. Publication, deployment, provider writes, live
+cutover and customer admission retain their separate authorization boundaries.

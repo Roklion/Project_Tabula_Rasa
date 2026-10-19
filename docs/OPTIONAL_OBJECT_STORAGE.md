@@ -244,14 +244,12 @@ does not prove managed DB PITR, independent archive protection, continuous RPO,
 full-service RTO or alternate-operator handoff. Default tests skip it pending
 manual provisioning/approval.
 
-| Owner | Implemented handoff | Pending evidence/authority |
-| --- | --- | --- |
-| #337/#338, #223 | SDK adapter, authorized API composition, elected verified migration, isolated restore tooling, synthetic regression/drill harness | Approved AWS setup; effective quota/access/lifecycle inspection; hosted exact-byte/version recovery and sanitized evidence |
-| #342 | Stage-specific byte/DB protection boundaries and this runbook | Actual DB-plus-byte staging evidence; NAS/independent byte protection pending until verified |
-| #303 | Drive route preserved; explicit migration/recovery tools | Three actual profile bindings, live-target approval, capacity/recovery decision and execution evidence |
-| #298/#224 | Recovery contract, secret custody and primary/alternate operator hooks | Approved guarantees, human handoff, full-service recovery and commercial activation/launch approval |
-
-No issue status or hosted acceptance has been changed. #337/#338 manual acceptance
-for this optional provider remains pending until S3 adoption and verification.
-The selected-Drive scope has independent acceptance. Restricted synthetic-alpha
-limitations do not automatically transfer to live owner use or external beta.
+Actual provider selection, approved setup and hosted verification status belong
+to [#382](https://github.com/Roklion/Project_Tabula_Rasa/issues/382), with
+[#342](https://github.com/Roklion/Project_Tabula_Rasa/issues/342) collecting
+stage-specific recovery evidence. Keep AWS quota/access/lifecycle and exact-byte
+versioned recovery evidence there if this optional provider is adopted; unused
+S3 setup is not a blocker to the selected Drive scope.
+[#303](https://github.com/Roklion/Project_Tabula_Rasa/issues/303) retains live owner
+bindings/execution, while #224/#298 retain customer/commercial approval. This guide
+defines the optional procedure, not a duplicate list of currently pending tasks.

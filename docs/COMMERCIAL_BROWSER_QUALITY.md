@@ -5,7 +5,7 @@ under [initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/12
 It consumes #278's shell, #280's protected mutation path and #281/#282's core
 workflows from merged [PR #301](https://github.com/Roklion/Project_Tabula_Rasa/pull/301),
 including failed-switch draft preservation. This gate builds on that reviewed
-workflow baseline; remaining alpha acceptance gates are tracked below.
+workflow baseline; release acceptance is tracked in the owning issues below.
 
 ## Repeatable local and CI gate
 
@@ -81,46 +81,32 @@ protected baselines remain owned by the existing form/service implementations.
 
 ## Alpha acceptance and remaining coverage
 
-#288 must consume the current-candidate CI results and rehearse its core workflow
-matrix on the selected persistent staging deployment. These disposable-database
-tests do not seed, mutate or certify a deployed staging service. The explicit
-operator checkpoint and stage-specific secrets remain in
-[Technical deployment](COMMERCIAL_DEPLOYMENT.md).
+The repeatable automated gate above uses disposable databases and synthetic
+providers. It does not certify a deployed service or actual-device behavior.
+[Technical alpha](TECHNICAL_ALPHA.md) defines the retained-staging workflow,
+receipt and rollback procedure; [#288](https://github.com/Roklion/Project_Tabula_Rasa/issues/288)
+records its completed bounded acceptance and approved screen-reader exclusion.
+Recurring/mixed-use, assets and mileage have their own supported workflow guides;
+existing-workflow ports are documented in [Workflow ports](COMMERCIAL_WORKFLOW_PORTS.md).
 
-Merged PR #304 completes [#283](https://github.com/Roklion/Project_Tabula_Rasa/issues/283)
-and adds receipt upload/link, partial recovery without reupload, exact-byte
-download, reference-only unlink/relink and failure coverage in
-`test_browser_mileage_documents.py`, using a synthetic DocumentStore with real
-PostgreSQL. #287's bounded automated baseline is complete. #288's
-[Technical-alpha release gate](TECHNICAL_ALPHA.md) reuses the actual browser/API
-path for retained staging; real hosted DocumentStore binding, staging execution,
-rollback and manual-device evidence remain outstanding. Its shared journey is
-also required in native CI through `test_browser_alpha.py`.
-Recurring/mixed-use and assets are implemented under #284/#285 with their own
-[secondary workflow gate](COMMERCIAL_SECONDARY_WORKFLOWS.md); manual mileage is
-complete under #286. None is promoted into the default first alpha matrix.
+For each new release's accepted scope, record actual browser/device versions,
+touch/keyboard, zoom/reflow, focus and accessibility observations or explicit
+approved exclusions. Managed engines/emulation do not prove physical-device
+behavior or comprehensive WCAG conformance. Keep material findings in a linked
+issue; do not weaken axe rules to hide them.
 
-For alpha acceptance, record tested versions of the latest two stable Chrome,
-Edge, Firefox and Safari releases plus current/previous iOS Safari and Android
-Chrome. Real-device touch/keyboard, zoom/reflow, visible focus, and screen-reader
-announcements require a recorded manual pass. Managed engine/emulated viewport
-tests do not establish real-device or complete WCAG conformance. Keep any
-material manual finding in a linked issue before accepting the gate; do not hide
-violations by weakening axe rules. #223 owns production telemetry; #222/#224 and
-#298 retain identity, external-beta and commercial acceptance boundaries.
-
-Reuse map: inspected the existing native browser/server/database fixtures,
-protected/create editors, shared fields/states, shell, design and canonical
-workflow guides. Extended those tests and components. New code owns a small
-confirmation presentation component, field-error association and accessibility
-assertions; it introduces no parallel accounting, persistence, retry or fixture
-seed workflow.
+Current work and decisions belong to [#321](https://github.com/Roklion/Project_Tabula_Rasa/issues/321)
+(hosted identity), [#320](https://github.com/Roklion/Project_Tabula_Rasa/issues/320)
+(security), [#348](https://github.com/Roklion/Project_Tabula_Rasa/issues/348)
+(external-beta acceptance) and [#303](https://github.com/Roklion/Project_Tabula_Rasa/issues/303)
+(live owner use). [#331](https://github.com/Roklion/Project_Tabula_Rasa/issues/331)
+retains completed visual/device acceptance evidence; its old local candidate
+status is not an outstanding-work list for later releases.
 
 ## Integrated visual acceptance
 
 [#331 acceptance](COMMERCIAL_UI_ACCEPTANCE.md) extends these same browser suites
 with per-image revision/browser/route metadata, representative effective-width
 reflow, a shared-fixture manual preview and explicit intentional-change review.
-It records current #288 status separately from this guide’s historical alpha
-implementation snapshot. Visual/manual sign-off and #224 external-beta gates
+The owning issues retain candidate-specific results and approved exclusions. Visual/manual sign-off and #224 external-beta gates
 remain distinct from passing automated checks.

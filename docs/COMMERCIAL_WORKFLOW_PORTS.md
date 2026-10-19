@@ -159,8 +159,8 @@ Run the affected service/provider/native suites, Python lint, browser build,
 ESLint, Vitest and generated-contract drift check before committing. Current-head
 GitHub **Full test suite** remains the authoritative merge gate after publication.
 For #303, retain a reviewed revision and actual hosted workflow/Maps restriction/
-grant-folder evidence for all selected live profiles; other remaining ports,
-normal authentication, recovery acceptance and operator authorization retain
+grant-folder evidence for all selected live profiles. Normal authentication,
+recovery acceptance and operator authorization retain
 their own gates. Local checks do not complete #303 or retire Streamlit.
 
 ---

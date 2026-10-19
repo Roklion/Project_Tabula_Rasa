@@ -335,13 +335,12 @@ domain engine, source loader, scheduler or recovery state machine is introduced.
 
 The resolver and deployment integration must be real and approved before using
 private data. #222 owns normal web identity/session delivery; #279 owns hosted
-deployment, and #281–#286 own the remaining domain workflow coverage. The shared
-HTTP foundation exposes account reads and creation, and #280 adds protected
-edit/delete endpoints and browser forms with loaded baselines. Service/report/
-export verification does not claim the remaining domain browser screens are
-delivered. Until the selected deployment has the resolver and
-required workflows, stop before live migration and complete those shared
-integration tasks. This is a setup/coverage checkpoint, not a second owner app.
+deployment. Core/secondary workflows and existing-functionality ports are
+implemented; [#303](https://github.com/Roklion/Project_Tabula_Rasa/issues/303)
+records their selected-release verification and owner decisions. Code completion
+alone does not establish that the approved deployment has working authentication,
+document bindings and every required workflow. Stop before live migration until
+that evidence is accepted. This is a setup/coverage checkpoint, not a second owner app.
 
 ### Reuse and completion evidence
 
@@ -366,67 +365,23 @@ Run these affected checks against an explicit disposable test endpoint:
 python -m pytest tests/http tests/test_backend_composition.py tests/postgres/test_owner_operated_cutover.py tests/postgres/test_cutover.py tests/postgres/test_migration_acceptance.py
 ```
 
-#299 closes only after its checks and documentation pass and the linked
-#220/#221/#288/#298 tracking records the supported path. Report missing native
-or deployed verification explicitly; do not infer it from skips or source review.
-#299 completion does not claim a live authority switch or #294 completion.
-
-Tracking handoff after verification: #220 records the supported non-commercial
-authority contract and evidence; #221/#288 consume this shared runtime factory
-and retain their workflow/deployment gates; #298 preserves all commercial
-activation requirements and records that owner use is independent; #294 retains
-NAS implementation/restore status. Updating or closing GitHub issues requires
-separate repository-write authorization. No issue status changes are implied by
-this guide.
+Implementation and reviewed synthetic verification are recorded in
+[#299](https://github.com/Roklion/Project_Tabula_Rasa/issues/299) and
+[PR #302](https://github.com/Roklion/Project_Tabula_Rasa/pull/302).
+Those results establish the supported runtime path, not a private/live operation.
 
 ## Implementation evidence and remaining operational acceptance
 
-Initial focused #299 implementation verification on 2026-10-08: **261 affected tests
-passed across focused runs**, with no skips: 170 application/HTTP,
-backend/document composition, source migration and export tests; 22 database
-configuration tests; and 69 native PostgreSQL tests. The native runs covered
-all nine new owner-operation cases, 29 existing cutover/whole-profile acceptance
-cases and 31 HTTP/schema/export cases. The new write/restart test initially used
-an inactive historical account; after correcting it to use the active account
-created through the HTTP API, that case passed on rerun.
+[#303](https://github.com/Roklion/Project_Tabula_Rasa/issues/303) owns the remaining
+selected-release access/bindings/workflow checks, operator authorization and
+accepted recovery limits, source freeze/writer drain, actual load/acceptance/export,
+authority activation, post-write restart/report/export/isolation and final owner
+acceptance. Keep pending manual-versus-automatic generation and depreciation
+scope decisions there. This guide defines the procedure, not their live status.
 
-Windows Smart App Control blocked the temporary local PostgreSQL runtime;
-verification instead used the operator's separate, empty Neon test project and
-its `test` branch on PostgreSQL 18.6. Its direct endpoint connected with TLS and
-`channel_binding=require`, and its test role could create/drop the fixture's
-disposable databases. All disposable test databases were removed afterward.
-The dedicated test URL was explicitly loaded into the test process from the
-operator's Git-ignored `.env.local`; no credentials were printed or committed.
-Scoped Ruff, working/branch whitespace and generated OpenAPI contract checks
-passed. This is focused local evidence; the full-suite publication/review checks
-and linked-issue tracking remain separate. No private source, live migration,
-production authority switch or deployed authentication is claimed.
-
-Publication validation on 2026-10-08 after integrating #280/current `main`
-at `3eb65b0`: full Ruff and **all 1,970 Python tests passed**, with zero skips,
-in 4,054.97 seconds against the dedicated Neon test project. Native browser
-checks were required and ran against the compiled shared application. Browser
-build/lint, all 14 browser unit tests, deterministic OpenAPI comparison and
-branch whitespace checks also passed. The only warning was an unrelated
-Starlette/httpx deprecation. All fixture-owned test databases were removed.
-Current-revision hosted CI and independent agent reviews remain required;
-local validation does not close #299 or authorize a live cutover.
-
-Synthetic native PostgreSQL tests cover complete final-format profiles, two
-isolated profiles with shared source IDs, exact financial/reference/document
-relationships, missing units, malformed/retired inputs before writes, service
-smoke checks, missing production gates, pre-divergence rollback, failed versus
-committed writes, and a write concurrent with rollback. These are implementation
-evidence. No private profile migration, production setup, recovery rehearsal,
-production authority switch or issue closure is performed by these tests.
-Retain the actual repeated staging/final-cutover evidence separately before
-claiming the remaining operational criteria of #257/#258.
-
-Local implementation validation on 2026-10-07, based on dependency branch
-`codex/issues-255-256-migration` at `77e4d7fc0153d6be66b5970525c9624de6e86fe0`:
-Ruff passed; all **1,810 tests passed in 164.54 seconds**, including native
-PostgreSQL with no skips; working and branch diff checks passed. The preceding
-focused service/migration/export checks passed 109 tests. A separate local
-review checked source ownership, service callers, export compatibility,
-production gate records, receipt profile/entity aliases and the rollback boundary.
-No GitHub publication, private source read or production operation was performed.
+[#294](https://github.com/Roklion/Project_Tabula_Rasa/issues/294) owns independent
+NAS enablement/restore; [#338](https://github.com/Roklion/Project_Tabula_Rasa/issues/338)
+records receipt-byte recovery; [#342](https://github.com/Roklion/Project_Tabula_Rasa/issues/342)
+collects stage-specific capacity/recovery evidence. [#298](https://github.com/Roklion/Project_Tabula_Rasa/issues/298)
+retains commercial recovery/activation acceptance. No old local test count,
+synthetic rehearsal or closed implementation issue supplies those decisions.

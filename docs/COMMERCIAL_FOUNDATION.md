@@ -64,8 +64,8 @@ remains the internal/reference edition.
   refuses synthetic contexts and disposes failed pools. Lasting owner use keeps
   the existing non-commercial cutover policy in a normal production app; see the
   [owner-operated procedure](BOOKKEEPING_CUTOVER.md#owner-operated-production-procedure-299).
-  This factory does not deliver #222's login/session system or remaining browser
-  workflow slices, and its synthetic tests do not authorize live use.
+  Named identity and workflow services have separate owners; this factory's
+  synthetic tests do not authorize live use. #303 owns selected-runtime evidence.
 
 The [central API authorization inventory](API_AUTHORIZATION.md) owns #313's
 registered action requirements, route audit, privileged-operation boundaries
@@ -76,10 +76,11 @@ and before-binding denial tests. Future private operations consume that guard.
 [ADR 0003](adr/0003-commercial-identity-and-tenancy.md) selects the named OIDC
 identity, durable session, role and server-membership contract. Follow
 [Commercial identity](COMMERCIAL_IDENTITY.md) for its staged implementation,
-operator checkpoints and testable threat model. #312 extends session DTOs for
-users without an entity; #313 replaces the broad method-based write rule with
-explicit action capabilities while retaining Origin/CSRF. Those extensions
-remain follow-on work; the behavior below describes today's foundation.
+operator checkpoints and testable threat model. Named-user session DTOs support
+users without an entity. The implemented #313 registered action-policy guard
+requires explicit capabilities while retaining Origin/CSRF; see
+[API authorization](API_AUTHORIZATION.md). Restricted synthetic alpha remains a
+separate supported mode, not commercial membership authorization.
 
 Inject a `runtime_factory(settings)` into `create_app`. Its resolver receives a
 Starlette request and returns the immutable `RequestContext`. #222 must resolve
@@ -88,16 +89,17 @@ credential binding. Supply a nonsecret cache scope that changes across sessions
 and membership contexts, and a session-bound CSRF token. The browser's selected
 entity, route/body/profile key, baseline or header never proves authorization.
 
-`resolve_context` checks entity agreement and read/write capabilities; unsafe
-operations additionally require the exact configured Origin and
+`resolve_context` checks entity agreement and the registered route's action
+capability; unsafe operations additionally require the exact configured Origin and
 `X-CSRF-Token`. API schema/docs use the same read context guard. An absent
 resolver denies access with 401. The default trusted resolver requires a
 loopback client and explicit development/test configuration. #279 adds a fixed
 hosted synthetic scope behind its environment-specific HTTP Basic gate; public
 HTTPS configuration, credentials and bound Neon connectivity fail closed.
 Production rejects synthetic context and alpha credentials. [Technical deployment](COMMERCIAL_DEPLOYMENT.md)
-owns the operator checkpoint and outstanding real hosted verification. #222 replaces that gate before
-external beta/customer data.
+owns the operator procedure. [#321](https://github.com/Roklion/Project_Tabula_Rasa/issues/321)
+tracks selected hosted named-user verification; external/customer access never
+uses the alpha gate as membership authorization.
 
 HTTP settings are read only from process environment. Database settings retain
 their existing loader. `TABULA_RASA_PUBLIC_ORIGIN` is the exact browser origin,

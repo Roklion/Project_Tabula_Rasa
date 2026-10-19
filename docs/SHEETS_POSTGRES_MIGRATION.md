@@ -2,14 +2,12 @@
 
 Implementation of #254 under EPIC #220 and commercialization initiative #124.
 The core and secondary implementation extends that framework for #255/#256.
-The current local implementation uses PR #274's historical recurring-ID
-correction as a dependency. Whole-profile acceptance (#257) and guarded backend
+The loaders preserve historical recurring identities and source provenance. Whole-profile acceptance (#257) and guarded backend
 selection/cutover (#258) now extend these loaders through the
 [acceptance and cutover guide](BOOKKEEPING_CUTOVER.md). Recovery (#259) and
 complete entity export (#260) retain their separate owners and release gates.
-The framework starts from dependency PR #266 at `aeee01eb` and consumes the
-merged #243 canonical model, #244 runtime, #253 integrity rules, and #261 frozen
-format-13 source contract.
+The framework consumes the canonical accounting model, shared PostgreSQL runtime
+and integrity rules, and the frozen format-13 source contract.
 
 ## Reuse and ownership
 
@@ -279,68 +277,37 @@ checks, output formats and authority boundaries.
 
 ## Persistent staging checkpoint
 
-Before #254 acceptance, the operator must provision a durable non-production
-PostgreSQL database, separate from eventual production, with approved secret
-injection and an explicit disposable rehearsal target. Verify current schema
-initialization from zero and connectivity to the frozen live Sheets source.
-Run a representative source-owned load/restart through the core path on that
-environment and retain safe evidence. Local UUID test databases prove the code
-path but do not meet this infrastructure checkpoint.
+Use a durable approved non-production target for a source-owned load/restart
+rehearsal, with explicit secret injection and separate disposable test databases.
+Verify current schema initialization/connectivity and retain sanitized target,
+source/run and acceptance references. Local UUID fixtures do not establish hosted
+acceptance, and a synthetic framework drill does not establish private migration.
 
-#254's persistent framework checkpoint was completed on 2026-10-06 with a
-synthetic two-profile load/failure/restart drill in the operator-selected Neon UAT
-environment. It used committed framework code and preserved the deployed
-`0004_mileage_order` chain without resetting the database. The private source
-profile was not loaded by that drill. #255/#256 realistic source-to-staging
-reconciliation, whole-profile acceptance (#257), complete export (#260),
-recovery/PITR (#259) and authority switching (#258) remain separate.
-
-On 2026-10-05 the operator explicitly deferred persistent staging setup and
-requested that the tested implementation remain ready. No persistent target
-or live Sheets rehearsal was provisioned/run in this implementation session.
+Completed framework/reconciliation evidence lives in
+[#254](https://github.com/Roklion/Project_Tabula_Rasa/issues/254),
+[#255](https://github.com/Roklion/Project_Tabula_Rasa/issues/255) and
+[#256](https://github.com/Roklion/Project_Tabula_Rasa/issues/256).
+Selected private/live execution and unresolved owner requirements belong to
+[#303](https://github.com/Roklion/Project_Tabula_Rasa/issues/303), using the
+[whole-profile acceptance/cutover procedure](BOOKKEEPING_CUTOVER.md).
+[#342](https://github.com/Roklion/Project_Tabula_Rasa/issues/342) owns stage-specific
+recovery/capacity evidence; [#298](https://github.com/Roklion/Project_Tabula_Rasa/issues/298)
+retains commercial activation. Preserve every retained source and recovery target.
 
 ## Implementation validation
 
-Validated from the isolated issue-254 worktree using the project's existing
-Python 3.12 development environment and real PostgreSQL 18.6 on the disposable
-loopback test service. The test fixtures create/drop only synthetic UUID-named
-databases; no operator database or real bookkeeping data was reset/read.
+Run scoped source/CLI and native migration checks from the repository root:
 
-- `ruff check .` passed.
-- `python -m pytest` passed all **1,538 tests in 86.76 seconds**, with native
-  PostgreSQL coverage and no skipped tests.
-- Working/staged diff checks passed; the committed branch is also checked
-  against `origin/main`.
-- Native framework coverage demonstrates stable source-owned recurring
-  occurrences, complete/disjoint journal projections and ID collision mappings,
-  atomic unit failure, explicit uncertain-commit restart without duplication,
-  changed-source/target refusal, explicit schema initialization, and two-profile
-  isolation. Planning coverage retains existing mixed/depreciation history and
-  verifies acquisition dependencies and cycle refusal.
-- Shared backup/source validation and the unchanged aggregate/history guards
-  pass their existing regression suites. Zero-to-head/repeat initialization and
-  explicit disposable downgrade/rebuild pass on the consolidated baseline.
+```powershell
+python -m pytest tests/test_sheets_migration_source.py tests/test_sheets_migration_cli.py tests/postgres/test_sheets_migration.py tests/postgres/test_migration_domains.py
+python -m ruff check .
+git diff --check
+```
 
-Dependency PR #266 merged while implementation was underway. The branch
-first integrated main `86988422`, whose tree matches the starting dependency
-head `aeee01eb`. Before publication it also integrated main `2cca151f`,
-including #247 reporting from PR #268, without conflicts. Its implementation
-diff against current main remains scoped to #254.
-
-The publication gate after that integration passed Ruff and all **1,564 tests
-in 98.63 seconds**, with native PostgreSQL coverage and no skips. Working,
-staged and committed-branch diff checks also passed. Persistent staging was
-deferred at that publication gate and later completed as described above.
-
-The #255/#256 implementation was validated locally on 2026-10-07 in the isolated
-`codex/issues-255-256-migration` worktree, based on PR #274. The full suite passed
-**1,720 tests in 138.88 seconds**, with native PostgreSQL coverage and no skips;
-Ruff and working/committed diff checks passed. After the final loader preflight
-compatibility correction, all **27 focused native migration tests** passed;
-Ruff and diff checks passed again. Focused coverage includes two
-profiles with the same source IDs, advanced journals, transfers, recurring and
-mixed occurrences, acquisition/depreciation history, mileage, verified and legacy
-receipt metadata, unreferenced documents, atomic unit failure/restart, and
-intentional record/posting/provenance drift. These synthetic checks are local
-implementation evidence; no realistic private profile has been loaded into
-staging by this implementation session.
+Native checks require an explicitly disposable `TABULA_RASA_TEST_DATABASE_URL`.
+They cover deterministic source identities, complete/disjoint projections,
+unit atomicity and uncertain-commit restart, changed-source/target refusal,
+provenance drift and two-profile isolation. They neither read private Sheets
+sources nor authorize loading retained staging or production. Historical local
+counts and branch-integration chronology are evidence in the owning issues/PRs,
+not a substitute for current-revision CI.

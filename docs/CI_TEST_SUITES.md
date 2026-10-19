@@ -103,66 +103,21 @@ of measured complete hosted native duration; diagnose phases before adjusting.
 
 ## Before/after evidence and completion boundary
 
-[Sanitized local validation](evidence/ci-376/local-validation.json) records the
-contract comparison, disjoint inventory and successful 140 UI / 125 native cases,
-including zero skips/failures. The native run passed in 420.34 seconds against
-a task-created PostgreSQL 18.6 container; all UI cases passed in 4.5 minutes with
-two workers. All 20 reported slowest native phases were test calls (3.95 to
-13.24 seconds); no individual setup/teardown phase exceeded 3.95 seconds in
-this sample. This bounds each fixture phase, not total fixture cost. These local
-durations are not directly comparable to hosted Linux.
-The affected tooling suite (171 cases), final focused policy/timing tests (44),
-frontend unit tests (92), lint, TypeScript/build and OpenAPI/client drift checks
-passed. Existing deprecated-httpx and bundle-size warnings remain informational.
+[Issue #376](https://github.com/Roklion/Project_Tabula_Rasa/issues/376) records
+completed partitioning, reviewed delivery and controlled same-source hosted
+measurement. Its [audited report](https://github.com/Roklion/Project_Tabula_Rasa/blob/fbbfbfb86ededbde30cbda2835399d3e5881c311/experiments/ci-376/results/REPORT.md)
+retains paired attempts, source/inventory proofs, runner/setup costs, failures and
+limitations. [Local validation evidence](evidence/ci-376/local-validation.json)
+and the baseline metadata above remain historical measurements, not current-head
+CI results or a reliability guarantee.
 
-Implementation starts from clean `origin/main` at `d5530d9`. The hosted timeout
-candidate contains different security changes; it is diagnostic context, not an
-equivalent-revision speed comparison. A controlled Windows 11/Node 24.19.0 sample
-used the original five unchanged contract bodies/setup from this main revision
-across the four original projects (two CI workers), then the new single-worker
-configuration: 20 passed in 3.1 s versus five passed in 1.2 s. This demonstrates
-removed repetition on identical inputs; one local sample does not predict hosted
-end-to-end performance or reliability. Collection confirms 140 retained UI cases
-split 70/70 with no overlap/omission, plus five run-once cases (previously 160
-executions). Native collection is 125 including the ten restored cases.
-
-Publication integrates main `ae9d9c5` (guided onboarding, PR #372), including its
-native identity/workspace additions. The earlier measurements above remain
-identified with their original inputs, not relabeled as validation of onboarding.
-Main's 30-minute headroom applied to the old combined browser job; the split
-UI/native partitions retain dedicated 20-minute budgets. Final integration
-validation and current-candidate hosted results are recorded in the PR.
-
-The first partitioned hosted attempt [38932587506](https://github.com/Roklion/Project_Tabula_Rasa/actions/runs/38932587506)
-passed all six components and `Full test suite` on head `ce6d515`, checkout
-candidate `c8b7d4b` against base `ae9d9c5`. Checkout logs confirm that exact
-candidate. Earliest runner start to aggregate completion was 677 seconds;
-occupied runner intervals summed to 2,160 seconds. Component job durations were
-111 s frontend, 563 s native, 108 s Windows, 346/358 s UI shards and 671 s Python,
-plus 3 s aggregate. UI test steps took 267/288 s; native tests took 462 s.
-The UI shards completed within their budgets; Python was the longest component.
-This is one successful after sample on different inputs from the cancelled
-baseline, with more native/onboarding coverage, not an equivalent-revision
-speedup, billed-cost or reliability comparison. The baseline occupied 1,907 s;
-extra parallel setup can increase total runner time even while reducing the
-serial bottleneck.
-
-The later review head also integrates main `3d1d628` (PR #374 security acceptance).
-The subsequent base integration also retains main `3331ad4` (PR #375): the
-NAS client image and synthetic TLS/encryption/restore drill stay required in
-the Python job, with execution ownership guarded by CI policy tests. No real
-NAS service, credentials, retained backup generation or scheduling is touched.
-The prior green result and timings remain associated with `ce6d515`; fresh
-current-candidate CI is required after this integration and timing-report fix.
-Equivalent-input hosted comparison and repeated reliability measurements remain
-pending. Do not mark #376's hosted acceptance complete from local evidence.
-Compare equivalent source/test inputs on the same hosted OS/runner class and
-attempt, retaining the baseline workflow externally as needed. Disclose the ten
-restored native cases. Include failures/cancellations and collect several runs
-before claiming improved reliability. Record aggregate elapsed time, occupied
-runner time, phase costs, retries, JUnit counts/skips/failures and shard imbalance.
-No overall speedup or cost reduction is claimed. Adjust partitions from evidence;
-broader visual scheduling requires an explicit coverage/fallback policy.
+For new comparisons, hold source/test inputs and runner class constant, include
+failed/cancelled attempts and collect elapsed/occupied runner time, phase costs,
+retries, counts/skips and shard imbalance. Occupied time is not billed usage;
+shorter elapsed time can cost more setup work. Required coverage and bounded
+budgets remain authoritative. [#384](https://github.com/Roklion/Project_Tabula_Rasa/issues/384)
+records the completed optimizer-isolation correction; no stale measurement or
+pre-publication task list here overrides its tracker.
 
 ## Visual-preview optimizer isolation (#384)
 

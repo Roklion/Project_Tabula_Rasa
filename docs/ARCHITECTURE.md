@@ -712,8 +712,7 @@ production adapter, migration, UI change, or authority switch.
 #244's optional database runtime and initial canonical migrations live in
 `infrastructure/postgres/`. [PostgreSQL development and operations](POSTGRESQL.md)
 documents the SQLAlchemy Core/Psycopg/Alembic choice, connection/transaction
-boundaries, exact baseline coverage, native test harness, and remaining #253
-integrity work. Current Sheets composition imports none of this infrastructure
+boundaries, baseline coverage, native test harness and shared integrity rules. Current Sheets composition imports none of this infrastructure
 and still works without database configuration or database dependencies.
 
 #254's explicit migration tooling keeps provider-neutral plans in `migration/`,

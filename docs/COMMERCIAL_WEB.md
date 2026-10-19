@@ -293,8 +293,9 @@ routes over TLS. Minimal health probes are exempt for the platform; unsafe
 requests still require Origin/CSRF protection. A trusted fixture ID without the
 gate must make hosted startup fail closed. #222's implemented named path replaces
 both the gate and fixture resolver before owner/external use. Follow
-[authenticated rollout](AUTHENTICATED_ROLLOUT.md) for manual configuration,
-pending hosted acceptance and named rollback. #279 records the precise
+[authenticated rollout](AUTHENTICATED_ROLLOUT.md) for manual configuration and
+the named rollback procedure. [#321](https://github.com/Roklion/Project_Tabula_Rasa/issues/321)
+records current hosted results and outstanding acceptance. #279 records the precise
 proxy boundary: Uvicorn trusts no forwarded headers; configured Host and Origin
 remain authoritative. Spoofed forwarding/Host inputs are covered by tests.
 
@@ -317,4 +318,7 @@ recovery/PITR, commercial auth, beta or Streamlit retirement requirements.
 
 [Commercial browser quality](COMMERCIAL_BROWSER_QUALITY.md) owns #287's repeatable
 Playwright/axe gate, viewport/engine matrix, synthetic fixture cleanup and the
-remaining #283/#288 receipt/staging and manual-device acceptance boundaries.
+release-evidence boundaries. Candidate-specific results and remaining work live in
+[#321](https://github.com/Roklion/Project_Tabula_Rasa/issues/321),
+[#348](https://github.com/Roklion/Project_Tabula_Rasa/issues/348) and the applicable
+workflow owner issues; completed technical-alpha evidence remains in #288.

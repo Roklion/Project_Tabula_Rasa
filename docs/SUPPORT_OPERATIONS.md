@@ -175,26 +175,13 @@ redacted output/logs, grant provisioning and atomic audit failure. Local
 synthetic evidence does not establish hosted production provisioning or
 #224/#298 release acceptance.
 
-### Local implementation evidence (2026-10-19)
+### Implementation evidence and operational handoff
 
-- 61 disposable-PostgreSQL support/audit/migration tests passed, including the
-  limited runtime-role service path; the affected identity, session, authorization,
-  jobs and transaction checks also passed during implementation.
-- 42 PostgreSQL export/recovery/migration/retained-bridge checks and 73
-  CLI/portable-export/tooling checks passed. The reviewed immutable staging bridge
-  remains pinned to its original image/schema; tests emulate that image instead
-  of changing its production target.
-- HTTP authorization/security/contracts passed. The broader HTTP run stopped
-  after 500 passes at the existing IPv6 TestClient case
-  `test_canonical_origin_accepts_browser_mutations_without_relaxing_scope[http://[::1]:8000-http://[::1]:8000]`.
-  That failure reproduces in the untouched primary checkout with pinned Starlette
-  and both installed test transports; it fails inside TestClient's IPv6 port
-  parsing before application handling. The rest of the transport module passed
-  (42 passed, that one known case deselected). No test or dependency pin was
-  changed to hide it.
-- Ruff, TypeScript, ESLint, deterministic API generation and `git diff --check`
-  passed. Semantic comparison confirmed existing OpenAPI schemas/endpoints are
-  unchanged; only the support contracts were added.
-
-This evidence covers local source behavior only. Required current-candidate CI,
-hosted provisioning/denial checks and human operational handoff remain separate.
+Reviewed implementation, local diagnostics and current-candidate CI/reviewer
+results are recorded in [#341](https://github.com/Roklion/Project_Tabula_Rasa/issues/341)
+and [PR #396](https://github.com/Roklion/Project_Tabula_Rasa/pull/396).
+[#342](https://github.com/Roklion/Project_Tabula_Rasa/issues/342) owns actual
+operator provisioning, deployed denial/telemetry observations and primary/alternate
+operator execution. [#332](https://github.com/Roklion/Project_Tabula_Rasa/issues/332)
+retains hosted telemetry activation. Code/test delivery does not establish that
+operational handoff or #224/#298 release acceptance.

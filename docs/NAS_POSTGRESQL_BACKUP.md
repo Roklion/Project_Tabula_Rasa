@@ -385,23 +385,21 @@ under #223/#337/#338. Filesystem versioning protects only already captured
 files. Neither this tooling nor a successful database drill supplies commercial
 readiness, a live authority switch or full-service/document recovery.
 
-## Acceptance evidence still required on the selected NAS
+## Selected-NAS verification and acceptance ownership
 
-- [ ] Direct ARM64 execution, exact DSM/package/image versions, compatible TLS
-  PostgreSQL clients and resource capacity are proven on DS220j.
-- [ ] Private destination/database inventory, owners, alternate operator,
-  secret/ACL/encryption/remount checks and both key-custody plans are recorded.
-- [ ] Production/UAT bindings are independently checked; all intended databases
-  have distinct protected configuration and complete coverage.
-- [ ] Sunday/Wednesday 22:00 Eastern registration, DST next-run dates, controlled
-  scheduled run, hourly catch-up and independently delivered health alerts work
-  with Windows/application offline.
-- [ ] Failed/interrupted/missed-run tests preserve the last usable archive;
-  partials remain quarantined. Capacity visibility and no-prune retention hold.
-- [ ] Actual Free-plan compute/transfer usage and backup-point gaps are measured.
-- [ ] A retained NAS archive decrypts/restores into isolation and passes complete
-  inventory, entity isolation, accounting integrity/content and alternate-operator
-  checks. RTO/age/limitations and additional #259 evidence are recorded.
+[Issue #294](https://github.com/Roklion/Project_Tabula_Rasa/issues/294) owns the
+actual device/setup checklist, observed passes and remaining operator work.
+Use this runbook's installation, scheduled-run/health, key-custody and isolated
+restore procedures for each approved target. Verify DSM/ARM64/client/TLS versions,
+private destination/database bindings, separate key custody, Windows-independent
+schedule/health alerts, failed/interrupted/missed-run recovery, no-prune capacity,
+actual compute/transfer and backup-age gaps, and retained-archive restore with
+entity/accounting/content checks. Record alternate-operator execution and observed
+limitations in that issue; keep #259/#342 recovery evidence linked there.
+
+These are repeatable verification requirements, not a second stale checklist of
+which operator steps have completed. A code merge or one manual backup does not
+prove schedule/alert/restore acceptance.
 
 ## Developer validation
 

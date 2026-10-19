@@ -4,9 +4,12 @@ This implements the #311/#312 foundation within [commercial identity](COMMERCIAL
 and ADR 0003. It does not complete #222, authorize external beta, claim a hosted
 provider rehearsal, or enable the separate legacy-profile migration. The
 Streamlit administrator remains a loopback-only operator surface. #313 owns
-the [complete action-policy gate](API_AUTHORIZATION.md); #314–#321 own the remaining commercial journey
-and rollout checks. Do not expose this foundation as a production-ready ledger
-before those gates are satisfied.
+the [implemented action-policy gate](API_AUTHORIZATION.md).
+[#321](https://github.com/Roklion/Project_Tabula_Rasa/issues/321) owns hosted
+rollout evidence, [#320](https://github.com/Roklion/Project_Tabula_Rasa/issues/320)
+owns security acceptance and #224 retains external release authority. Implemented
+journeys are documented in [Workspace lifecycle](WORKSPACE_LIFECYCLE.md); their
+business-centric replacement is tracked under #385–#388.
 
 ## Explicit deployment configuration
 

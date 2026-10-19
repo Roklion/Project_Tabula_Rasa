@@ -57,7 +57,9 @@ retains prior receipt locators separately from canonical metadata and links.
 It stores no receipt bytes or credentials and preserves export v1's 26 domains.
 Follow [Document storage and recovery](DOCUMENT_STORAGE_RECOVERY.md) for explicit
 verified Drive-to-Drive isolated recovery, preserved original grants/locators,
-private byte archives and pending hosted-Drive acceptance. S3 adoption is optional
+private byte archives and the selected-provider recovery procedure. Hosted results
+and limitations are tracked in [#338](https://github.com/Roklion/Project_Tabula_Rasa/issues/338)
+and [#342](https://github.com/Roklion/Project_Tabula_Rasa/issues/342). S3 adoption is optional
 under #382 and does not block the Drive-backed #337/#338 scope.
 
 Use synchronous **SQLAlchemy Core 2.0 + Psycopg 3**, with **Alembic** for
@@ -669,7 +671,7 @@ These adapters do not switch the active Sheets ledger, add scheduling workers,
 migrate source records or document bytes, or satisfy production activation by
 themselves. #256 can consume these domain paths for secondary migration; #257
 whole-profile reconciliation, #260 complete entity export, #259 real recovery
-rehearsals, #261's frozen source boundary and #253's remaining consumer checks
+rehearsals, #261's frozen source boundary and #253's consumer invariants
 still gate #258 commercial production activation.
 
 ## Native integration tests
@@ -704,29 +706,22 @@ diagnostic work as described in [Development](DEVELOPMENT.md#required-validation
 
 ## Delivery boundary for the initiative
 
-#244 supplies the reusable runtime and baseline. #245/#246 now supply the core
-reference and accounting adapters described above. #250–#252 supply mileage,
-document metadata and imports/bootstrap. #247–#249 complete the other domain
-mappings and mutation constraints/tests. #253 supplies shared
-caller-baseline transport, aggregate version advancement and ordered locks.
-Cross-adapter acceptance remains coordinated with the domain repository slices.
-The `0001_initial` baseline includes #253's specialized enforcement from
-ADR 0001: mixed complete/inspectable pairs, recurring target/history rules,
-asset override and committed-event immutability, and allowed document/import
-targets. The actual domain repository slices
-must consume these guards, reuse the existing domain algorithms and verify
-their full supported paths before use. Native service contract probes validate
-shared atomicity and recurring failure isolation without supplying full adapters.
+The PostgreSQL runtime, reference/accounting, reporting, recurring/mixed-use,
+asset, mileage, document and import repositories implement the application ports.
+HTTP/browser composition consumes those services; see
+[Commercial workflows](COMMERCIAL_WORKFLOWS.md) and
+[existing workflow ports](COMMERCIAL_WORKFLOW_PORTS.md).
+Shared baseline/version/lock and history constraints remain necessary in every
+adapter; successful row/FK checks alone never establish domain correctness.
 
-The full PostgreSQL repository paths are not exposed by the current application; no
-commercial mutation should rely on FK/row checks alone. Every repository slice
-must enforce its supported invariants from its first implementation. Stable
-entity/reference/transaction slices (#245/#246 and usable #247) unblock early
-#221 web/API work. Final v13 extraction/reconciliation (#254–#257), complete
-entity export (#260), recovery rehearsal (#259), and controlled single-backend
-activation (#258) remain separate. No Sheets data migration, dual write,
-identity model, frontend replacement, or production activation happens here.
-
+Completed implementation and synthetic verification are recorded in
+[EPIC #220](https://github.com/Roklion/Project_Tabula_Rasa/issues/220).
+[#303](https://github.com/Roklion/Project_Tabula_Rasa/issues/303) owns actual
+owner-source migration, accepted bindings and single-backend authority;
+[#342](https://github.com/Roklion/Project_Tabula_Rasa/issues/342) owns stage-specific
+operational evidence and [#298](https://github.com/Roklion/Project_Tabula_Rasa/issues/298)
+retains commercial recovery/activation. Repository delivery does not activate
+private data or authorize dual writes, source deletion or a customer release.
 
 ## Initial baseline and Sheets migration
 
@@ -745,12 +740,9 @@ preserve its data and old revision chain. This implementation recreates only
 synthetic UUID test databases through the existing test fixture. It does not
 reset an operator database or silently upgrade an old revision identifier.
 
-Parallel repository tickets #248–#252 consume this baseline. Repository code
-alone need not introduce a revision. Any later schema/constraint change uses a
-new forward revision after `0001_initial`, coordinated to keep one Alembic head.
-Once this baseline is deployed to a retained database, keep it immutable.
-Do not delay #254 framework work for every secondary repository; corresponding
-loaders remain #256's responsibility.
+Repository code alone need not introduce a revision. Any later schema/constraint
+change uses a new forward revision, coordinated to keep one Alembic head.
+The deployed baseline and its retained forward history remain immutable.
 
 See [the migration operator guide](SHEETS_POSTGRES_MIGRATION.md) for dry-run,
 explicit loading, extension contracts, restart, and the persistent staging
