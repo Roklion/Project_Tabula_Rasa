@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { api, ApiError, type ErrorCode } from '../../api/client';
 import { session } from '../../test/fixtures';
@@ -112,4 +112,21 @@ it.each(['success', 'reauthentication_required', 'uncertain'] as const)('members
     }
   }
   expect(change).toHaveBeenCalledTimes(1);
+});
+
+it.each(['membership', 'ownership'] as const)('preserves a confirmed %s concurrency rejection even when the member refresh fails', async operation => {
+  const member = { user_id: 'other', display_name: 'Synthetic member', role: 'read_only' as const, state: 'active' as const, authorization_version: 1 };
+  const members = vi.spyOn(api, 'members').mockResolvedValueOnce({ items: [member] }).mockRejectedValue(new ApiError('unexpected'));
+  vi.spyOn(api, 'invitations').mockResolvedValue({ items: [] });
+  const mutation = vi.spyOn(api, operation === 'membership' ? 'changeMember' : 'grantOwnership').mockRejectedValue(new ApiError('concurrent_write'));
+  render(<ScopeBoundary session={{ ...session, trusted_development: false, capabilities: ['bookkeeping:read', 'members:manage', 'ownership:manage'] }}><WorkspacePage /></ScopeBoundary>);
+  fireEvent.click(await screen.findByRole('button', { name: operation === 'membership' ? 'Review membership change' : 'Grant ownership' }));
+  const dialog = within(screen.getByRole('alertdialog'));
+  const confirm = dialog.getByRole('button', { name: operation === 'membership' ? 'Confirm membership change' : 'Confirm ownership grant' });
+  fireEvent.click(confirm);
+  expect(await dialog.findByText('This record changed or conflicts with another record. Your draft is preserved.')).toBeVisible();
+  expect(confirm).toBeEnabled();
+  expect(dialog.queryByText(/The outcome could not be confirmed/)).not.toBeInTheDocument();
+  expect(members).toHaveBeenCalledTimes(2);
+  expect(mutation).toHaveBeenCalledTimes(1);
 });

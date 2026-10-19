@@ -28,7 +28,7 @@ function MemberEditor({ member, owner, onSave, onGrant }: { member: Schemas['Mem
     try { await operation(); close(); }
     catch (failure) {
       setError(failure);
-      setUncertain(!(failure instanceof ApiError && ['validation', 'invariant', 'required', 'forbidden', 'unauthorized', 'reauthentication_required', 'stale', 'conflict'].includes(failure.code)));
+      setUncertain(!(failure instanceof ApiError && ['validation', 'invariant', 'required', 'forbidden', 'unauthorized', 'reauthentication_required', 'stale', 'conflict', 'concurrent_write'].includes(failure.code)));
     } finally { submitting.current = false; setPending(false); }
   }
   const allowed = owner || member.role === 'admin' && member.user_id === actor || !['owner', 'admin'].includes(member.role);

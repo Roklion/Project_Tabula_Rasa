@@ -23,7 +23,7 @@ export function ConfirmationDialog({ title, children, keepLabel, confirmLabel, o
     onCancel={event => { event.preventDefault(); if (!pending) onKeep(); }}
     onKeyDown={event => {
       if (event.key !== 'Tab') return;
-      const buttons = Array.from(ref.current!.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled)'));
+      const buttons = Array.from(ref.current!.querySelectorAll<HTMLElement>('a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled)'));
       const first = buttons[0], last = buttons.at(-1);
       if (!first || !last) { event.preventDefault(); return; }
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }

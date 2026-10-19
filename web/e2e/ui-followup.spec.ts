@@ -120,7 +120,15 @@ for (const outcome of ['success', 'reauthentication_required', 'uncertain'] as c
       if (outcome === 'uncertain') {
         await expect(page.getByText(/The outcome could not be confirmed/)).toBeVisible();
         await expect(confirm).toBeDisabled();
-      } else await expect(page.getByRole('link', { name: 'Sign in again' })).toBeVisible();
+      } else {
+        const login = page.getByRole('link', { name: 'Sign in again' });
+        await expect(login).toBeVisible();
+        await confirm.focus(); await page.keyboard.press('Tab');
+        await expect(login).toBeFocused();
+        await page.keyboard.press('Shift+Tab'); await expect(confirm).toBeFocused();
+        await page.getByRole('button', { name: 'Keep current membership' }).focus();
+        await page.keyboard.press('Shift+Tab'); await expect(login).toBeFocused();
+      }
     }
     expect(calls).toBe(1);
   });
