@@ -64,8 +64,11 @@ neither audit inspection nor audit export. #341's inspection UI remains separate
 
 Provision migration/function ownership separately from the ordinary runtime.
 Runtime must have no audit DML, DDL, ownership or RLS bypass. Grant audit SELECT
-only to the separately provisioned inspector, with the canonical SELECT needed
-by its verifier. RLS scopes non-owner reads; the reader also applies explicit
+only to the provisioned inspector or trusted API serving separately provisioned,
+expiring [support grants](SUPPORT_OPERATIONS.md); the latter revalidates named
+operator, environment and organization on each request. Direct recovery
+inspection also needs the canonical SELECT used by its verifier.
+RLS scopes non-owner reads; the reader also applies explicit
 entity predicates for owner connections. GUC scope and capabilities are trusted
 server infrastructure, not browser claims. A DBA can bypass PostgreSQL controls;
 the guarantee is application append-only history, not malicious-DBA resistance.
