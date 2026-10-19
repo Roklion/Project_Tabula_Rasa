@@ -96,6 +96,21 @@ def provider(monkeypatch):
     monkeypatch.setattr('tabula_rasa.google_drive.load_oauth_config', lambda value: value)
 
 
+def test_duplicate_entity_profile_keys_stop_before_provider_or_upload(tmp_path, monkeypatch):
+    binding = configurations()
+    for modes in binding.values():
+        for config in modes.values():
+            config['profile_key'] = 'stage-shared'
+    _, output, _ = environment(tmp_path, monkeypatch, binding)
+    def forbidden(*args, **kwargs):
+        pytest.fail('Duplicate profiles must stop before provider access or test execution')
+    monkeypatch.setattr('tabula_rasa.google_drive.GoogleDriveClient', forbidden)
+    monkeypatch.setattr(runner.subprocess, 'run', forbidden)
+    assert runner.main() == 1
+    evidence = json.loads((output / 'sanitized-evidence.json').read_text())
+    assert not evidence['passed'] and evidence['exception_type'] == 'AssertionError'
+
+
 def test_occupied_beta_target_stops_before_upload_or_database_execution(tmp_path, monkeypatch):
     _, output, _ = environment(tmp_path, monkeypatch, configurations())
     provider(monkeypatch)

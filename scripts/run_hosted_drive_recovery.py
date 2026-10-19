@@ -29,6 +29,7 @@ def main():
     try:
         binding = json.loads(os.environ['DRIVE_RECOVERY_STAGING_BINDING'])
         assert set(binding) == {'alpha', 'beta'}
+        assert len({modes['source']['profile_key'] for modes in binding.values()}) == 2
         sys.path.insert(0, str(source))
         from tabula_rasa.google_drive import GoogleDriveClient, load_oauth_config
         folders = []
