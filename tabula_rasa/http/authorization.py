@@ -131,12 +131,14 @@ def authorize_request(request: Request):
     if policy.scope == 'support':
         from .context import require_csrf
         from .identity import NamedIdentity
-        request.state.security_event = 'privileged_denied'
-        request.state.security_reason = 'capability'
         identity = getattr(request.app.state.runtime, 'identity', None)
         if not isinstance(identity, NamedIdentity) or identity is not request.app.state.runtime.resolve_context:
+            request.state.security_event = 'privileged_denied'
+            request.state.security_reason = 'capability'
             raise TransportError('forbidden')
         session = identity.authenticated(request)
+        request.state.security_event = 'privileged_denied'
+        request.state.security_reason = 'capability'
         require_csrf(request, session.csrf_token)
     elif policy.scope == 'entity':
         from .context import resolve_context

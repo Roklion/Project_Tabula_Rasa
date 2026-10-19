@@ -454,3 +454,33 @@ def test_confirmed_revocation_uses_exact_locked_session_set(database, support, m
     with pytest.raises(IdentityError):
         auth.sessions.validate(selected_raw)
     assert auth.sessions.validate(other_raw).selected.entity_id == ('alpha' if movement == 'arriving' else 'beta')
+
+
+def test_support_rebinds_same_database_sessions_and_rejects_foreign_database(database, support):
+    from tabula_rasa.infrastructure.postgres.config import DatabaseSettings
+    from tabula_rasa.infrastructure.postgres.runtime import Database
+    from tabula_rasa.infrastructure.postgres.sessions import PostgresSessionRepository
+
+    _, raw, _, _, _, bob, _, org_a, _, _, auth, _ = support
+    other_pool = Database(DatabaseSettings(database.engine.url))
+    foreign = Database(DatabaseSettings(database.engine.url.set(database='unrelated_database')))
+    try:
+        sessions = PostgresSessionRepository(other_pool, auth.sessions.environment,
+            auth.sessions.configuration_hash, clock=auth.sessions.clock)
+        service = PostgresSupport(database, sessions)
+        assert service.sessions.database is database
+        assert service.sessions.clock is sessions.clock
+        assert service.diagnostics(raw, org_a, 'alpha', 'incident').organization_id == org_a
+        # The target has no sessions in this organization; PostgreSQL infers the
+        # empty ANY parameter from cache_id's text type and safely updates zero rows.
+        support[3].set_membership(org_a, bob.id, 'editor')
+        preview = service.administer(raw, org_a, 'alpha', 'incident',
+            'revoke_sessions', target_user_id=bob.id)
+        assert service.administer(raw, org_a, 'alpha', 'incident', 'revoke_sessions',
+            target_user_id=bob.id, confirm_plan=preview.plan_sha256).applied
+        with pytest.raises(ValueError, match='runtime session database'):
+            PostgresSupport(database, PostgresSessionRepository(foreign,
+                sessions.environment, sessions.configuration_hash))
+    finally:
+        other_pool.dispose()
+        foreign.dispose()

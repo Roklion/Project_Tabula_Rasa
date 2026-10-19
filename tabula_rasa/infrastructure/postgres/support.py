@@ -27,7 +27,14 @@ AUDIT_FILTERS = frozenset({'since', 'until', 'actor_id', 'action', 'source', 'ta
 class PostgresSupport:
     def __init__(self, database, sessions):
         if sessions.database is not database:
-            raise ValueError('Support requires the runtime session repository.')
+            from .identity import database_identity
+            from .sessions import PostgresSessionRepository
+            if database_identity(sessions.database) != database_identity(database):
+                raise ValueError('Support requires the runtime session database.')
+            # Migrated runtimes may authenticate through a separate pool for the
+            # same database. Rebind validation so it joins the support transaction.
+            sessions = PostgresSessionRepository(database, sessions.environment,
+                sessions.configuration_hash, clock=sessions.clock)
         self.database, self.sessions = database, sessions
 
     @contextmanager
