@@ -330,7 +330,7 @@ becomes `overdue` after two hours, which may indicate interruption. A failed att
 visible while the previous verified generation remains available. A failure
 after publication but before status update leaves a complete recoverable
 directory with conservative running/failed health; inspect it with
-`verify --generation <directory-name>` before recording private evidence or
+`verify --generation GENERATION_NAME` before recording private evidence or
 requesting another run. Do not manually report success from a partial directory.
 
 Each successful generation is retained **indefinitely**. There is no expiry,
@@ -383,7 +383,7 @@ health polling do not make this a daily backup or a 24-hour RPO.
    A stop may remove `.lock` or leave it behind. Absence of a lock does not
    establish success. If it remains, confirm the old process stopped before
    removing only the exact empty lock directory as described above.
-3. Verify the prior complete generation with `verify --generation <name>`.
+3. Verify the prior complete generation with `verify --generation GENERATION_NAME`.
    Keep `incomplete/` output quarantined: it may contain a plaintext dump and
    must remain inside the protected encrypted share. Do not publish it, use it
    as a completed backup or delete it to clear a failure.
@@ -412,7 +412,7 @@ tasks or alter the NAS clock.
   Require a nonzero storage failure and preserved prior verified generation.
   Another `scheduled` tick for that attempted slot must be `no_attempt` and
   still report unhealthy health, not a fresh dump.
-- For interruption, use a reviewed test fixture to pause a client stage and
+- For interruption, use the disposable fixture below to pause a client stage and
   stop only the named drill container after confirming an attempt began.
   Verify it stopped, inspect whether a lock remains, and retain unpublished
   `incomplete/` output and the previous verified complete generation. Do not
@@ -435,6 +435,65 @@ authorized cleanup. Record each drill's tested boundary and limitations in
 restricted operator records. Test an external missing-NAS check-in independently;
 a task running on the NAS cannot report its own power or network outage.
 
+### Disposable interruption fixture
+
+Use only the isolated drill config/storage prepared above, with a verified
+baseline complete generation. This fixture overrides `age` in one named
+container; it does not change the reviewed image or live wrappers. Replace all
+example paths and uppercase values with the approved drill targets. As the
+backup OS account, create an owner-only tools directory on the protected data
+volume and write this executable `age` shim there (LF line endings, mode `0700`):
+
+```sh
+#!/bin/sh
+if [ "$1" = "--version" ]; then
+  exec /usr/bin/age "$@"
+fi
+touch /backup/.drill-age-paused || exit 1
+sleep 600
+exit 1
+```
+
+The marker appears only after the runner has dumped and traversed the archive
+and entered encryption. The shim creates no encrypted output and fails after
+ten minutes if the operator does not interrupt it. Use a fresh marker path;
+if one already exists, stop and inspect the previous drill rather than deleting
+it or treating it as evidence of a new attempt.
+
+Set `DRILL_CONFIG` to the isolated host config directory, `DRILL_STORAGE` to
+its protected host storage root (configured as `/backup` inside the container),
+`DRILL_TOOLS` to the shim directory, `DRILL_UID`/`DRILL_GID` to the backup account,
+and `IMAGE_ID` to the reviewed immutable image ID. Verify these are the drill
+paths, not live production/UAT paths. Then launch just this container:
+
+```sh
+test ! -e "$DRILL_STORAGE/.drill-age-paused" || exit 1
+docker run -d --name tabula-backup-interruption-drill \
+  --read-only --cap-drop ALL --security-opt no-new-privileges \
+  --user "$DRILL_UID:$DRILL_GID" \
+  --env PATH=/drill-tools:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+  --mount type=bind,source="$DRILL_CONFIG",target=/secrets,readonly \
+  --mount type=bind,source="$DRILL_STORAGE",target=/backup \
+  --mount type=bind,source="$DRILL_TOOLS",target=/drill-tools,readonly \
+  "$IMAGE_ID" run --config /secrets/backup.json
+```
+
+Confirm that exact container is running and the marker exists on the host
+before the ten-minute pause expires. If either check fails, inspect only this
+drill; do not launch replacements or stop other containers. Once both checks
+pass, the authorized interruption is:
+
+```sh
+docker kill --signal KILL tabula-backup-interruption-drill
+docker inspect --format '{{.State.Running}}' tabula-backup-interruption-drill
+```
+
+Require `false` from inspection before lock recovery. Use the ordinary isolated
+wrapper, without the shim mount or PATH override, to inspect status and recover
+as described above. Preserve the stopped container, marker and partial/complete
+artifacts for inspection until exact-target cleanup is authorized. A reused
+container name deliberately fails instead of replacing an earlier drill.
+
 ## Isolated retained-archive restore drill
 
 1. Record authorization, incident/drill declaration time, exact new isolated
@@ -445,7 +504,7 @@ a task running on the NAS cannot report its own power or network outage.
    entity, including two entities with overlapping local IDs when available.
    Resume writers only after the controlled capture finishes.
 2. Select a retained complete generation. Run the runner's `verify` action with
-   `--generation <directory-name>` to check source/environment, size and SHA-256.
+   `--generation GENERATION_NAME` to check source/environment, size and SHA-256.
    This verifies ciphertext integrity only. In a restricted recovery workspace,
    decrypt with the off-NAS key and validate the archive before restoring:
 
@@ -521,12 +580,13 @@ or recreate managed-provider roles to force replay to succeed.
    `DEFAULT ACL` entries by owning role. Presence in the archive proves
    recoverability material exists, not that it can be applied. Do not select by
    expected counts or loosely matching role names alone.
-4. Preview each selected list offline with `pg_restore --use-list <list>
-   --file <private-preview.sql> /protected/restore.dump`. Review every statement,
+4. Replace uppercase placeholders with reviewed private paths. Preview each
+   selected list offline with `pg_restore --use-list LIST_FILE
+   --file PRIVATE_PREVIEW_SQL /protected/restore.dump`. Review every statement,
    recipient role and affected object. Keep provider-managed defaults separate
    from application/owner-controlled defaults, and reject unexpected changes.
 5. Reconfirm target identity, then apply only the approved list using
-   `pg_restore --no-password --use-list <list> --single-transaction
+   `pg_restore --no-password --use-list LIST_FILE --single-transaction
    --exit-on-error --no-owner --dbname 'service=isolated_recovery'
    /protected/restore.dump`. A failed transactional replay is not partial
    success; inspect target state before continuing. Do not fall back to replay
