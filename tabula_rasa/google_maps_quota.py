@@ -623,11 +623,6 @@ def _rate_period_seconds(unit: str) -> float | None:
     return None
 
 
-def _format_google_timestamp(timestamp: datetime) -> str:
-    """Render the source point timestamp in an unambiguous UTC form."""
-    return timestamp.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-
-
 def _usage_in_limit_unit(
     usage: GoogleMapsQuotaUsage, limit: GoogleMapsQuotaLimit
 ) -> tuple[float, str] | None:
@@ -636,17 +631,6 @@ def _usage_in_limit_unit(
     if source_period is None or target_period is None:
         return None
     return usage.value * target_period / source_period, limit.unit
-
-
-def _utilization(usage: GoogleMapsQuotaUsage, limit: GoogleMapsQuotaLimit) -> float | None:
-    configured = limit.effective_limit_for(usage.dimensions)
-    if configured is None:
-        return None
-    usage_rate = _rate_in_minutes(usage.value, usage.unit)
-    limit_rate = _rate_in_minutes(configured, limit.unit)
-    if usage_rate is None or limit_rate is None or limit_rate <= 0:
-        return None
-    return usage_rate / limit_rate
 
 
 def render_google_maps_usage_sidebar(secrets_mapping: Mapping[str, Any]) -> None:

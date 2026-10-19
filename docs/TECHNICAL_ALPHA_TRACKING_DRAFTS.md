@@ -11,9 +11,12 @@ None of these long-tail flows expands the default technical-alpha matrix.
 Published owners and implementation routing: TA-1 → #357, TA-2 → #358,
 TA-6 → #362 and TA-8 → #364 now have browser/API/service/PostgreSQL ports,
 documented with validation in [Commercial workflow ports](COMMERCIAL_WORKFLOW_PORTS.md).
-TA-3 is narrowed to #359's existing financial CSV; TA-5 → #361 and TA-7 → #363
-remain separate ports. TA-4/#360 and standalone report downloads are excluded by
-#124/#221's October 11 existing-functionality correction. Historical drafts below
+TA-3 → #359's existing financial CSV, TA-5 → #361 and TA-7 → #363 are also
+implemented and documented there. All seven ports have delivering implementation
+evidence; their selected hosted/provider/owner acceptance remains separate.
+The [retirement inventory](TRANSITION_RETIREMENT.md) records #377's retained
+capabilities and removal eligibility. TA-4/#360 and standalone report downloads
+are excluded by #124/#221's October 11 existing-functionality correction. Historical drafts below
 do not override those decisions or authorize #303 live execution.
 
 ## TA-1 — Commercial web: Transaction CSV and QuickBooks import
@@ -129,33 +132,17 @@ the existing commercial manual filtered CSV is already delivered by #286.
 - #298/#224: commercial activation and recovery agreement; alpha has no authority
   to claim customer readiness or retire internal workflows.
 
-## Historical pre-acceptance #288 status draft (superseded)
-
-The text below preserves the earlier preparation handoff. #288 was accepted and
-closed on October 11; its published seven-port scope and exclusions above govern
-current work. These historical pending instructions are not current gate status.
-
-The remaining runtime implementation is prepared: default hosted synthetic HTTP
-composition loads an explicit environment/origin/entity-bound Drive secret file,
-validates the selected grant/managed folders and reuses PostgreSQL metadata,
-ReceiptService and GoogleDriveDocumentStore. The API image includes its requests
-dependency and Render secret-file group; the read-only preflight and exact operator
-runbook are in `docs/ALPHA_DOCUMENT_STORAGE.md`. Scope/failure/restart/isolation
-tests use synthetic providers and disposable PostgreSQL, not retained staging.
-
-Record the published reviewed commit/PR and its actual validation here after
-publication. Keep the implementation prerequisite unchecked until the reviewed
-change lands. Do not check provider configuration, staging suite, rollback,
-manual acceptance or final handoff from local tests. Publish/link TA-1 through
-TA-8 or record explicit approved exclusions; these drafts do not complete the
-ticketing criterion. Parent #221 and initiative #124 remain open.
+For historical technical-alpha acceptance, the
+[accepted #288 handoff](https://github.com/Roklion/Project_Tabula_Rasa/issues/288#issuecomment-6117319756)
+and Git history retain the historical evidence; current release, identity and
+owner-cutover requirements keep their own owners.
 
 ## Exact-candidate operator acceptance record template
 
 Retain one sanitized record and private evidence references, refreshing evidence
 after candidate changes. Leave each pending field pending until observed:
 
-| Field | Required evidence (currently pending) |
+| Field | Evidence to record for the selected candidate |
 | --- | --- |
 | Candidate | Reviewed merged release SHA, main-push Full test suite URL/result, immutable image index/runtime digests and schema revision |
 | Deployment | Exact staging target binding reference, promotion/smoke URL, observed `/version`/readiness |

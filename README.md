@@ -50,8 +50,11 @@ The application supports:
    streamlit run tabula_rasa/app.py
    ```
 
-The active datastore is Google Sheets. The application does not use a local
-SQLite database for ledger storage.
+This quick start runs the supported internal Streamlit/Google Sheets edition.
+The browser/API edition uses PostgreSQL after its applicable deployment and
+cutover gates; see [Commercial development](docs/COMMERCIAL_WEB.md) and
+[Bookkeeping cutover](docs/BOOKKEEPING_CUTOVER.md). Neither edition uses a local
+SQLite database as an alternate live ledger.
 
 ## Documentation
 
@@ -76,6 +79,7 @@ The documentation index is this section of the root README. Go directly to:
 | Respond to incidents, roll back compatible images and rotate secrets | [Incident response](docs/INCIDENT_RESPONSE.md), [secret operations](docs/SECRETS_OPERATIONS.md) and [staging drill](docs/INCIDENT_DRILL.md) |
 | Review commercial visual, responsive and accessibility evidence | [Integrated UI acceptance](docs/COMMERCIAL_UI_ACCEPTANCE.md) |
 | Verify technical alpha and track the Streamlit transition | [Alpha release gate and retirement boundary](docs/TECHNICAL_ALPHA.md) |
+| Review retained capabilities, cleanup evidence and retirement conditions | [Transition retirement inventory](docs/TRANSITION_RETIREMENT.md) |
 | Implement the commercial PostgreSQL accounting model | [Canonical schema ADR](docs/adr/0001-canonical-accounting-schema.md) |
 | Start PostgreSQL, run migrations, and test database infrastructure | [PostgreSQL development and operations](docs/POSTGRESQL.md) |
 | Implement PostgreSQL mutations and carry loaded-record baselines | [PostgreSQL concurrency convention](docs/POSTGRESQL_CONCURRENCY.md) |

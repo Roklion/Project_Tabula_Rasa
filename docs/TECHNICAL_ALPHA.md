@@ -179,6 +179,10 @@ Before repository-wide removal of Streamlit, separately inventory all remaining
 internal users/workflows, migrate or explicitly retire each, preserve source and
 recovery artifacts, and update operator/user documentation and tests. #288 does
 not authorize package removal, source deletion or a big-bang cutover.
+The [supported-capability retirement inventory](TRANSITION_RETIREMENT.md) under
+#377 records active callers, owners, eligible cleanup, retained regression
+contracts and concrete conditions for deferred removals. It consumes this routing
+matrix without adding a release or owner-cutover prerequisite.
 
 ## Acceptance record and outstanding evidence
 

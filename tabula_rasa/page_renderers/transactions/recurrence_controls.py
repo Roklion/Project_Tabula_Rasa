@@ -8,11 +8,6 @@ from datetime import date
 
 import streamlit as st
 
-from tabula_rasa.recurrence_state import (
-    mixed_use_edit_pending_state,
-    transaction_edit_pending_state,
-)
-
 
 @dataclass(frozen=True)
 class RecurrenceSelection:
@@ -34,26 +29,6 @@ class RecurrenceSelection:
             "recurrence_interval": self.interval,
             "end_date": self.end_date,
         }
-
-
-def recurring_edit_pending_schedule_key(profile_key: str, record_id: str) -> str:
-    """Build an ordinary-edit retry key with an unambiguous profile suffix."""
-    return transaction_edit_pending_state(profile_key, record_id).schedule_id_key
-
-
-def mixed_use_edit_pending_schedule_key(profile_key: str, source_id: str) -> str:
-    """Build a mixed-use-edit retry key with an unambiguous profile suffix."""
-    return mixed_use_edit_pending_state(profile_key, source_id).schedule_id_key
-
-
-def recurring_edit_pending_payload_key(profile_key: str, record_id: str) -> str:
-    """Build an ordinary-edit retry payload key with an exact profile suffix."""
-    return transaction_edit_pending_state(profile_key, record_id).payload_key
-
-
-def mixed_use_edit_pending_payload_key(profile_key: str, source_id: str) -> str:
-    """Build a mixed-use-edit retry payload key with an exact profile suffix."""
-    return mixed_use_edit_pending_state(profile_key, source_id).payload_key
 
 
 def edit_defaults_with_pending_payload(
@@ -137,11 +112,7 @@ def render_recurrence_controls(
 
 __all__ = [
     "RecurrenceSelection",
-    "mixed_use_edit_pending_schedule_key",
-    "mixed_use_edit_pending_payload_key",
     "edit_defaults_with_pending_payload",
-    "recurring_edit_pending_schedule_key",
-    "recurring_edit_pending_payload_key",
     "render_recurrence_controls",
     "restore_recurrence_controls",
 ]

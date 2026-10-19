@@ -65,6 +65,10 @@ The HTTP runtime reuses application services and PostgreSQL adapters. Preserve
 the server-side #222 membership/context seam, #280 loaded-baseline form contract,
 and #223 health/request/job seams. Keep ordinary development and tests synthetic;
 the current Streamlit/Sheets setup and validation gates continue to apply.
+The [transition retirement inventory](TRANSITION_RETIREMENT.md) records #377's
+capability/caller ownership, eligible cleanup and concrete deferred conditions.
+Retain independent adapter/transport tests while both modes are supported;
+[CI suite ownership](CI_TEST_SUITES.md) remains #376's execution contract.
 
 [Existing workflow ports](COMMERCIAL_WORKFLOW_PORTS.md) documents
 #357/#358/#362/#364's transaction/mileage imports, ordinary copy/bulk and

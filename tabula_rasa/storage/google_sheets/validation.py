@@ -128,15 +128,6 @@ def _validate_tag_records(records: Iterable[Mapping[str, Any]]) -> None:
 
 
 
-def _positive_miles(value: Any) -> str:
-    try:
-        miles = Decimal(str(value))
-    except (InvalidOperation, ValueError):
-        raise StorageValidationError("Miles must be numeric") from None
-    if not miles.is_finite() or miles <= 0:
-        raise StorageValidationError("Miles must be greater than zero")
-    return format(miles.quantize(Decimal("0.1")), "f")
-
 def _validate_journal_tables(
     entries: Iterable[Mapping[str, Any]],
     postings: Iterable[Mapping[str, Any]],
@@ -694,7 +685,6 @@ __all__ = [
     "_encode_tag_ids",
     "_validate_tag_records",
     "_positive_amount",
-    "_positive_miles",
     "_balance_amount",
     "_validate_account_classification",
     "_iso_date",
