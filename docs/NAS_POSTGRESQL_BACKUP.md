@@ -1,20 +1,18 @@
-# NAS PostgreSQL backup operations (#294)
+# NAS PostgreSQL backup operations
 
-This is the NAS logical-backup runbook under [EPIC #223](https://github.com/Roklion/Project_Tabula_Rasa/issues/223)
-and [initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124).
 The standalone runner uses the selected database's direct TLS connection and
 requires neither Windows, the application nor a paid provider scheduler.
 The runner, image and synthetic drill are implementation artifacts. They do not
 establish a deployed NAS task, protected storage, actual provider usage or an
-accepted recovery drill. Keep #294 open until the operator checklist below is
-completed. The [managed recovery contract](POSTGRESQL_RECOVERY.md) remains
-authoritative for #259's separate snapshot/PITR evidence and #298's commercial
-recovery agreement, handoff and activation. #342 consumes operational evidence;
-#224/#298 retain release acceptance. #299/#303 owner use remains independent.
+accepted recovery drill. Complete the operational checklist below before
+accepting this recovery route. The [managed recovery contract](POSTGRESQL_RECOVERY.md)
+remains authoritative for managed snapshots, PITR, recovery objectives and
+return-to-service authorization. Keep deployment and drill results in restricted
+operator records rather than adding them to this runbook.
 
-## Selected host and compatibility checkpoint
+## Host compatibility
 
-The operator identified **Synology DS220j, DSM 7.4.1-90080**. Its Realtek RTD1296
+This runbook targets **Synology DS220j with DSM and Container Manager**. Its Realtek RTD1296
 is 64-bit ARM with 512 MB RAM ([hardware specification](https://global.download.synology.com/download/Document/Hardware/ProductSpec/DiskStation/20-year/DS220j/enu/Product_Spec_DS220j_enu.pdf)).
 Synology's [Container Manager release notes](https://www.synology.com/en-us/releaseNote/ContainerManager?model=DS120j&os=DSM&version=7_x_series)
 explicitly include ARMv8 DS220j/DS120j support. This establishes a documented
@@ -41,7 +39,7 @@ entrypoint. Its dedicated Docker ignore file sends only the runner and private m
 builder; never put credentials or backups in a build context.
 
 ```sh
-docker build --platform linux/arm64 -f deploy/nas/Dockerfile -t tabula-nas-backup:294 .
+docker build --platform linux/arm64 -f deploy/nas/Dockerfile -t tabula-nas-backup:reviewed .
 ```
 
 Retain the built image ID/digest and use that immutable ID in the task command.
@@ -93,7 +91,7 @@ operator artifact, never an ordinary tenant/profile download.
 5. `source_sha256` is SHA-256 of UTF-8
    `lowercase-host:decimal-port/database`, excluding credentials. Compute it
    privately from the selected service values. This NAS namespace fingerprint
-   has its own encoding; it is **not** #259's application endpoint fingerprint.
+   has its own encoding; it is **not** the application recovery verifier's endpoint fingerprint.
    Check Neon branch lineage independently. Never substitute the application
    verifier's hash for this value. Production and UAT use separate configs,
    secrets, and `environment/source_sha256` archive/status/lock namespaces.
@@ -179,29 +177,29 @@ reusing an old wrapper image ID still runs the old check. Missing Psycopg or
 helper files also fail closed as `source`; rebuild the complete image. Provider
 diagnostics stay private; the runner intentionally returns only fixed guidance.
 
-### Build and import the corrected ARM64 image
+### Build, import and update the ARM64 image
 
 Use a development machine or CI runner with Docker Buildx and ARM64 execution
 support (native or emulated), avoiding a build on the 512 MB NAS. From the
-reviewed fix checkout, these PowerShell commands produce a single-platform
+reviewed release checkout, these PowerShell commands produce a single-platform
 Docker archive; record the commit, image ID and both hashes privately:
 
 ```powershell
 git rev-parse HEAD
-docker buildx build --platform linux/arm64 --load -f deploy/nas/Dockerfile -t tabula-nas-backup:neon-tls .
+docker buildx build --platform linux/arm64 --load -f deploy/nas/Dockerfile -t tabula-nas-backup:reviewed .
 if ($LASTEXITCODE -ne 0) { throw 'Image build failed' }
-docker image inspect --format '{{.Id}} {{.Os}}/{{.Architecture}}' tabula-nas-backup:neon-tls
+docker image inspect --format '{{.Id}} {{.Os}}/{{.Architecture}}' tabula-nas-backup:reviewed
 Get-FileHash scripts/nas_postgres_backup.py,scripts/nas_postgres_source.py -Algorithm SHA256
-docker image save --output tabula-nas-backup-neon-tls-arm64.tar tabula-nas-backup:neon-tls
+docker image save --output tabula-nas-backup-arm64.tar tabula-nas-backup:reviewed
 if ($LASTEXITCODE -ne 0) { throw 'Image export failed' }
-Get-FileHash tabula-nas-backup-neon-tls-arm64.tar -Algorithm SHA256
+Get-FileHash tabula-nas-backup-arm64.tar -Algorithm SHA256
 ```
 
 The inspect result must say `linux/arm64`. Package security updates are resolved
 at build time, so subsequent rebuilds can produce different IDs. Transfer this
-exact archive to `/volume1/Tabula_Rasa_Postgres/` using the authorized NAS file
+exact archive to the approved NAS image-import directory using the authorized file
 transfer route; keep it outside the source tree and backup-generation namespace.
-Compare `sha256sum /volume1/Tabula_Rasa_Postgres/tabula-nas-backup-neon-tls-arm64.tar`
+Compare `sha256sum /approved/image-import/tabula-nas-backup-arm64.tar`
 with the recorded archive hash. In Synology **Container Manager → Image → Add →
 Import**, select that archive and wait for import to finish. Do not create a
 database container or alter scheduled tasks.
@@ -210,12 +208,12 @@ In the authorized NAS shell, retrieve the imported immutable image ID, verify
 the architecture and check the shipped scripts against the recorded hashes:
 
 ```sh
-docker image inspect --format '{{.Id}} {{.Os}}/{{.Architecture}}' tabula-nas-backup:neon-tls
-IMAGE_ID=$(docker image inspect --format '{{.Id}}' tabula-nas-backup:neon-tls) || exit 1
+docker image inspect --format '{{.Id}} {{.Os}}/{{.Architecture}}' tabula-nas-backup:reviewed
+IMAGE_ID=$(docker image inspect --format '{{.Id}}' tabula-nas-backup:reviewed) || exit 1
 docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
-  --user 1027:100 --entrypoint sha256sum "$IMAGE_ID" \
+  --user REPLACE_UID:REPLACE_GID --entrypoint sha256sum "$IMAGE_ID" \
   /opt/tabula/nas_postgres_backup.py /opt/tabula/nas_postgres_source.py
-docker run --rm --read-only --user 1027:100 --entrypoint python3 "$IMAGE_ID" \
+docker run --rm --read-only --user REPLACE_UID:REPLACE_GID --entrypoint python3 "$IMAGE_ID" \
   -c 'import psycopg; from psycopg import pq; print("psycopg", psycopg.__version__, "libpq", pq.version())'
 ```
 
@@ -223,24 +221,22 @@ The image ID must match the build-host ID, both script hashes must match the
 reviewed checkout, and libpq must support PostgreSQL 18. These inspection
 containers have no credentials or archive mounts.
 
-After these checks, the **operator** updates
-`/volume1/Tabula_Rasa_Postgres/config/bin/run-production.sh`: preserve an
-owner-only copy, edit only the existing `sha256:...` image reference to the
-verified new `IMAGE_ID`, and retain `--user 1027:100`, current hardened flags,
-production config mount and `/volume1/Tabula_Rasa_Postgres/archives` mount.
-Keep the existing container mount targets, since `backup.json` uses them.
-Do not change credentials, keys, UAT settings or scheduler registration. Check
-the replacement image ID privately in the wrapper, then run:
+Replace the inspection UID/GID placeholders with the configured backup account.
+For each environment authorized for the update, preserve an owner-only copy of
+its wrapper and replace only its existing image reference with the verified
+`IMAGE_ID`. Preserve its UID/GID, hardened flags and environment-specific config
+and archive mounts, including the container targets used by `backup.json`.
+Check the image reference privately, then run that environment's wrapper:
 
 ```sh
-/volume1/Tabula_Rasa_Postgres/config/bin/run-production.sh preflight
+wrapper preflight
 ```
 
 Require exit zero, `status: compatible`, `tls: true`, the intended schema
 revision and matching major-18 tool/server values. This is a read-only source
-check, not a backup. Keep #294 open: controlled backup execution, scheduling,
-retention, failure drills and retained-archive isolated restore acceptance
-remain separate operator work. These instructions do not perform deployment.
+check, not a backup. Complete a controlled backup and retained-archive restore
+when accepting a new image; scheduling, retention and failure drills remain
+separate operational checks.
 
 Configure **DSM Task Scheduler** with a known `America/New_York` local timezone
 and working NTP; verify the displayed timezone and next-run dates. Do not
@@ -274,18 +270,22 @@ review phases and capacity with the operator before accepting the schedule.
 These are slower-than-hourly checks, so detection/notification can be delayed by up to
 roughly the check interval plus execution/runtime latency. Neither cadence
 changes the runner's 24-hour catch-up limit nor retries an already attempted
-failed slot. Configure nonzero-exit notification to the authorized operator. Healthy/no-attempt and in-progress-within-grace results exit zero;
-failed, missing, stale, capacity and overdue states exit nonzero. Configure notification on abnormal
+failed slot. Configure nonzero-exit notification to the authorized operator.
+Healthy and in-progress-within-grace results exit zero. A `no_attempt` result
+exits zero only when its `health` is healthy or running; failed, missing, stale,
+capacity and overdue health still exit nonzero. Configure notification on abnormal
 termination, not on every successful tick. In DSM Control Panel → Notification →
 Email, configure the separate **Sender email** service and authorized recipient
 profiles; Synology Account's successful test email alone does not establish
-Task Scheduler delivery. Test both a synthetic scheduled successful task and an
-`exit 1` failure-only task, verify actual emailed results, and remove the test
+Task Scheduler delivery. Test a synthetic scheduled successful task with success
+notification enabled and an `exit 1` task with abnormal-only notification,
+verify actual emailed results, and remove the test
 task. Do not test delivery by deliberately breaking real backup jobs. The archive task alone
 cannot detect its own missing registration or a powered-off NAS; use an
 independent external availability/check-in monitor or a recorded operator
 health-check responsibility for that failure boundary. Coordinate future
-central alert integration with #332; no general job framework is introduced.
+central alert integration with the [observability guide](OBSERVABILITY.md);
+application readiness does not replace backup monitoring.
 
 The runner computes Sunday/Wednesday 22:00 in `America/New_York` from timezone
 data, independently of container local time. UTC capture times are recorded in
@@ -340,19 +340,98 @@ uncompressed working dump, encrypted output and growth. The example 1 GiB is
 only an initial placeholder, not capacity certification; mid-run exhaustion
 still fails safely. Inspect `status` free bytes and DSM storage trends and set
 an actionable capacity notification. Unlimited retention does not mean unlimited
-capacity. Preserve #259 evidence and verified copies before considering any
-explicit future retention-policy change under #223/#339.
+capacity. Preserve recovery records and verified copies before considering any
+explicitly approved future retention-policy change.
 
-Measure the actual selected project's remaining Free compute/transfer allowance
-before enabling recurrence. [Neon plans](https://neon.com/docs/introduction/plans)
-currently describe shared project allowances; recheck the actual console/plan
-rather than hardcoding them in this runner. Record before/after compute and
-public-transfer usage for a representative backup, duration, compute size,
-archive bytes, cold-start/idle overhead, other production/UAT demand and NAS
-free space. Budget up to ten scheduled captures per calendar month **per
-selected database**, plus controlled/manual runs and restore drills. Archive
-size is not a network-transfer measurement; dump compression happens client
-side. Record headroom and quota/capacity gaps, and stop enablement if inadequate.
+Inspect the selected project's compute, storage and public-transfer allowances
+in its current provider console/plan before enabling recurrence; do not hardcode
+Free-plan limits. Production and UAT branches in one project share its budget.
+Record the dashboard scope, billing period, units and reporting delay. If only
+an organization aggregate is available, label it as an aggregate: it can bound
+an included project's contribution for the same metric and period, but cannot
+attribute consumption to a project or backup. Branch views need reconciliation
+before treating them as a complete project total.
+
+Where available, take mature before/after usage readings around a representative
+backup, allowing for provider reporting delay and noting other activity. Record
+duration, compute size, archive bytes, cold-start/idle overhead, production/UAT
+demand, manual/drill runs and NAS free space. Unchanged readings immediately
+after a run do not establish zero usage. Archive size is not network transfer;
+dump compression happens client side. Budget up to ten scheduled captures per
+calendar month **per selected database**, plus controlled/manual runs and restore
+drills. Record any attribution or headroom uncertainty, and stop enablement if
+available capacity is inadequate.
+
+Measure backup age using the verified manifest's capture start at a recorded UTC
+observation time; `last_success` is completion time, not the recovery point.
+Sunday/Wednesday due slots have nominal 72-hour and 96-hour spacing in ordinary
+weeks, with a one-hour DST variation when the interval crosses a clock change.
+Failed/missed captures increase the gap. A 24-hour catch-up window and frequent
+health polling do not make this a daily backup or a 24-hour RPO.
+
+## Failed or interrupted backup recovery
+
+1. Identify the exact environment/database namespace and use its own wrapper to
+   run `status`. Record the current `status`, last verified success and capacity.
+   Treat an old `code` field in `status.json` as diagnostic history when its
+   `result` describes a later running attempt; do not infer the current state
+   from that field alone. Keep private state and source details out of logs.
+2. Confirm whether the task/container is still active. `running` within the
+   two-hour grace is not a completed backup; `overdue` requires investigation.
+   A stop may remove `.lock` or leave it behind. Absence of a lock does not
+   establish success. If it remains, confirm the old process stopped before
+   removing only the exact empty lock directory as described above.
+3. Verify the prior complete generation with `verify --generation <name>`.
+   Keep `incomplete/` output quarantined: it may contain a plaintext dump and
+   must remain inside the protected encrypted share. Do not publish it, use it
+   as a completed backup or delete it to clear a failure.
+4. Diagnose storage reserve, mount/permissions, client/source compatibility or
+   task interruption without weakening TLS or changing the live source. A
+   failed/interrupted attempt already consumed its slot; another `scheduled`
+   tick does not retry it. After correcting the cause and obtaining target
+   authorization, perform one explicit `wrapper run` in that namespace.
+5. Require `complete`, then check `status` is healthy and verify the new
+   generation. Retain the old successful generation and quarantined partials;
+   cleanup requires separate exact-target approval. If recovery fails, preserve
+   the failure state and stop for diagnosis rather than repeatedly rerunning.
+
+## Controlled failure and catch-up drills
+
+Use a disposable protected configuration and archive namespace with a new
+storage marker and its own environment/source status and lock path. Verify that
+neither live wrapper/task nor live archive namespace is selected. Use an
+authorized read-only source connection or synthetic database; even read-only
+dumps consume provider/NAS resources. Do not deliberately break production/UAT
+tasks or alter the NAS clock.
+
+- Establish a complete baseline generation, record `status`, and verify its
+  ciphertext checksum. For a capacity failure, set `minimum_free_bytes` above
+  available space **only in the disposable config**; do not fill the disk.
+  Require a nonzero storage failure and preserved prior verified generation.
+  Another `scheduled` tick for that attempted slot must be `no_attempt` and
+  still report unhealthy health, not a fresh dump.
+- For interruption, use a reviewed test fixture to pause a client stage and
+  stop only the named drill container after confirming an attempt began.
+  Verify it stopped, inspect whether a lock remains, and retain unpublished
+  `incomplete/` output and the previous verified complete generation. Do not
+  assume every stop leaves a stale lock. Inspect running/overdue status and
+  perform the manual recovery procedure above after removing the test fixture.
+- To test overdue classification without waiting, evaluate the runner's health
+  function with a time beyond `started_at + 2 hours` against a read-only mounted
+  drill namespace. Label this as simulated classification; it does not test
+  actual elapsed-time scheduling, CLI exit status or emailed delivery. Verify
+  those boundaries separately using the scheduler notification checks.
+- For missed-slot catch-up, use a **fresh** disposable namespace with no prior
+  attempt, invoke `scheduled` after a due slot but within 24 hours, and require
+  a complete generation and healthy status. A second invocation for the same
+  slot must be `no_attempt` with healthy health. This simulates eligibility and
+  duplicate prevention; it does not prove a live DSM task was missed or that
+  NAS-offline detection works.
+
+Keep baseline, failed/interrupted and recovered artifacts until separately
+authorized cleanup. Record each drill's tested boundary and limitations in
+restricted operator records. Test an external missing-NAS check-in independently;
+a task running on the NAS cannot report its own power or network outage.
 
 ## Isolated retained-archive restore drill
 
@@ -380,42 +459,100 @@ side. Record headroom and quota/capacity gaps, and stop enablement if inadequate
    Do not reuse the source backup service or default connection. Run:
 
    ```sh
-   pg_restore --no-password --exit-on-error --dbname 'service=isolated_recovery' /protected/restore.dump
+   pg_restore --no-password --single-transaction --exit-on-error --dbname 'service=isolated_recovery' /protected/restore.dump
    ```
 
    Use explicit `PGSERVICEFILE`/`PGPASSFILE` paths for this recovery process.
    There is deliberately no automated live restore command. Do not use
-   `--clean`, `--create`, automatic ownership/ACL suppression or source overwrite
-   to force success. Investigate failures and retain the isolated target.
+   `--clean`, `--create` or source overwrite to force success. If the target's
+   role/provider boundaries prevent ownership or privilege replay, use the
+   explicit staged procedure below; suppression alone is not security recovery.
+   Investigate failures and retain the isolated target.
 4. Compare the complete database/schema/security inventory: schemas, tables,
    sequences, all entities, constraints, functions/triggers, extensions,
    ownership, effective grants, authority, identity/job/audit/control records
    and release/Alembic revision. Restore uses the historical capture's compatible
    release; do not stamp/upgrade the target before verifying it.
-5. Use #259's existing `scripts/verify_postgres_recovery.py inspect` and `verify`
+5. Use `scripts/verify_postgres_recovery.py inspect` and `verify`
    with the isolated target's explicit `TABULA_RASA_RECOVERY_DATABASE_URL` and
    independently retained source exports. Follow its distinct source/target
    fingerprint contract. Run it for every expected bookkeeping entity. Verify
    overlapping local IDs stay isolated, relationships/content are complete,
    transfers/mileage retain their semantics, and balance/accounting integrity
    holds. Separately verify objects outside its `entity_bookkeeping` scope.
+   Post-capture exports are corroboration, not an independent at-capture oracle.
+   Investigate each mismatch against capture timing and authorized changes;
+   do not dismiss differences merely because receipts or sessions can change.
 6. Record elapsed declaration-to-verified recovery time including operator/key
    access, target creation, decrypt/restore and all validation; source capture
    time, actual backup age/point gap, included/excluded controlled commits and
    limitations. Retain private reports, source/target inventory and the tested
-   archive. Link **sanitized** additional NAS evidence to #259 when GitHub-write
-   authorization is available. Keep ongoing health/retention ownership in #294.
-   Have the alternate operator repeat the documented procedure.
+   archive in restricted operator records. SQL execution duration alone is not
+   declaration-to-verified database RTO. Have the alternate operator repeat the
+   documented procedure with their approved access and key custody.
+
+### Staged ownership and privilege recovery
+
+Use this only as an explicitly reviewed isolated-target procedure when ordinary
+restore cannot recreate source ownership or grants. Never escalate, impersonate
+or recreate managed-provider roles to force replay to succeed.
+
+1. Inventory source object owners, application roles, object ACLs, default
+   privileges and provider-managed roles before restoring. If an initial
+   data/schema restore uses `--no-owner --no-privileges`, record those exclusions
+   and run it with `--single-transaction --exit-on-error` against the same
+   independently verified new empty target. Exit zero proves only the selected
+   restore scope; ownership and privilege parity remain unverified.
+2. Compare capture-time source and target schema-only inventories from matching
+   client versions. A current source dump is comparable only after accounting
+   for post-capture schema/security changes; retain the archive's own schema
+   output as the captured reference.
+   First use `--no-owner --no-privileges` to inspect structural parity, then
+   compare full schema-only output including ownership and grants. Normalize
+   only non-semantic dump comments, random psql restriction tokens and blank
+   formatting; never filter SQL, owner, ACL, RLS or default-privilege differences
+   out of the security comparison. Preserve the restriction commands when
+   executing SQL; normalization applies only to comparison copies. Retain
+   differences privately.
+3. Inspect the retained archive's `pg_restore --list` output. Make an explicit
+   reviewed selection of object `ACL` entries and a separate selection of
+   `DEFAULT ACL` entries by owning role. Presence in the archive proves
+   recoverability material exists, not that it can be applied. Do not select by
+   expected counts or loosely matching role names alone.
+4. Preview each selected list offline with `pg_restore --use-list <list>
+   --file <private-preview.sql> /protected/restore.dump`. Review every statement,
+   recipient role and affected object. Keep provider-managed defaults separate
+   from application/owner-controlled defaults, and reject unexpected changes.
+5. Reconfirm target identity, then apply only the approved list using
+   `pg_restore --no-password --use-list <list> --single-transaction
+   --exit-on-error --no-owner --dbname 'service=isolated_recovery'
+   /protected/restore.dump`. A failed transactional replay is not partial
+   success; inspect target state before continuing. Do not fall back to replay
+   without transactional/error-stop safeguards.
+6. Repeat grant-aware schema comparison after each approved group. Reconcile
+   provider-managed defaults (for example Neon `cloud_admin` defaults) against
+   the target provider's supported setup; do not try to replay them as an
+   ordinary recovery role. Record any remaining difference, impact and required
+   operator/provider decision. Separately reconcile ownership where suppressed.
+7. Verify effective access using the intended runtime/recovery roles, including
+   denied cross-business access and privileges on future objects governed by
+   default grants. Matching SQL inventories do not establish effective-role,
+   identity or authority parity. Do not reopen service until the managed
+   recovery contract's security and return-to-service checks pass.
 
 Sunday/Wednesday backups are approximately three/four days apart, longer after
 failures; they do not meet the proposed 24-hour fallback or 5-minute PITR RPO.
 They are logical database recovery points, not Neon managed snapshots or PITR.
 Receipt/document bytes remain the separate DocumentStore recovery responsibility
-under #223/#337/#338. Filesystem versioning protects only already captured
+described in [document storage and recovery](DOCUMENT_STORAGE_RECOVERY.md).
+Filesystem versioning protects only already captured
 files. Neither this tooling nor a successful database drill supplies commercial
 readiness, a live authority switch or full-service/document recovery.
 
-## Acceptance evidence still required on the selected NAS
+## Operational acceptance checklist
+
+Apply this checklist for the selected deployment; it records required checks,
+not the completion state of a particular installation or drill.
 
 - [ ] Direct ARM64 execution, exact DSM/package/image versions, compatible TLS
   PostgreSQL clients and resource capacity are proven on DS220j.
@@ -429,51 +566,12 @@ readiness, a live authority switch or full-service/document recovery.
   with Windows/application offline.
 - [ ] Failed/interrupted/missed-run tests preserve the last usable archive;
   partials remain quarantined. Capacity visibility and no-prune retention hold.
-- [ ] Actual Free-plan compute/transfer usage and backup-point gaps are measured.
+- [ ] Provider usage scope/period/reporting delay, capacity headroom and actual
+  backup ages/point gaps are recorded; per-run attribution limits are explicit.
 - [ ] A retained NAS archive decrypts/restores into isolation and passes complete
   inventory, entity isolation, accounting integrity/content and alternate-operator
-  checks. RTO/age/limitations and additional #259 evidence are recorded.
-
-
-## Operator evidence checkpoint — October 18–19, 2026 (not final acceptance)
-
-The operator confirmed that a genuine DS220j scheduled production backup at
-Sunday 22:00 EDT and UAT backup at Sunday 22:30 EDT each exited `Normal (0)`,
-published a complete encrypted generation and reported healthy status. The
-separate DSM email sender was configured; a synthetic scheduled success email
-and an abnormal-only `exit 1` Task Scheduler email were delivered. The test
-task was removed, and email notifications were enabled on production/UAT
-catch-up and health jobs. This tests DSM email transport, **not** an actual
-NAS backup-health failure or a powered-off NAS; the independent external
-check-in remains outstanding.
-
-Retained UAT generation
-`20261019T023012740769Z-6b2a00acbb1d455faa7c707fab531518`, completed
-`2026-10-19T02:30:24.982350Z`, recorded PostgreSQL 18.6 and revision
-`0014_document_locations`. Its ciphertext digest matched the manifest,
-the privately held age identity matched the NAS public recipient, decryption
-and archive traversal succeeded, and a separate empty Neon recovery database
-accepted `pg_restore --single-transaction --exit-on-error --no-owner
---no-privileges` with exit zero in **25.6577183 seconds**. The restored
-database has 52 public tables, 2 sequences, 106 foreign keys, 209 check
-constraints (0 unvalidated), and the exact manifest revision. The application
-canonical verifier matched 7 of 8 business entities exactly. The eighth
-had an independently timed post-capture receipt upload (new document/link,
-entry version and update timestamp). Subsequent logins explain differences
-in ephemeral identity records. No unexplained financial-content differences
-were identified. See [#294 operator evidence](https://github.com/Roklion/Project_Tabula_Rasa/issues/294#issuecomment-6259851298).
-
-**Limits:** The 25.66 seconds is SQL restore execution time, **not** end-to-end
-declaration-to-verified database RTO. The target was restored using ownership
-and privilege suppression, so source grants, roles, authority and security
-parity still require verification and recovery-role handling. Expected
-bookkeeping exports were made after capture; a controlled capture with
-independent exports at the recovery point remains the higher-standard test.
-External DocumentStore receipt bytes are not in a PostgreSQL archive.
-Genuine interrupted/missed NAS runs, offline detection, NAS encryption/remount
-and operator custody, capacity/quota headroom, and alternate-operator recovery
-remain open. Do not delete the recovery target or retained archive before
-authorization and evidence acceptance.
+  checks. Ownership/grant exceptions, effective-role checks and database/full-service
+  RTO distinctions are recorded alongside backup age and recovery limitations.
 
 ## Developer validation
 
