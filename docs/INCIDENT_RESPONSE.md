@@ -218,8 +218,13 @@ Measure database RTO from incident declaration through full database validation,
 including access/operator delay. Full-service RTO additionally includes secure
 binding, auth, bytes and smoke. Record observed recovery point/loss independently
 from approved objectives; proposals in #298 are not accepted commitments.
-NAS policy remains Sunday/Wednesday 22:00 America/New_York with indefinite
-successful-generation retention; no automatic prune or plan purchase is implied.
+NAS scheduled captures are Sunday/Wednesday at 22:00 for production and 22:30
+for UAT in `America/New_York`, following DST; the runner's due slot remains
+22:00 for both environments. Use the selected generation's manifest capture
+time to measure the actual recovery point, and follow the
+[NAS schedule and catch-up phases](NAS_POSTGRESQL_BACKUP.md#nas-command-and-schedule).
+Successful-generation retention remains indefinite; no automatic prune or
+plan purchase is implied.
 
 ## Provider, worker and document cases
 
@@ -230,7 +235,7 @@ successful-generation retention; no automatic prune or plan purchase is implied.
 | Google OAuth/Drive outage or revoked grant | Preserve ledger metadata and bytes. Inspect the affected entity's connection lifecycle, exact grant/root and provider state; Owner reconnects through the existing connection flow. Ledger reads can remain available if safe. Disconnect locally before separately approved provider revocation; see secret guide for shared-consent impact. |
 | Failed/dead worker job | Use `inspect` and `attempts`, classify safe outcome and inspect committed partial recurring effects. Stop the relevant timer/definition if needed; fix the cause, then use existing `retry` with the same job identity and bounded budget. Never delete/recreate runs or manually replay postings. |
 | Recurring workload containment | Stop the external timer. If authority must be removed, use the existing `recurring-disable` with exact entity/service/time zone and `--allow-mutations`; verify `recurring-status=explicit`. It drains/fences occurrence writes. Definition pause alone cannot promise that. Do not disable period policy to bypass a locked-period failure. |
-| Missing/failed NAS backup | Use the [NAS health and notifications](NAS_POSTGRESQL_BACKUP.md#nas-command-and-schedule) exit state, capacity and due-slot/grace rules. Repair access/capacity/schedule, run the approved bounded recovery and verify a healthy generation. Retain all successful generations; missed backup monitoring is not replaced by API readiness. |
+| Missing/failed NAS backup | Use the [NAS health and notifications](NAS_POSTGRESQL_BACKUP.md#nas-command-and-schedule) exit state, capacity and due-slot/grace rules. Follow [failed/interrupted backup recovery](NAS_POSTGRESQL_BACKUP.md#failed-or-interrupted-backup-recovery): confirm the old task stopped, preserve quarantined partials and prior generations, correct the cause, then perform one authorized manual run and verify healthy recovery. Missed backup monitoring is not replaced by API readiness. |
 | Receipt-byte loss | Restrict affected document operations, preserve metadata, links, originals and unreferenced uploads. Use the same entity's approved Drive/NAS byte recovery; verify exact version/checksum, private permissions and two-business isolation. DB restore alone cannot restore bytes. #337/#338 own provider binding/byte archives and their still-unverified gaps. Never delete newer files or relink another entity's receipt to simulate recovery. |
 
 Mutation commands require explicit target authorization. After cause/target
