@@ -65,3 +65,12 @@ def test_cli_rejects_unsafe_origins_before_prompting(monkeypatch, origin):
     with pytest.raises(SystemExit):
         cli.main(args)
     prompt.assert_not_called()
+
+@pytest.mark.parametrize('origin', ['http://127.0.0.1:8000', 'http://localhost:8000', 'http://[::1]:8000'])
+def test_cli_accepts_supported_loopback_origins(monkeypatch, origin):
+    session = client(monkeypatch)
+    args = arguments()
+    args[2] = origin
+    assert cli.main(args) == 0
+    assert session.post.call_args.args[0].startswith(origin + '/api/v1/support/')
+    assert session.post.call_args.kwargs['cookies'] == {'tabula_dev_session': 'synthetic-private-cookie'}

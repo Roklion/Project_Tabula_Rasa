@@ -47,7 +47,11 @@ incident procedure for a compromised global identity. No support command can
 restore, migrate, reset books, change credentials, fetch ledger rows or download
 receipts. Administrative plans bind exact scope, reason, operation, target and
 current relevant state. A changed membership or session set invalidates a stale
-plan. Preview is default; applying requires the returned plan hash.
+plan. Confirmed session rows stay locked until commit, and the update targets
+only their immutable cache IDs. Sessions arriving or switching into the business
+after that boundary remain outside the confirmed set; inspect and preview again
+if further containment is needed. Preview is default; applying requires the
+returned plan hash.
 
 ## CLI and bounded audit export
 

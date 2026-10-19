@@ -409,3 +409,48 @@ def test_nonowner_runtime_can_append_scoped_history_but_cannot_provision_or_muta
         with database.engine.begin() as connection:
             connection.exec_driver_sql(f'DROP OWNED BY "{role}"')
             connection.exec_driver_sql(f'DROP ROLE "{role}"')
+
+@pytest.mark.parametrize('movement', ['arriving', 'departing'])
+def test_confirmed_revocation_uses_exact_locked_session_set(database, support, movement):
+    from sqlalchemy import event
+    from tabula_rasa.infrastructure.postgres.config import DatabaseSettings
+    from tabula_rasa.infrastructure.postgres.runtime import Database
+    from tabula_rasa.infrastructure.postgres.sessions import PostgresSessionRepository, credential_hash
+    service, raw, _, repo, _, bob, _, org_a, org_b, _, auth, _ = support
+    repo.set_membership(org_a, bob.id, 'editor')
+    selected_raw, _ = auth.sessions.issue(verified('bob'))
+    auth.sessions.select(selected_raw, 'alpha')
+    other_raw, _ = auth.sessions.issue(verified('bob'))
+    auth.sessions.select(other_raw, 'beta')
+    preview = service.administer(raw, org_a, 'alpha', 'incident', 'revoke_sessions', target_user_id=bob.id)
+    other = Database(DatabaseSettings(database.engine.url))
+    other_sessions = PostgresSessionRepository(other, 'test', 'a' * 64)
+    observed = []
+    def before_update(connection, cursor, statement, parameters, context, many):
+        if observed or not statement.lstrip().startswith('UPDATE identity_sessions SET revoked_at=clock_timestamp()'):
+            return
+        observed.append(movement)
+        if movement == 'arriving':
+            # A real second connection moves an unconfirmed session into this
+            # business between the confirmation-set read and revocation UPDATE.
+            other_sessions.select(other_raw, 'alpha')
+        else:
+            # A confirmed session must not escape by changing its selection
+            # during that same window; existing session mutation shares its lock.
+            with pytest.raises(DatabaseError):
+                with other.transaction() as concurrent:
+                    concurrent.execute(text("SET LOCAL lock_timeout='150ms'"))
+                    concurrent.execute(text("""UPDATE identity_sessions SET organization_id=:org,entity_id='beta'
+                        WHERE credential_hash=:credential"""),
+                        {'org': org_b, 'credential': credential_hash(selected_raw)})
+    event.listen(database.engine, 'before_cursor_execute', before_update)
+    try:
+        result = service.administer(raw, org_a, 'alpha', 'incident', 'revoke_sessions',
+                                    target_user_id=bob.id, confirm_plan=preview.plan_sha256)
+        assert result.applied and observed == [movement]
+    finally:
+        event.remove(database.engine, 'before_cursor_execute', before_update)
+        other.dispose()
+    with pytest.raises(IdentityError):
+        auth.sessions.validate(selected_raw)
+    assert auth.sessions.validate(other_raw).selected.entity_id == ('alpha' if movement == 'arriving' else 'beta')

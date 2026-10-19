@@ -31,7 +31,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     origin = urlsplit(args.origin)
     if (origin.scheme not in {'https', 'http'} or not origin.hostname
-            or origin.scheme == 'http' and origin.hostname not in {'127.0.0.1', 'localhost'}
+            or origin.scheme == 'http' and origin.hostname not in {'127.0.0.1', 'localhost', '::1'}
             or origin.username or origin.password or origin.query or origin.fragment
             or origin.path not in {'', '/'} or not 1 <= args.limit <= 100):
         parser.error('Use an HTTPS application origin (or loopback development) and a limit of 1-100.')

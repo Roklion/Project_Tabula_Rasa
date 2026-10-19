@@ -152,7 +152,7 @@ class PostgresSupport:
             # a changed membership invalidate an earlier preview.
             sessions = tuple(connection.scalars(text("""SELECT cache_id FROM identity_sessions
                 WHERE organization_id=:org AND user_id=:user AND environment=:env AND revoked_at IS NULL
-                ORDER BY cache_id"""), {'org': organization_id, 'user': target_user_id,
+                ORDER BY cache_id FOR UPDATE"""), {'org': organization_id, 'user': target_user_id,
                                        'env': self.sessions.environment})) if operation == 'revoke_sessions' else ()
             plan = sha256(json.dumps([organization_id, entity_id, self.sessions.environment,
                 reason, operation, target_user_id, state, dict(member) if member else None, sessions],
@@ -167,8 +167,10 @@ class PostgresSupport:
                     repository.set_organization_state(organization_id, 'suspended')
                 else:
                     connection.execute(text("""UPDATE identity_sessions SET revoked_at=clock_timestamp()
-                        WHERE organization_id=:org AND user_id=:user AND environment=:env AND revoked_at IS NULL"""),
-                        {'org': organization_id, 'user': target_user_id, 'env': self.sessions.environment})
+                        WHERE organization_id=:org AND user_id=:user AND environment=:env AND revoked_at IS NULL
+                        AND cache_id=ANY(:sessions)"""),
+                        {'org': organization_id, 'user': target_user_id, 'env': self.sessions.environment,
+                         'sessions': list(sessions)})
             self._record(connection, entity_id, operation if confirm_plan is not None else 'preview', reason, target_user_id,
                          environment=self.sessions.environment, requested_operation=operation)
             return AdministrativeResult(confirm_plan is not None, plan)
