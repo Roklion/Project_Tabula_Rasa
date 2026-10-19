@@ -2,6 +2,9 @@
 import io
 import json
 from pathlib import Path
+import runpy
+import subprocess
+import sys
 import tarfile
 from types import SimpleNamespace
 
@@ -102,10 +105,11 @@ def test_occupied_beta_target_stops_before_upload_or_database_execution(tmp_path
     assert not json.loads((output / 'sanitized-evidence.json').read_text())['passed']
 
 
-@pytest.mark.parametrize('exit_code', [0, 1])
+@pytest.mark.parametrize('exit_code', [0, 1, None])
 def test_test_environment_isolated_and_success_or_failure_artifacts_never_expose_private_inputs(tmp_path, monkeypatch, capsys, exit_code):
     source, output, key = environment(tmp_path, monkeypatch, configurations())
     provider(monkeypatch)
+    monkeypatch.setenv('PYTHONOPTIMIZE', '1')
     receipt = b'synthetic-private-receipt'
     import hashlib
     digest = hashlib.sha256(receipt).hexdigest()
@@ -121,17 +125,31 @@ def test_test_environment_isolated_and_success_or_failure_artifacts_never_expose
         assert command[1:] == ['-m', 'pytest',
             'tests/postgres/test_drive_document_recovery.py::test_real_drive_staging_exact_byte_backup_and_isolated_restore', '-q', '-s']
         assert 'TABULA_RASA_DATABASE_URL' not in env
+        assert 'PYTHONOPTIMIZE' not in env
+        assert kwargs['timeout'] == 480
         assert 'DRIVE_RECOVERY_STAGING_BINDING' not in env and 'DRIVE_RECOVERY_ARCHIVE_KEY' not in env
         assert env['TABULA_RASA_TEST_DATABASE_URL'] == 'postgresql+psycopg://tabula_test@postgres:5432/postgres'
         assert env['TABULA_RASA_ALLOW_DRIVE_RECOVERY_STAGING_DRILL'] == 'approved'
         root = Path(env['DRILL_PRIVATE']) / 'pytest-output' / 'test-synthetic' / 'archives'
         root.mkdir(parents=True)
         (root / 'synthetic.bin').write_bytes(receipt)
+        if exit_code is None:
+            raise subprocess.TimeoutExpired(command, 480, output='synthetic-private-error')
+        if exit_code == 1:
+            monkeypatch.setenv('DRILL_PRIVATE', env['DRILL_PRIVATE'])
+            plugin = runpy.run_path(str(Path(env['DRILL_PRIVATE']) / 'custody_plugin.py'))
+            call = SimpleNamespace(when='call', excinfo=SimpleNamespace(
+                typename='AssertionError', value='synthetic-private-error',
+                traceback=[SimpleNamespace(path='/private/test_recovery.py', name='test_recovery', lineno=9)]))
+            hook = plugin['pytest_runtest_makereport'](None, call)
+            next(hook)
+            with pytest.raises(StopIteration):
+                next(hook)
         status = dict(status='drive_recovery_drill_passed', entities=2, documents=4,
                       isolated_db_and_drive=True, originals_retained=True)
         return SimpleNamespace(returncode=exit_code, stdout=json.dumps(status), stderr='synthetic-private-error')
     monkeypatch.setattr(runner.subprocess, 'run', execute)
-    assert runner.main() == exit_code
+    assert runner.main() == (0 if exit_code == 0 else 1)
     evidence = json.loads((output / 'sanitized-evidence.json').read_text())
     assert evidence['passed'] == (exit_code == 0)
     if exit_code == 0:
@@ -140,6 +158,23 @@ def test_test_environment_isolated_and_success_or_failure_artifacts_never_expose
     with tarfile.open(fileobj=io.BytesIO(blob), mode='r:gz') as archive:
         binding = next(member for member in archive.getmembers() if member.name.endswith('/binding.json'))
         assert 'synthetic-client-secret' in archive.extractfile(binding).read().decode()
+        assert any(member.name.endswith('/synthetic.bin') for member in archive.getmembers())
+        if exit_code == 1:
+            member = next(member for member in archive.getmembers() if member.name.endswith('/test-diagnostic.json'))
+            assert json.load(archive.extractfile(member)) == {'phase': 'call', 'exception_type': 'AssertionError',
+                'frames': [{'file': 'test_recovery.py', 'function': 'test_recovery', 'line': 10}]}
+        if exit_code is None:
+            assert evidence['exception_type'] == 'TimeoutExpired'
     logs = capsys.readouterr().out + (output / 'sanitized-evidence.json').read_text()
     assert 'synthetic-client-secret' not in logs and key.decode() not in logs
     assert receipt.decode() not in logs and 'synthetic-private-error' not in logs
+
+
+def test_optimized_python_refused_before_private_directories_or_provider_access(tmp_path, monkeypatch):
+    _, output, _ = environment(tmp_path, monkeypatch, {})
+    result = subprocess.run([sys.executable, '-O', str(Path(runner.__file__).resolve())],
+        capture_output=True, text=True, check=False)
+    assert result.returncode == 1
+    assert json.loads(result.stdout) == {'passed': False, 'exception_type': 'RuntimeError',
+        'private_details_suppressed': True}
+    assert not output.exists()

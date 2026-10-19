@@ -46,6 +46,7 @@ jobs:
       - name: Require reviewed main history before granting credentials
         run: git -C source merge-base --is-ancestor "$SOURCE_SHA" origin/main
       - name: Install test dependencies
+        timeout-minutes: 5
         working-directory: source
         run: python -m pip install --quiet -r requirements-dev.txt
       - name: Run isolated recovery and encrypt private evidence

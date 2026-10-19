@@ -228,6 +228,12 @@ running the exact opt-in test. It retains generated grant-envelope keys privatel
 verifies archived bytes offline after success, and emits sanitized status only.
 Provider/test tracebacks and private inputs are not printed. Failures retain
 available private artifacts encrypted and do not delete source or target files.
+Python optimization is refused so validation assertions remain active. The test
+has an eight-minute subprocess timeout within the twenty-minute job budget,
+leaving time to encrypt available evidence and upload it on test failure. Private
+diagnostics retain only exception categories and frame locations; exception
+messages, locals and raw pytest output are excluded. Runner termination or a
+provider/preflight failure can still prevent complete evidence capture.
 
 Only sanitized evidence and a Fernet-authenticated encrypted archive are uploaded.
 The archive includes private binding/grant material, canonical manifests and

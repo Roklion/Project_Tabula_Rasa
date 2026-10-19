@@ -13,6 +13,8 @@ from cryptography.fernet import Fernet
 
 
 def main():
+    if sys.flags.optimize:
+        raise RuntimeError('Python optimization must be disabled for recovery validation')
     os.umask(0o077)
     source = Path(os.environ['GITHUB_WORKSPACE']) / 'source'
     output = Path(os.environ['RUNNER_TEMP']) / 'drive-recovery-evidence'
@@ -54,7 +56,8 @@ def main():
         binding_path = private / 'binding.json'
         binding_path.write_text(json.dumps(binding))
         # Preserve the test's newly generated grant-envelope key in the encrypted archive.
-        (private / 'custody_plugin.py').write_text('''import os
+        (private / 'custody_plugin.py').write_text('''import json
+import os
 from pathlib import Path
 import pytest
 @pytest.hookimpl(tryfirst=True)
@@ -67,9 +70,17 @@ def pytest_runtest_call(item):
             super().__init__(directory, key)
             (root / 'grant-envelope.key').write_text(key)
     item.module.ConnectionSecrets = RetainedSecrets
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    yield
+    if call.excinfo is not None:
+        diagnostic = {'phase': call.when, 'exception_type': call.excinfo.typename,
+            'frames': [{'file': Path(str(frame.path)).name, 'function': frame.name,
+                'line': frame.lineno + 1} for frame in call.excinfo.traceback][-8:]}
+        (Path(os.environ['DRILL_PRIVATE']) / 'test-diagnostic.json').write_text(json.dumps(diagnostic))
 ''')
         env = {k: v for k, v in os.environ.items() if not k.startswith('TABULA_RASA_')
-            and k not in {'DRIVE_RECOVERY_STAGING_BINDING', 'DRIVE_RECOVERY_ARCHIVE_KEY'}}
+            and k not in {'DRIVE_RECOVERY_STAGING_BINDING', 'DRIVE_RECOVERY_ARCHIVE_KEY', 'PYTHONOPTIMIZE'}}
         env.update(TABULA_RASA_TEST_DATABASE_URL='postgresql+psycopg://tabula_test@postgres:5432/postgres',
             TABULA_RASA_DRIVE_RECOVERY_STAGING_BINDING=str(binding_path),
             TABULA_RASA_ALLOW_DRIVE_RECOVERY_STAGING_DRILL='approved', DRILL_PRIVATE=str(private),
@@ -78,7 +89,7 @@ def pytest_runtest_call(item):
             PYTEST_ADDOPTS='--tb=no --basetemp=' + str(private / 'pytest-output'))
         result = subprocess.run([sys.executable, '-m', 'pytest',
             'tests/postgres/test_drive_document_recovery.py::test_real_drive_staging_exact_byte_backup_and_isolated_restore',
-            '-q', '-s'], cwd=source, env=env, capture_output=True, text=True)
+            '-q', '-s'], cwd=source, env=env, capture_output=True, text=True, timeout=480)
         evidence['pytest_exit_code'] = result.returncode
         for line in result.stdout.splitlines():
             try:
