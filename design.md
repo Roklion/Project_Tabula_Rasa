@@ -455,6 +455,30 @@ The [integrated acceptance record](docs/COMMERCIAL_UI_ACCEPTANCE.md) tracks the
 selected direction, exact-candidate evidence and separate manual/release gates.
 
 **Current behavior — commercial core presentation (#326–#328, EPIC #323 / initiative #124):**
+Issue #401 extends the existing shared shell and presentation owners. Independent
+page sections use the 32px spacing token, including sections following explanatory
+text or an action row. Sidebar context controls stay within the available width;
+the selected business's full name remains visible above the selector. The top bar
+identifies Workspace & members rather than displaying a generic Page placeholder.
+The business-first replacement names and selector retain #386–#388 ownership.
+
+Transactions and Mileage share an accessible Show filters / Hide filters button.
+The header keeps a short active-scope summary visible while collapsed. Collapsing
+keeps controls mounted and preserves filters, sorting, results, selection and CSV
+scope. Only the collapse preference is stored in session storage, separately for
+each page, actor, authorization cache scope, organization and business. Navigation
+still resets filter values as before; unavailable storage simply disables preference
+persistence. Report-period controls govern metrics as well as tables and remain
+expanded, as do create/edit/import forms and other workflow cards.
+
+Pending confirmations show live progress wording and disable their actions.
+Membership/ownership commands report confirmed success, retain safe rejection
+feedback, and stop resubmission after an uncertain outcome with reload guidance.
+There are no automatic mutation retries. Existing authorization, reauthentication,
+loaded-version and last-owner checks retain their owners. Final business-specific
+membership/onboarding acceptance still requires #386–#388; see the
+[follow-up record](docs/COMMERCIAL_UI_FOLLOWUP_401.md).
+
 The shell marks the current main destination with weight and a leading rule as
 well as color. Transactions remains the current main workflow for Journals,
 Mixed-use expenses and Recurring expenses. Categories & contacts groups

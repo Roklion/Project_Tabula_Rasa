@@ -29,7 +29,8 @@ export function ConfirmationDialog({ title, children, keepLabel, confirmLabel, o
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     }}>
-    <p id={description}>{children}</p>
+    <div id={description}>{children}</div>
+    {pending && <p role="status" aria-live="polite" className="notice neutral">Working… Please wait for confirmation before trying again.</p>}
     <div className="actions"><ActionButton disabled={pending} onClick={onKeep}>{keepLabel}</ActionButton>
       <ActionButton tone={confirmTone} disabled={confirmDisabled} pending={pending} onClick={onConfirm}>{confirmLabel}</ActionButton></div>
   </dialog>, document.body);

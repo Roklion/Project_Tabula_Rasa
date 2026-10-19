@@ -44,6 +44,15 @@ Owner grants and removal/demotion require provider authentication within five
 minutes. The database rejects removing the last active Owner, including races.
 Loaded membership authorization versions reject stale changes.
 
+After confirming a membership change or ownership grant, a live **Working**
+message remains visible while both dialog actions are disabled. Wait for the
+confirmed success notice or safe failure guidance. A rejected request restores
+the dialog controls; reauthentication still requires signing in again. An
+uncertain outcome disables resubmission: close the dialog and reload the member
+list to inspect current state before another change. Commands never retry
+automatically. The reported staging latency is a separate investigation; local
+synthetic delayed-response coverage does not establish its cause.
+
 The approved early restricted-beta delivery is **operator-distributed**, not
 outbound email. An authorized administrator enters the recipient email and role.
 The creation view displays a cryptographically random 256-bit credential once.

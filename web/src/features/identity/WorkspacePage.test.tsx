@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { api, ApiError, type ErrorCode } from '../../api/client';
 import { session } from '../../test/fixtures';
@@ -78,4 +78,38 @@ it('refreshes invitation state after an uncertain create without exposing or ret
   expect(await screen.findByText(/recipient@example.test.*pending/)).toBeVisible();
   expect(screen.queryByLabelText('New invitation credential')).not.toBeInTheDocument();
   expect(invite).toHaveBeenCalledTimes(1);
+});
+
+
+it.each(['success', 'reauthentication_required', 'uncertain'] as const)('membership confirmation gives immediate feedback and handles %s without duplicate submissions', async outcome => {
+  const member = { user_id: 'other', display_name: 'Synthetic member', role: 'read_only' as const, state: 'active' as const, authorization_version: 1 };
+  vi.spyOn(api, 'members').mockResolvedValue({ items: [member] });
+  vi.spyOn(api, 'invitations').mockResolvedValue({ items: [] });
+  let resolve!: () => void;
+  let reject!: (reason: unknown) => void;
+  const change = vi.spyOn(api, 'changeMember').mockImplementation(() => new Promise<void>((yes, no) => { resolve = yes; reject = no; }));
+  render(<ScopeBoundary session={{ ...session, trusted_development: false, capabilities: ['bookkeeping:read', 'members:manage', 'ownership:manage'] }}><WorkspacePage /></ScopeBoundary>);
+  fireEvent.click(await screen.findByRole('button', { name: 'Review membership change' }));
+  const confirm = screen.getByRole('button', { name: 'Confirm membership change' });
+  fireEvent.click(confirm); fireEvent.click(confirm);
+  expect(screen.getByText(/Working.*Please wait/)).toBeVisible();
+  expect(confirm).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Keep current membership' })).toBeDisabled();
+  expect(change).toHaveBeenCalledTimes(1);
+  await act(async () => { if (outcome === 'success') resolve(); else reject(new ApiError(outcome === 'uncertain' ? 'unavailable' : outcome)); });
+  expect(screen.queryByText(/Working.*Please wait/)).not.toBeInTheDocument();
+  if (outcome === 'success') {
+    expect(await screen.findByText('Membership change confirmed.')).toBeVisible();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  } else {
+    expect(screen.getByRole('button', { name: 'Keep current membership' })).toBeEnabled();
+    if (outcome === 'uncertain') {
+      expect(screen.getByText(/The outcome could not be confirmed/)).toBeVisible();
+      expect(confirm).toBeDisabled();
+    } else {
+      expect(screen.getByRole('link', { name: 'Sign in again' })).toBeVisible();
+      expect(confirm).toBeEnabled();
+    }
+  }
+  expect(change).toHaveBeenCalledTimes(1);
 });

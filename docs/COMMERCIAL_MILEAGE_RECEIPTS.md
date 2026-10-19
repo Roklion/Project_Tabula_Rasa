@@ -12,6 +12,12 @@ beta or commercial activation. Existing deployment/cutover gates still apply.
 
 ## Mileage
 
+The log's **Hide filters** / **Show filters** button collapses only the filter
+controls. Its summary keeps the selected dates/tag count visible; trips, totals
+and CSV stay filtered. Expand to change or clear filters. Collapse preference is
+remembered per page and authorized business/user scope in this browser tab when
+session storage is available; navigating still resets filter values as before.
+
 Open **Mileage** to view the business's log. Shared **View mileage log** /
 **Add trip** route links show the current workflow with weight and an underline,
 wrap on narrow screens and retain the dirty-navigation confirmation. Add trip

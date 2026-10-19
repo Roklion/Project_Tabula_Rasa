@@ -1,3 +1,4 @@
+import { FilterPanel } from '../../components/FilterPanel';
 import { ActionButton, PageHeader, SectionHeader, TableRegion } from '../../components/VisualPrimitives';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -37,7 +38,9 @@ export function MileagePage() {
     downloadBlob(new Blob([data.map(row => row.map(mileageCsvCell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' }), 'tabula-rasa-mileage.csv');
   }
   return <><PageHeader title="Mileage" description="Record business travel and review your mileage log." />
-    <section className="surface editor" aria-label="Mileage filters"><SectionHeader title="View & edit mileage log" description="Dates and tags apply to the log, totals and CSV download." /><div className="formGrid">
+    <FilterPanel name="mileage" title="View & edit mileage log" label="Mileage filters" summary={[
+      start && `From ${start}`, end && `To ${end}`, tagIds.length > 0 && `${tagIds.length} tags`,
+    ].filter(Boolean).join(' · ') || 'All trips'}><p className="fieldHint">Dates and tags apply to the log, totals and CSV download.</p><div className="formGrid">
       <Field id="from" label="From"><input id="from" type="date" value={start} onChange={e => setStart(e.target.value)} /></Field>
       <Field id="to" label="To"><input id="to" type="date" value={end} onChange={e => setEnd(e.target.value)} /></Field>
       {tags.isPending ? <LoadingState label="Loading tags…" /> : tags.isError ? <ErrorNotice error={tags.error} operation="read" onReview={() => void tags.refetch()} />
@@ -46,7 +49,7 @@ export function MileagePage() {
           {tags.data.items.map(tag => <option key={tag.id} value={tag.id}>{tag.name}</option>)}
         </select><p id="mileage-tag-hint" className="fieldHint">Use Ctrl or Command with click, or Shift with arrow keys, to select multiple tags.</p>
           <p id="mileage-tag-selection" className="fieldHint">Selected: {tagIds.length ? tagIds.map(id => names.get(id) ?? id).join(', ') : 'All tags'}</p></Field>}
-    </div><ActionButton onClick={() => { setStart(''); setEnd(''); setTagIds([]); }}>Clear filters</ActionButton></section>
+    </div><ActionButton onClick={() => { setStart(''); setEnd(''); setTagIds([]); }}>Clear filters</ActionButton></FilterPanel>
     {trips.isPending ? <LoadingState label="Loading mileage…" /> : trips.isError ? <ErrorNotice error={trips.error} operation="read" onReview={() => void trips.refetch()} /> : <>
       <p role="status">Trips: {rows.length} · Business miles: {(rows.reduce((sum, row) => sum + Math.round(Number(row.miles) * 10), 0) / 10).toFixed(1)}</p>
       <div className="actions tableToolbar"><ActionButton disabled={!rows.length} onClick={download}>Download filtered mileage CSV</ActionButton></div>

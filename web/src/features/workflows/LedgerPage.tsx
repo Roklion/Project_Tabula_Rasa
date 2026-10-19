@@ -1,3 +1,4 @@
+import { FilterPanel } from '../../components/FilterPanel';
 import { DateRangeFields } from '../../components/DateRangeFields';
 import { ActionButton, PageHeader } from '../../components/VisualPrimitives';
 import { useState } from 'react';
@@ -90,7 +91,12 @@ export function LedgerPage() {
       <Link className="button" to="/transactions/new">Add transaction</Link><Link to="/journals/new" className="button action-secondary">Add journal</Link></>} />
     {loadingRecord ? <LoadingState label="Loading record…" /> : copy ? <TransactionCopyEditor draft={copy.draft} sourceId={copy.sourceId} onClose={() => { setCopy(undefined); setBulkRecords(undefined); setBulkSelection({ scope: '', ids: [] }); }} /> : selected ? 'transaction' in selected ? <TransactionEditor row={selected.transaction} onClose={() => setSelected(undefined)} />
       : <JournalEditor row={selected.journal} onClose={() => setSelected(undefined)} /> : <>
-      <section className="surface ledgerFilters" aria-label="Ledger filters"><h2>Filter ledger</h2>
+      <FilterPanel name="ledger" title="Filter ledger" label="Ledger filters" summary={[
+        filters.start && `From ${filters.start}`, filters.end && `To ${filters.end}`, filters.kind !== 'All' && filters.kind,
+        (filters.account_ids.length + filters.category_ids.length > 0) && `${filters.account_ids.length + filters.category_ids.length} account/category selections`,
+        filters.tag_ids.length > 0 && `${filters.tag_ids.length} tags`, search.trim() && `Search: ${search.trim()}`,
+        (sortField !== 'Date' || !descending) && `Sort: ${sortField} / ${descending ? 'Descending' : 'Ascending'}`,
+      ].filter(Boolean).join(' · ') || 'All entries · Date / Descending'}>
       <div className="filterGrid ledgerFilterGrid">
         <DateRangeFields prefix="ledger" start={filters.start} end={filters.end}
           onStart={value => setFilters({ ...filters, start: value || undefined })} onEnd={value => setFilters({ ...filters, end: value || undefined })} />
@@ -105,7 +111,7 @@ export function LedgerPage() {
         {search.trim() && <ActionButton onClick={() => setSearch('')}>Clear search</ActionButton>}</div>
         <Field id="sort-field" label="Sort entries by"><select id="sort-field" value={sortField} onChange={event => setSortField(event.target.value as keyof typeof sortFields)}>{Object.keys(sortFields).map(field => <option key={field}>{field}</option>)}</select></Field>
         <Field id="entry-order" label="Entry order"><select id="entry-order" value={descending ? 'Descending' : 'Ascending'} onChange={event => setDescending(event.target.value === 'Descending')}><option>Descending</option><option>Ascending</option></select></Field>
-      </div><div className="actions filterActions"><ActionButton onClick={() => { setFilters({ kind: 'All', account_ids: [], category_ids: [], tag_ids: [] }); setSearch(''); setSortField('Date'); setDescending(true); }}>Clear filters</ActionButton></div></section>
+      </div><div className="actions filterActions"><ActionButton onClick={() => { setFilters({ kind: 'All', account_ids: [], category_ids: [], tag_ids: [] }); setSearch(''); setSortField('Date'); setDescending(true); }}>Clear filters</ActionButton></div></FilterPanel>
       {!query.isPending && !query.isError && <p role="status">{rows.length} matching entries</p>}
       {choices.error && <ErrorNotice error={choices.error} />}
       {failure !== undefined && <ErrorNotice error={failure} />}
