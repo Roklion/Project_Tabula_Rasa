@@ -32,18 +32,21 @@ table/function/sequence ACLs. Source capture checks trigger function/schema,
 operation type, deferral and key arguments, and exact scoped-read policies
 (including refusal of additional permissive audit policies), RLS and sequence
 presence before trusting an oracle. A right name with weakened semantics fails.
-The five required audit functions' bodies, argument/result types, language,
+The required audit and period/correction functions' bodies, argument/result types, language,
 security mode, volatility and search path must also match the frozen 0012/0013
 migration SQL for these supported revisions. The verifier reads those release
 sources without executing them; a weakened same-name function cannot bless a
-truncated source history as a valid oracle.
+truncated source history as a valid oracle. The same bounded check verifies
+#336's period/correction/authority triggers and scoped action-history policy;
+a source with disabled period guards cannot become a trusted recovery oracle.
 The verifier also runs the shared current-state reconciliation, including #336
 period/correction evidence and #341 support history at applicable revisions.
 Matching an Alembic revision alone is insufficient.
 
 Supported archived revisions are `0013_accounting_controls`,
 `0014_document_locations` and `0015_support_controls`, with exact expected revision
-matching. Pre-activation revisions report `audit_history_unavailable`; other
+matching. Pre-activation revisions, including `0001_initial`, report
+`audit_history_unavailable`; other
 unsupported revisions stop with `audit_schema_unsupported`. Use their retained
 compatible release/tooling in isolation. Never migrate or stamp a target before
 verifying the original point. A separate forward-upgrade test proves original

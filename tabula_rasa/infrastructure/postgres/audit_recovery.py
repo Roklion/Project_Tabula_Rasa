@@ -21,8 +21,13 @@ from .migrations import MIGRATION_ROOT, current_revision
 FORMAT = 'tabula-rasa-audit-recovery-v1'
 SUPPORTED_REVISIONS = {'0013_accounting_controls', '0014_document_locations', '0015_support_controls'}
 AUDIT_TABLES = ('audit_events', 'audit_baseline', 'audit_activation')
-AUDIT_FUNCTIONS = frozenset({'audit_immutable', 'audit_insert_guard', 'audit_summary',
-                             'audit_row_digest', 'capture_bookkeeping_audit'})
+RECOVERY_FUNCTIONS = frozenset({'audit_immutable', 'audit_insert_guard', 'audit_summary',
+                             'audit_row_digest', 'capture_bookkeeping_audit',
+                             'capture_period_action', 'require_period_authority', 'guard_period_control',
+                             'closed_accounting_date', 'guard_accounting_period', 'guard_entry_correction'})
+PERIOD_GUARD_TABLES = ('entries', 'postings', 'entry_tags', 'mixed_use_sources', 'mixed_use_tags',
+                       'depreciation_events', 'recurring_occurrences', 'fixed_assets', 'asset_tags',
+                       'asset_period_overrides', 'accounts', 'categories')
 
 
 def _digest(value):
@@ -48,7 +53,7 @@ def _validate_function_sources(functions):
     for filename in ('0012_operations.sql', '0013_accounting_controls.sql'):
         for name, args, result_type, language, modifiers, body in declaration.findall(
                 (MIGRATION_ROOT / 'versions' / filename).read_text(encoding='utf-8')):
-            if name in AUDIT_FUNCTIONS:
+            if name in RECOVERY_FUNCTIONS:
                 expected[name] = {
                     'args': args, 'source': body.strip(), 'result_type': result_type, 'language': language,
                     'security_definer': 'SECURITY DEFINER' in modifiers.upper(),
@@ -56,7 +61,7 @@ def _validate_function_sources(functions):
                     'config': ['search_path=public, pg_temp'] if 'search_path' in modifiers else None,
                     'strict': False, 'leakproof': False,
                 }
-    if set(expected) != AUDIT_FUNCTIONS:
+    if set(expected) != RECOVERY_FUNCTIONS:
         raise ExportError('audit_schema_unsupported')
     for name, definition in expected.items():
         actual = [row for row in functions if row['proname'] == name]
@@ -136,19 +141,33 @@ def _inventory(connection, revision):
         ('audit_baseline', 'immutable_truncate'): (34, 'audit_immutable', False, False, ''),
         ('audit_baseline', 'immutable_insert'): (7, 'audit_immutable', False, False, ''),
         ('audit_activation', 'immutable'): (58, 'audit_immutable', False, False, ''),
+        ('accounting_period_actions', 'immutable'): (27, 'audit_immutable', False, False, ''),
+        ('accounting_period_actions', 'immutable_truncate'): (34, 'audit_immutable', False, False, ''),
+        ('accounting_period_actions', 'capture_only'): (7, 'audit_insert_guard', False, False, ''),
+        ('entry_corrections', 'immutable'): (27, 'audit_immutable', False, False, ''),
+        ('entry_corrections', 'correction_authority'): (7, 'guard_entry_correction', False, False, ''),
     })
+    required.update({(table, 'accounting_period_guard'):
+        (31, 'guard_accounting_period', False, False, '') for table in PERIOD_GUARD_TABLES})
+    for table in ('accounting_period_policy', 'accounting_periods'):
+        required[(table, 'period_control')] = (31, 'guard_period_control', False, False, '')
+        required[(table, 'action_history')] = (21, 'capture_period_action', False, False, '')
+    for table in ('accounting_period_policy', 'accounting_periods', 'entry_corrections'):
+        required[(table, 'immutable_truncate')] = (34, 'audit_immutable', False, False, '')
     valid_triggers = all(
         key in triggers and triggers[key]['tgenabled'] == 'O' and triggers[key]['function_schema'] == 'public'
         and tuple(triggers[key][field] for field in ('tgtype','proname','tgdeferrable','tginitdeferred','arguments')) == expected
         for key, expected in required.items()
     )
-    scoped_policies = [row for row in inventory['policies'] if row['tablename'] in {'audit_events','audit_baseline'}]
+    scoped_tables = {'audit_events', 'audit_baseline', 'accounting_period_actions'}
+    scoped_policies = [row for row in inventory['policies'] if row['tablename'] in scoped_tables]
     expected_policies = [{
         'tablename': table, 'policyname': name, 'permissive': 'PERMISSIVE', 'roles': '{public}', 'cmd': 'SELECT',
         'qual': "(entity_id = current_setting('tabula.audit_reader_entity'::text, true))", 'with_check': None,
-    } for table, name in [('audit_baseline','scoped_baseline_read'), ('audit_events','scoped_audit_read')]]
+    } for table, name in [('accounting_period_actions','scoped_period_action_read'),
+                         ('audit_baseline','scoped_baseline_read'), ('audit_events','scoped_audit_read')]]
     secured = {r['relname'] for r in inventory['tables'] if r['relrowsecurity']}
-    if (not valid_triggers or not {'audit_events', 'audit_baseline'} <= secured
+    if (not valid_triggers or not scoped_tables <= secured
             or scoped_policies != expected_policies
             or len(inventory['tables']) != len(tables) or len(inventory['sequences']) != 1):
         raise ExportError('audit_schema_incomplete')
@@ -181,7 +200,7 @@ def capture_audit_recovery(database, entity_id, *, capabilities):
         revision = current_revision(connection)
         if revision not in SUPPORTED_REVISIONS:
             raise ExportError('audit_history_unavailable' if revision in {
-                '0004_mileage_order', '0005_bookkeeping_cutover', '0006_identity_control_plane',
+                '0001_initial', '0004_mileage_order', '0005_bookkeeping_cutover', '0006_identity_control_plane',
                 '0007_identity_sessions', '0008_owner_lock_scope', '0009_external_connections',
                 '0010_onboarding_routes', '0010_workspace_lifecycle', '0011_control_plane_join',
             } else 'audit_schema_unsupported')

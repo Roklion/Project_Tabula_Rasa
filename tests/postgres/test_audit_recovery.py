@@ -317,6 +317,33 @@ def test_source_function_drift_is_checked_against_frozen_migration_definitions(d
         capture(database)
 
 
+@pytest.mark.parametrize('drift', ['period-function', 'correction-function', 'authority-function',
+                                  'missing-period-trigger', 'disabled-period-trigger'])
+def test_source_period_and_correction_guards_are_required_before_capture(database, drift):
+    alpha, _ = seed_core(database)
+    alpha.transactions.create(transaction_id='closed-month', **expense())
+    close(database, alpha)
+    query = {
+        'period-function': "CREATE OR REPLACE FUNCTION guard_accounting_period() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RETURN NEW; END'",
+        'correction-function': "CREATE OR REPLACE FUNCTION guard_entry_correction() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RETURN NEW; END'",
+        'authority-function': "CREATE OR REPLACE FUNCTION require_period_authority(scope text, action text) RETURNS void LANGUAGE plpgsql AS 'BEGIN RETURN; END'",
+        'missing-period-trigger': 'DROP TRIGGER accounting_period_guard ON entries',
+        'disabled-period-trigger': 'ALTER TABLE postings DISABLE TRIGGER accounting_period_guard',
+    }[drift]
+    with database.engine.begin() as connection:
+        connection.execute(text(query))
+    assert reader(database).verify()['status'] == 'matched'
+    with pytest.raises(ExportError, match='audit_schema_incomplete'):
+        capture(database)
+
+
+def test_initial_revision_reports_preaudit_history_unavailable(empty_database):
+    with empty_database.engine.begin() as connection:
+        command.upgrade(migration_config(connection), '0001_initial')
+    with pytest.raises(ExportError, match='audit_history_unavailable'):
+        capture(empty_database)
+
+
 def test_real_pg_dump_restore_retains_audit_archive(database):
     """Use the same pg_dump -Fc / pg_restore path as #294, with real SQL.
 

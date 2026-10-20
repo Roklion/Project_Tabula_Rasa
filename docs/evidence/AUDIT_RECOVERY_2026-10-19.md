@@ -46,6 +46,13 @@ The source oracle rejects changed audit function bodies and search paths by
 comparing the five required functions against the frozen migration definitions,
 including a same-name weakened immutability function with an older event removed.
 
+Next review round: **62 targeted recovery/period/CLI checks passed in 46.28 seconds**,
+no skips/failures; Ruff/diff passed. The source-definition check now also covers
+#336's existing period/correction guards and authority functions/triggers. Missing
+or disabled guards and weakened same-name functions are refused; `0001_initial`
+explicitly reports unavailable pre-audit history. No new runtime policy or
+historical conversion was introduced.
+
 ## Test and evidence matrix
 
 | Check | Execution/result | Evidence and limit |
