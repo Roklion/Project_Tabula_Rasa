@@ -5,6 +5,8 @@ All databases are independently created/dropped by the native pytest fixture.
 """
 
 from copy import deepcopy
+import json
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 from fastapi.testclient import TestClient
@@ -87,15 +89,37 @@ def activated_profiles(database):
     return plans, controller, settings_for("alpha", "beta")
 
 
-def test_owner_authority_survives_production_restart_writes_reports_and_complete_export(database, monkeypatch):
+def container_factory(database, config, tmp_path, monkeypatch):
+    from tabula_rasa.http.composition import open_runtime
+    from tabula_rasa.http.migrated_configuration import FILE_ENV
+    source = tmp_path / 'bindings.json'
+    source.write_text(json.dumps({'profiles': [
+        {'entity_id': profile, 'profile_key': profile, 'spreadsheet_id': values['spreadsheet_id'],
+         'receipt_folder_id': values['google_drive']['receipt_folder']['id'],
+         'mode': config['bookkeeping_backends'][profile]['mode']}
+        for profile, values in config['business_profiles'].items()
+    ]}), encoding='utf-8')
+    monkeypatch.setenv(FILE_ENV, str(source))
+    monkeypatch.setattr(DatabaseSettings, 'from_environment', Mock(return_value=DatabaseSettings(database.engine.url)))
+    monkeypatch.setattr('tabula_rasa.infrastructure.oidc.OidcSettings.from_environment',
+                        Mock(return_value=SimpleNamespace(configuration_hash='a' * 64)))
+    monkeypatch.setattr('tabula_rasa.infrastructure.oidc.OidcProvider', Mock())
+    return open_runtime
+
+
+@pytest.mark.parametrize('deployment', ['injected_factory', 'container_configuration'])
+def test_owner_authority_survives_production_restart_writes_reports_and_complete_export(database, monkeypatch,
+                                                                                     tmp_path, deployment):
     plans, controller, config = activated_profiles(database)
     monkeypatch.setattr("tabula_rasa.composition.GoogleSheetsStorage.from_secrets",
                         lambda _: pytest.fail("Migrated production must not initialize Sheets."))
     assert smoke_application("alpha", config, database, plans["alpha"])["passed"]
     before = create_postgres_export_service(database, "alpha").export()
     credentials = owned_profiles(database)
+    factory = (container_factory(database, config, tmp_path, monkeypatch)
+               if deployment == 'container_configuration' else runtime_factory(database, config))
     for restart in range(2):
-        app = create_app(settings=SETTINGS, runtime_factory=runtime_factory(database, config))
+        app = create_app(settings=SETTINGS, runtime_factory=factory)
         with TestClient(app, base_url=SETTINGS.public_origin) as client:
             login(client, credentials)
             assert client.get("/health/ready").status_code == 200
@@ -136,6 +160,25 @@ def test_owner_authority_survives_production_restart_writes_reports_and_complete
     config["bookkeeping_backends"]["alpha"]["mode"] = "commercial_production"
     with pytest.raises(RuntimeError, match="startup failed"):
         runtime_factory(database, config)(SETTINGS)
+
+
+@pytest.mark.parametrize('failure', ['folder', 'inactive_authority'])
+def test_container_runtime_refuses_invalid_live_bindings_without_native_fallback(database, tmp_path,
+                                                                                monkeypatch, failure):
+    plans, controller, config = activated_profiles(database)
+    owned_profiles(database)
+    if failure == 'folder':
+        config['business_profiles']['alpha']['google_drive']['receipt_folder']['id'] = 'folder-beta'
+    else:
+        controller.rollback(plans['alpha'])
+    factory = container_factory(database, config, tmp_path, monkeypatch)
+    native = Mock()
+    monkeypatch.setattr('tabula_rasa.http.composition.create_postgres_services', native)
+    with pytest.raises(RuntimeError, match='startup failed') as caught:
+        factory(SETTINGS)
+    assert caught.value.__context__ is None
+    native.assert_not_called()
+    assert not controller.inspect(plans['beta'].snapshot.binding)['divergent']
 
 
 def test_owner_runtime_preserves_identity_capability_origin_and_csrf_guards(database):
