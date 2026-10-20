@@ -316,10 +316,11 @@ Database triggers reject event update/delete/truncate and direct inserts.
 Row-level read policies scope non-owner roles to a server-selected reader entity;
 the read contract also includes an explicit entity predicate for owner connections.
 Deploy with a separate migration/function-owner role and a runtime role that has
-only canonical bookkeeping DML and required job DML; **no audit INSERT/UPDATE/
+only required bookkeeping, job and scoped support DML; **no audit INSERT/UPDATE/
 DELETE/TRUNCATE, DDL, schema CREATE, trigger bypass, table ownership or BYPASSRLS**.
-Grant SELECT on `audit_events`, `audit_baseline` and `audit_activation` only to the
-separately provisioned inspector role (plus selected canonical SELECT for verification). Context
+Grant audit SELECT only to provisioned inspectors or the trusted API serving
+separately provisioned, expiring [support grants](SUPPORT_OPERATIONS.md).
+Direct recovery inspection also needs canonical and sequence SELECT for verification. Context
 settings and capabilities are server infrastructure, never browser claims.
 DB owners/superusers can bypass these controls, as PostgreSQL documents in its
 [row-security model](https://www.postgresql.org/docs/current/ddl-rowsecurity.html).
@@ -337,11 +338,12 @@ Attention timestamps are operational fields, not bookkeeping edits. The verifier
 must preserve this exclusion when comparing current-state evidence.
 
 Retain all audit/baseline/activation and job history by default; no expiry, pruning
-or deletion API is installed. Pending #346 owns accepted retention/legal holds
-and any separately approved redaction process. A hold therefore has no automatic
-expiry path to override in this version. Sensitive-field minimization happens
-before storage; do not silently rewrite old events for future redaction requests.
-Customer content/access policy and storage capacity require #346's acceptance.
+or deletion API is installed. The [audit policy](AUDIT_POLICY.md) records the
+owner-approved interim operator contract (2026-10-19), existing enforcement,
+manual hold handling and unresolved owner/legal decisions. No in-place redaction
+or pseudonymization and no customer audit export are authorized. Sensitive-field
+minimization happens before storage. #346 retains statutory/commercial review,
+any separately approved privacy mechanism and its broader lifecycle scope.
 
 Database dump/PITR recovery must retain these tables, functions, triggers, sequences,
 policies and the original activation watermark. An older recovery point loses
