@@ -62,7 +62,7 @@ this repository.
 11. Perform one controlled live validation, then inspect key usage, API metrics,
     quota consumption, and billing. Rotate or disable any unused test key.
 
-## Commercial browser/API configuration (#363)
+## Commercial browser/API configuration
 
 The shared HTTP runtime accepts deployment-wide environment settings:
 
@@ -79,23 +79,25 @@ human Drive grants or quota-monitoring credentials into the HTTP environment.
 Absent configuration preserves manual entry; equal browser/server keys suppress
 the browser key so a server credential cannot accidentally cross the API.
 
-Before enabling lookup, add the exact commercial website origins to the browser
-key's website restrictions. Local Vite and same-origin API deployments need their
-actual ports/origins, rather than the Streamlit examples above. Restrict that key
-to Maps JavaScript API and Places API (New). Keep Routes excluded from it.
-The separate Routes key stays on the API server and is restricted to Routes API.
-Inspect the selected host's documented egress; use an IP-restricted key where
-stable egress is available. If unavailable, record the existing dedicated-key,
-quota and monitoring alternative explicitly under #133. Changing keys, broadening
-origins or removing restrictions is not authorized by the workflow port.
+Before enabling lookup, add the exact commercial website origins to the browser key's
+website restrictions. Local Vite and same-origin API deployments need their actual
+ports/origins, rather than the Streamlit examples above. Restrict that key to Maps
+JavaScript API and Places API (New). Keep Routes excluded from it. The separate Routes
+key stays on the API server and is restricted to Routes API. Inspect the selected host's
+documented egress; use an IP-restricted key where stable egress is available. If
+unavailable, record the existing dedicated-key, quota and monitoring alternative
+explicitly under Maps key restrictions. Changing keys, broadening origins or removing
+restrictions is not authorized by the workflow port.
 
-The widget uses the [Places autocomplete element](https://developers.google.com/maps/documentation/javascript/reference/places-widget),
-and restrictions follow [Google's API security guidance](https://developers.google.com/maps/api-security-best-practices).
-Retain the existing attribution, terms, privacy and transient-content policy.
-Run a controlled non-sensitive lookup and both route directions before rollout,
-then inspect usage/quota and record sanitized evidence against the selected
-revision. Synthetic validation does not prove deployed restrictions or complete
-#133/#303 acceptance. See [workflow ports](COMMERCIAL_WORKFLOW_PORTS.md).
+The widget uses the [Places autocomplete
+element](https://developers.google.com/maps/documentation/javascript/reference/places-widget),
+and restrictions follow [Google's API security
+guidance](https://developers.google.com/maps/api-security-best-practices). Retain the
+existing attribution, terms, privacy and transient-content policy. Run a controlled
+non-sensitive lookup and both route directions before rollout, then inspect usage/quota
+and record sanitized evidence against the selected revision. Synthetic validation does
+not prove deployed restrictions or complete Maps key restrictions and live owner cutover
+acceptance. See [workflow ports](browser/IMPORTS_EXPORTS_AND_INTEGRATIONS.md).
 
 ## Internal-edition Streamlit Secrets
 
@@ -107,6 +109,7 @@ browser_api_key = "RESTRICTED_BROWSER_KEY"
 routes_api_key = "RESTRICTED_SERVER_KEY"
 routes_timeout_seconds = 15
 # Optional two-letter region restriction, for example "us".
+
 autocomplete_region_code = "us"
 
 [google_maps.quota_monitoring]
@@ -233,19 +236,19 @@ unrestricted customer-owned data.
 | User-confirmed business mileage recorded in the ledger | Persist as application/user business-record data |
 | User-authored location text stored in the ledger | Persist as application/user business-record data |
 
-This table is the canonical implementation policy for issue #135. Selecting a
-Google suggestion provides transient routing input only. The Mileage workflow
-shows the selected text for lookup and uses the transient route result to fill
-editable, unsaved mileage fields; it does not write a durable mileage value
-until the user reviews and saves the trip. The selected display text pre-fills
-an editable location field but is not written to a durable ledger field until
-the user saves the trip.
+This table is the canonical implementation policy for mileage cache invalidation.
+Selecting a Google suggestion provides transient routing input only. The Mileage
+workflow shows the selected text for lookup and uses the transient route result to fill
+editable, unsaved mileage fields; it does not write a durable mileage value until the
+user reviews and saves the trip. The selected display text pre-fills an editable
+location field but is not written to a durable ledger field until the user saves the
+trip.
 
-No Google response cache should be introduced, and no route polyline should be
-stored. No Google provenance fields should be added to the Mileage worksheet
-unless a future product requirement justifies them and the applicable policy is
-reviewed again. The current Mileage and backup schemas therefore do not require
-a migration for issue #135.
+No Google response cache should be introduced, and no route polyline should be stored.
+No Google provenance fields should be added to the Mileage worksheet unless a future
+product requirement justifies them and the applicable policy is reviewed again. The
+current Mileage and backup schemas therefore do not require a migration for mileage
+cache invalidation.
 
 ## Billing jurisdiction
 
@@ -253,10 +256,10 @@ a migration for issue #135.
 - **Applicable jurisdiction classification:** non-EEA
 - **Review date:** September 1, 2026
 
-This deployment is documented as governed by the applicable non-EEA Google Maps
-Platform terms. If the billing-account country changes, especially to an EEA
-country, the applicable Google Maps Platform terms and this retention decision
-must be reviewed again before relying on them.
+This deployment is documented as governed by the applicable non-EEA Google Maps platform
+terms. If the billing-account country changes, especially to an EEA country, the
+applicable Google Maps Platform terms and this retention decision must be reviewed again
+before relying on them.
 
 ## Current authoritative references
 

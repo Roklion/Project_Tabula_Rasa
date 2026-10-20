@@ -1,4 +1,4 @@
-"""Small native contract probes for #253, not deployable domain repositories.
+"""Native mutation-baseline contract probes, not deployable domain repositories.
 
 Only the exercised create/snapshot/attention ports are implemented. Domain
 preparation and reconciliation use the real services; SQL stores their outputs.

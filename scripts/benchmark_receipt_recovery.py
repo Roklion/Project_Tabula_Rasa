@@ -1,4 +1,4 @@
-"""Compare issue-72 receipt recovery with its pre-optimization implementation."""
+"""Benchmark receipt recovery against a fixed historical implementation."""
 
 from __future__ import annotations
 
@@ -19,10 +19,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from tabula_rasa.receipt_recovery import recover_receipts_from_synology
-from tests.test_receipt_recovery import (
-    _backup_with_receipts,
-    _drive_file,
-    _reference,
+from tests.receipt_recovery._support import (
+    backup_with_receipts as _backup_with_receipts,
+    make_drive_file as _drive_file,
+    make_reference as _reference,
 )
 
 

@@ -15,8 +15,8 @@ def verify_recovery(
     """Match one restored entity to a private, independently retained export.
 
     Endpoint fingerprints are operator bindings, not proof of provider lineage
-    or isolation. A match neither attests a provider restore nor releases #258.
-    All bookkeeping reads use #260's independent read-only snapshot/validators.
+    or isolation. A match attests neither a provider restore nor cutover approval.
+    Bookkeeping reads use the complete export's read-only snapshot and validators.
     """
     if any(not isinstance(value, str) or not re.fullmatch("[0-9a-f]{64}", value)
            for value in (source_database_sha256, target_database_sha256)):

@@ -1,4 +1,4 @@
-"""Bounded #320 route/schema audit; new private surfaces must join the guard."""
+"""Route/schema security audit; every private surface must join the action guard."""
 
 from unittest.mock import Mock
 

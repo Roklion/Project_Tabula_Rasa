@@ -34,7 +34,7 @@ logger = logging.getLogger("tabula_rasa.http")
 
 
 def create_app(*, settings=None, runtime_factory=None, schema_only=False, static_dir=None):
-    """#222 injects a server resolver/runtime factory; export skips all runtime access."""
+    """Compose server identity/runtime factories; schema export skips runtime access."""
     @asynccontextmanager
     async def lifespan(app):
         app.state.settings = settings or HttpSettings.from_environment()

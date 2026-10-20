@@ -1,4 +1,4 @@
-"""#320: real sessions and native PostgreSQL across the entire private API.
+"""Real sessions and native PostgreSQL across the entire private API.
 
 Only synthetic identities/records; no live provider, grant or operator action.
 Viewer/bookkeeper are the canonical read_only/editor roles, not new roles.

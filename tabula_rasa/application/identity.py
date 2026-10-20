@@ -80,7 +80,7 @@ class LoginTransaction:
 
 
 class IdentityService:
-    """Narrow internal control-plane facade; caller authorization lives in #313/#315."""
+    """Internal control-plane facade; callers enforce action and membership policy."""
 
     def __init__(self, repository):
         self.repository = repository

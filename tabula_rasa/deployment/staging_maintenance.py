@@ -1,4 +1,4 @@
-"""Explicit #321 staging bridge; ordinary promotion remains head-only."""
+"""Explicit staging schema bridge; ordinary promotion remains head-only."""
 import argparse
 import json
 import os

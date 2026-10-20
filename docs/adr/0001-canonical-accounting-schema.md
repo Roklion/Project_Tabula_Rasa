@@ -2,28 +2,24 @@
 
 Status: Proposed v1 implementation contract; subject to maintainer review.
 
-Issue: [#243](https://github.com/Roklion/Project_Tabula_Rasa/issues/243),
-under [PostgreSQL EPIC #220](https://github.com/Roklion/Project_Tabula_Rasa/issues/220)
-and [commercialization initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124).
-
 ## Context and scope
 
 The commercial datastore represents accounting concepts, while the current
-Streamlit/Sheets application remains functional. The persistence-neutral
-services and ports completed in
-[#219](https://github.com/Roklion/Project_Tabula_Rasa/issues/219) are the adapter
-boundary. This ADR specifies tables, projections, integrity rules, and migration
-units; it neither installs a database nor changes production code or current UX.
-Executable migrations belong to #244 and repository implementations to
-#245–#252. Read this together with [Architecture](../ARCHITECTURE.md).
+Streamlit/Sheets application remains functional. The persistence-neutral services and
+ports completed in [application service boundaries](../ARCHITECTURE.md) are the adapter
+boundary. This ADR specifies tables, projections, integrity rules, and migration units;
+it neither installs a database nor changes production code or current UX. Executable
+migrations belong to database runtime and repository implementations to reference
+repositories and ledger setup service. Read this together with
+[Architecture](../ARCHITECTURE.md).
 
-The initiative requires incremental delivery: #245/#246 and usable #247 reads
-enable the #221 commercial web/API milestone without waiting for all secondary
-domains. Identity/membership belongs to #222; durable jobs and audit policy to
-#223; customer delivery/retention to #224. Production authority changes only
-through #258 after #253 concurrency/integrity, #257 whole-profile reconciliation,
-#259 recovery rehearsal, and #260 complete entity-export evidence. This ADR
-does not authorize cutover, indefinite dual writes, or reverse migration.
+Core reference, transaction/journal and reporting repositories support browser/API
+integration independently of secondary domains. Identity owns memberships and authorized
+entity context; operations owns durable jobs, audit and recovery; customer lifecycle
+policy owns external delivery and retention. Live authority requires
+concurrency/integrity verification, whole-profile reconciliation, complete export and
+real recovery evidence. This ADR authorizes neither cutover, indefinite dual writes nor
+reverse migration.
 
 ### Existing owners and reuse
 
@@ -182,10 +178,10 @@ managed name, so renaming does not rewrite accounting rows.
 
 Notation: `?` means nullable; all other columns are NOT NULL. `money` means
 `numeric(28,2)`, `percent` means `numeric(8,5)`. Common object columns above are
-implicit unless overridden. An `FK` below always includes `entity_id`.
-Named constraints and explicitly listed indexes are required; equivalent names
-may follow #244's migration conventions. Foreign-key indexes are not assumed
-to be created automatically.
+implicit unless overridden. An `FK` below always includes `entity_id`. Named constraints
+and explicitly listed indexes are required; equivalent names may follow database
+runtime's migration conventions. Foreign-key indexes are not assumed to be created
+automatically.
 
 ### Ledger root and reference data
 
@@ -258,9 +254,9 @@ fields on both source and projection from the *same* occurrence row. Changes
 to a schedule template do not rewrite historical occurrence amounts/metadata.
 Cadence and next-due calculations remain in `recurrence.py`/`recurring.py`.
 
-No failed-job/attempt state is confused with an accounting occurrence. Attention
-stays schedule metadata, including the current pending-initial-link marker.
-Durable workers/run history are #223's separate concern.
+No failed-job/attempt state is confused with an accounting occurrence. Attention stays
+schedule metadata, including the current pending-initial-link marker. Durable
+workers/run history are platform operations's separate concern.
 
 ### Fixed assets and depreciation
 
@@ -287,7 +283,7 @@ the event amount must equal the underlying postings.
 
 | Table | Additional columns | Keys, constraints, and indexes |
 | --- | --- | --- |
-| `mileage_records` | `trip_date date`, `miles numeric(28,1)`, `vehicle text`, `start_location text`, `destination text`, `business_purpose text`, `notes text`; #250's `0004_mileage_order` adds a database-generated `insertion_order bigint`. | Finite miles `> 0`; nonblank start/destination/purpose; index `(entity_id,trip_date,id)`. The ordinal preserves equal-date/equal-instant trip ordering, outside bookkeeping identity/provenance. No financial-entry relationship or calculated tax amount. |
+| `mileage_records` | `trip_date date`, `miles numeric(28,1)`, `vehicle text`, `start_location text`, `destination text`, `business_purpose text`, `notes text`; mileage repository's `0004_mileage_order` adds a database-generated `insertion_order bigint`. | Finite miles `> 0`; nonblank start/destination/purpose; index `(entity_id,trip_date,id)`. The ordinal preserves equal-date/equal-instant trip ordering, outside bookkeeping identity/provenance. No financial-entry relationship or calculated tax amount. |
 | `mileage_tags` | `entity_id text`, `mileage_id text` FK mileage, `tag_id text` FK tags. | PK `(entity_id,mileage_id,tag_id)`; reverse `(entity_id,tag_id,mileage_id)`; mileage version covers edits. |
 | `documents` | `stored_filename text`, `original_filename text`, `mime_type text`, `byte_size bigint?`, `sha256 text?`, `store_kind text`, `store_scope_key text`, `storage_key text`, `open_url text`. | Canonical `id` is `DocumentMetadata.document_id`, not a provider file ID. Nonblank `stored_filename`, `store_kind`, and `storage_key`; nonnegative byte size when known; SHA-256 CHECK 64 lowercase hex characters when known. Unique `(entity_id,store_kind,store_scope_key,storage_key)`; id uniqueness also deduplicates stable uploads. Optional historical integrity fields are explicit, never claimed verified. |
 | `document_links` | `entity_id text`, `document_id text` FK documents, `entry_id text?` FK entries, `mixed_use_source_id text?` FK mixed sources, `position integer`, `created_at timestamptz`. | PK `(entity_id,document_id)` preserves current one-receipt/one-logical-target ownership. Exactly one target populated. Entry target must be simple and not source-owned; mixed target represents both source/projection views. Depreciation has no receipts. Position `> 0`; partial unique `(entity_id,entry_id,position)` or `(entity_id,mixed_use_source_id,position)` for each target; those indexes also serve reverse reads. Target aggregate version covers link changes. |
@@ -308,13 +304,13 @@ Inventory-only/unreferenced documents may have no `document_links` row. Store
 inventory remains authoritative for uploaded files whose metadata/link mutation
 did not commit, so failed linking cannot hide recoverable uploads.
 
-Mixed source receipts have one source-owned link set; the transaction projection
-reads that same set. Unlink removes metadata associations only. It never invokes
-DocumentStore.delete, and neither SQL rollback nor ledger deletion deletes bytes.
-The current maximum of 100 receipts per target remains a boundary validation;
-#251 must serialize additions on the target aggregate to enforce it concurrently.
-Adding journal/asset/mileage receipt workflows is outside v1 and needs a later
-typed relationship extension, not an unchecked polymorphic target string.
+Mixed source receipts have one source-owned link set; the transaction projection reads
+that same set. Unlink removes metadata associations only. It never invokes
+DocumentStore.delete, and neither SQL rollback nor ledger deletion deletes bytes. The
+current maximum of 100 receipts per target remains a boundary validation; document
+metadata repository must serialize additions on the target aggregate to enforce it
+concurrently. Adding journal/asset/mileage receipt workflows is outside v1 and needs a
+later typed relationship extension, not an unchecked polymorphic target string.
 
 ### Import and migration provenance
 
@@ -326,12 +322,12 @@ typed relationship extension, not an unchecked polymorphic target string.
 | `migration_units` | `entity_id text`, `run_id text` FK runs, `unit_key text`, `unit_kind text`, `unit_sha256 text`, `status text` (`pending/loaded/failed`), `loaded_at timestamptz?`. | PK `(entity_id,run_id,unit_key)`; digest identifies immutable normalized unit content. Loaded iff loaded_at present; unit status and its bookkeeping rows commit together. No unchecked cross-entity pointer. |
 | `migration_id_mappings` | `entity_id text`, `run_id text` FK runs, `source_record_kind text`, `source_id text`, `target_record_kind text`, `target_id text`, `mapping_reason text`, `source_updated_at timestamptz?`. | PK `(entity_id,run_id,source_record_kind,source_id)`; unique `(entity_id,run_id,target_record_kind,target_id)`. This is immutable mapping evidence, not a live polymorphic FK. Typed domain tables enforce all actual links; migration validation verifies each mapping's target. Index `(entity_id,target_record_kind,target_id)`. |
 
-`import_records` is target-owned provenance: its target FK may use ON DELETE
-CASCADE so deleting an eligible ordinary entry/trip also removes that attribution
-row. The completed batch identity remains and cannot be replayed to recreate
-deleted rows. V1 does not promise permanent import deletion history; #223's audit
-policy owns that extension. This exception avoids making imported transactions
-undeletable through an otherwise ordinary CRUD path.
+`import_records` is target-owned provenance: its target FK may use ON DELETE CASCADE so
+deleting an eligible ordinary entry/trip also removes that attribution row. The
+completed batch identity remains and cannot be replayed to recreate deleted rows. V1
+does not promise permanent import deletion history; atomic audit policy owns that
+extension. This exception avoids making imported transactions undeletable through an
+otherwise ordinary CRUD path.
 
 Import bookkeeping fingerprints and source positions are private metadata and
 must not enter logs/errors. Current Sheets import code persists resulting rows,
@@ -339,13 +335,13 @@ not a complete historical import-batch log. Migration must not invent unknown
 source batches: preserve available facts, use migration-run mappings for
 worksheet extraction provenance, and state missing historical import attribution.
 
-Migration metadata is enough to reproduce/inspect mapping and restart; private
-source snapshots and detailed diagnostics stay in protected operator artifacts.
-No generic event-store, SQL transaction-manager framework, or JSON copy of each
-worksheet row is introduced. #223 may later attach audit events to the root
-entity and stable object IDs. A future audit reference is not current authorization.
+Migration metadata is enough to reproduce/inspect mapping and restart; private source
+snapshots and detailed diagnostics stay in protected operator artifacts. No generic
+event-store, SQL transaction-manager framework, or JSON copy of each worksheet row is
+introduced. platform operations may later attach audit events to the root entity and
+stable object IDs. A future audit reference is not current authorization.
 
-## Posting and projection contract (#246/#247)
+## Posting and projection contract
 
 ### Simple mapping
 
@@ -410,14 +406,14 @@ journal debiting Cash 2 and crediting Income 2 yields Assets 132 and current
 earnings 32, not a second copy of the simple entries. Parent/child openings
 and activity remain direct values and are rolled up once by the existing owner.
 
-Current openings have no effective date and apply to existing historical/as-of
-reports. V1 preserves that behavior rather than inventing a cutover date. An
-unbalanced opening set keeps the existing equation warning; a database balance
-constraint applies to each *entry*, not to a fabricated aggregate opening journal.
-Future dated openings, locked periods, and mandatory corrections require a
-separate accounting-policy change under #223.
+Current openings have no effective date and apply to existing historical/as-of reports.
+V1 preserves that behavior rather than inventing a cutover date. An unbalanced opening
+set keeps the existing equation warning; a database balance constraint applies to each
+*entry*, not to a fabricated aggregate opening journal. Future dated openings, locked
+periods, and mandatory corrections require a separate accounting-policy change under
+platform operations.
 
-## Integrity, transactions, and concurrency (#244/#253)
+## Integrity, transactions, and concurrency
 
 ### Enforced integrity
 
@@ -460,21 +456,21 @@ provenance are enforced on updates as well as creation. The explicit recurring
 conversion may add its first occurrence association to an existing eligible
 entry; normal edits cannot repoint that association.
 
-Pure domain preparation additionally validates finite precision, allocation
-rounding, asset schedules/overrides/retirement locks, active-reference selection,
-and immutable provenance. Do not reimplement these algorithms as SQL stored
-procedures. #244/#253 must document each constraint's name and stable safe
-error translation; report IDs/codes without quoting private rows or raw SQL
+Pure domain preparation additionally validates finite precision, allocation rounding,
+asset schedules/overrides/retirement locks, active-reference selection, and immutable
+provenance. Do not reimplement these algorithms as SQL stored procedures. database
+runtime and mutation baseline contract must document each constraint's name and stable
+safe error translation; report IDs/codes without quoting private rows or raw SQL
 parameters. Native integration tests must exercise direct constraint failures.
 
-Deferral alone is not concurrency control. Every posting/link/detail mutation
-locks and advances its parent aggregate version, including mutations made
-through specialized repositories. PostgreSQL triggers protect balance/shape
-under direct writes by acquiring the parent entry lock before altering postings
-and checking the final state; account/category hierarchy mutations serialize on
-the entity root before inspecting/changing edges. Coupled operations lock roots
-in deterministic entity/table/ID order. #253 verifies concurrent operations
-through independent connections rather than assuming trigger snapshots suffice.
+Deferral alone is not concurrency control. Every posting/link/detail mutation locks and
+advances its parent aggregate version, including mutations made through specialized
+repositories. PostgreSQL triggers protect balance/shape under direct writes by acquiring
+the parent entry lock before altering postings and checking the final state;
+account/category hierarchy mutations serialize on the entity root before
+inspecting/changing edges. Coupled operations lock roots in deterministic
+entity/table/ID order. mutation baseline contract verifies concurrent operations through
+independent connections rather than assuming trigger snapshots suffice.
 
 ### Operation boundaries
 
@@ -495,15 +491,14 @@ composition convention, not an application-level transaction-manager abstraction
 Callbacks still execute once after fresh boundary validation.
 
 The current recurring service appends each successful returned occurrence to
-`generated`. Consequently #248 must return from occurrence creation only after
-its occurrence transaction commits, not after releasing a savepoint in an
-uncommitted all-run transaction. On SQL failure, roll back that transaction
-before attention writes or the next schedule. Mark attention in a new boundary;
-preserve current policy: clearing and persisting error attention are best effort;
-the returned attention map retains the failure even if its metadata write fails.
+`generated`. Consequently recurring and mixed-use repositories must return from
+occurrence creation only after its occurrence transaction commits, not after releasing a
+savepoint in an uncommitted all-run transaction. On SQL failure, roll back that
+transaction before attention writes or the next schedule. Mark attention in a new
+boundary; preserve current policy: clearing and persisting error attention are best
+effort; the returned attention map retains the failure even if its metadata write fails.
 An uncommitted/rolled-back record never appears in successful generated results.
-Whole-run all-or-nothing reconciliation
-would violate this behavior.
+Whole-run all-or-nothing reconciliation would violate this behavior.
 
 For reporting and complete export, use one read-only REPEATABLE READ transaction
 for all component SELECTs. READ COMMITTED per-statement snapshots are not enough
@@ -524,13 +519,13 @@ and mileage/reference versions for their supported changes. Schedule attention
 and derived display/next-due fields are outside its editable baseline. Denormalized
 display-name refreshes do not advance the referring entry's version.
 
-#253's initial [implemented convention](../POSTGRESQL_CONCURRENCY.md) supplies
-additive persistence-neutral baseline transport. Use an opaque token
-encoding the entity, aggregate kind/ID, incarnation, and version returned when the caller
-loads the record, carried separately from proposed editable fields. It grants
-no authorization. Existing full expected snapshots remain supported and compare
-normalized persisted fields/relationships, excluding derived display fields;
-the adapter handles comparison while holding the aggregate lock.
+the shared mutation contract's initial [implemented
+convention](../database/CONCURRENCY.md) supplies additive persistence-neutral baseline
+transport. Use an opaque token encoding the entity, aggregate kind/ID, incarnation, and
+version returned when the caller loads the record, carried separately from proposed
+editable fields. It grants no authorization. Existing full expected snapshots remain
+supported and compare normalized persisted fields/relationships, excluding derived
+display fields; the adapter handles comparison while holding the aggregate lock.
 
 The guard checks both incarnation and version. A deleted generated occurrence
 may later be recreated with its deterministic domain ID under existing cadence
@@ -540,33 +535,33 @@ metadata once in their frozen manifest and reuse it on restart, rather than
 changing a loaded unit's baseline on every retry. This is concurrency identity,
 not retention of historical backups or a new event-history feature.
 
-Supported commercial edit/delete/bulk callers in #221 must provide their loaded
-token/expected snapshot. A guarded update/delete compares that version (or the
-complete expected record) in the same transaction and returns a stale conflict
-when it no longer matches. Re-reading immediately before submit does not replace
-the user's loaded baseline. Two callers load version 1; one commits version 2;
-the other's later edit or delete with version 1 must fail, even if its submission
-begins after the first commit.
+Supported commercial edit/delete/bulk callers in browser and API workflows must provide
+their loaded token/expected snapshot. A guarded update/delete compares that version (or
+the complete expected record) in the same transaction and returns a stale conflict when
+it no longer matches. Re-reading immediately before submit does not replace the user's
+loaded baseline. Two callers load version 1; one commits version 2; the other's later
+edit or delete with version 1 must fail, even if its submission begins after the first
+commit.
 
-Account/Category and Mileage mutation ports now carry optional expected
-baselines; #245/#250 consume #253's additive contract change. Payee/Tag/Transaction and several
-source ports permit omitted expected values; documented legacy/internal calls
-retain that compatibility path, using fresh locking/domain checks without a
-claim of stale-form protection. Journal update/delete currently require an
-expected entry; retain that stricter contract. Commercial propagation and
-cross-adapter verification remain required as the repository slices land.
+Account/Category and Mileage mutation ports now carry optional expected baselines;
+reference repositories and mileage repository consume the shared mutation contract's
+additive contract change. Payee/Tag/Transaction and several source ports permit omitted
+expected values; documented legacy/internal calls retain that compatibility path, using
+fresh locking/domain checks without a claim of stale-form protection. Journal
+update/delete currently require an expected entry; retain that stricter contract.
+Commercial propagation and cross-adapter verification remain required as the repository
+slices land.
 
 ## Delete, merge, and correction behavior
 
-Live references default to `ON DELETE NO ACTION`, with same-transaction
-deferral only for coupled aggregates that require it. Owned import-attribution
-rows use the explicitly documented target cascade. Do not use `SET NULL`
-to lose accounting provenance. Accounts with history remain inactive rather
-than disappearing. Category/Payee/Tag removal refuses current references;
-managed merges explicitly repoint all relevant entry/posting/source/schedule/
-asset/mileage links, deduplicate tag joins, and advance affected baselines in
-one transaction before removing the source reference. Reuse the current
-reference-use semantics, including schedules; inactive historical data remains
+Live references default to `ON DELETE NO ACTION`, with same-transaction deferral only
+for coupled aggregates that require it. Owned import-attribution rows use the explicitly
+documented target cascade. Do not use `SET NULL` to lose accounting provenance. Accounts
+with history remain inactive rather than disappearing. Category/Payee/Tag removal
+refuses current references; managed merges explicitly repoint all relevant
+entry/posting/source/schedule/ asset/mileage links, deduplicate tag joins, and advance
+affected baselines in one transaction before removing the source reference. Reuse the
+current Reference-use semantics, including schedules; inactive historical data remains
 resolvable. A category hierarchy deletion preserves the existing refusal of
 children/references. The current Account port has no delete capability.
 
@@ -590,16 +585,17 @@ of deleted historical gaps. Ending a schedule retains historical occurrences.
 Schedule source kind and occurrence provenance are immutable; the explicit
 initial conversion is the supported operation that establishes provenance.
 
-V1 preserves ordinary transaction/journal edit and delete behavior and introduces
-no mandatory reversal-only workflow, draft/post state machine, close-period rule,
-or automatic year-end closing. A user may still create a compensating journal
-through the existing service. A first-class reversal relation, audit actor
-schema, and period lock/correction permissions require #223/#222's explicit
-policy and a later schema migration; downstream v1 agents must not invent them.
-Entity destruction is not a cascade reachable from normal bookkeeping services;
-#224/#222 own retention, export, and authorized deletion lifecycle.
+V1 preserves ordinary transaction/journal edit and delete behavior and introduces no
+mandatory reversal-only workflow, draft/post state machine, close-period rule, or
+automatic year-end closing. A user may still create a compensating journal through the
+existing service. A first-class reversal relation, audit actor schema, and period
+lock/correction permissions require platform operations and identity and tenancy's
+explicit policy and a later schema migration; downstream v1 agents must not invent them.
+Entity destruction is not a cascade reachable from normal bookkeeping services; external
+release and customer lifecycle and identity and tenancy own retention, export, and
+authorized deletion lifecycle.
 
-## Repository-to-table mapping (#219)
+## Repository-to-table mapping
 
 All capabilities are bound to one explicit entity by composition, including
 callbacks and any caches. `fresh/force_refresh` concerns adapter caching and
@@ -610,7 +606,7 @@ in `application/services.py`, including the byte-store boundary.
 | Repository/port | Canonical tables and read models | Mutation/mapping responsibility |
 | --- | --- | --- |
 | `LedgerSetupRepository` | `business_entities`, accounts/categories | `ledger_name` reads root name; ensure_defaults uses current default definitions and normalized uniqueness transactionally. No workbook name/worksheet bootstrap in SQL. |
-| `AccountRepository` | accounts -> `AccountRecord`/`ReportingAccount` | Type/classification/hierarchy and signed opening values preserved; #253 baseline addition for commercial edits. |
+| `AccountRepository` | accounts -> `AccountRecord`/`ReportingAccount` | Type/classification/hierarchy and signed opening values preserved; mutation baseline contract baseline addition for commercial edits. |
 | `CategoryRepository` | categories -> `CategoryRecord`/`ReportingCategory` | Income/Expense kind and hierarchy preserved, child/reference deletion guards. |
 | `PayeeRepository` | payees and all typed payee FKs | Reuse/reactivate, rename, remove/merge, normalized uniqueness, expected records; historical names resolve through joins. |
 | `TagRepository` | tags and entry/mixed/schedule/asset/mileage tag joins | Shared entity-local Tag identity, reference guards and atomic merges over every association. |
@@ -620,24 +616,24 @@ in `application/services.py`, including the byte-store boundary.
 | `RecurringRepository` | schedules/tags, occurrences, their simple entries or mixed sources/pairs | `RecurringSnapshot` reconstructs current schedules/transactions/mixed_sources and fresh references; callbacks and attention obey isolated commit units. |
 | `MixedUseRepository` | mixed sources/tags, owned entry/postings, occurrences, source document links | Source-authoritative pair CRUD; `linked_transaction_id` from expected projection identity; list/get parity checks and inspection stops; never arbitrary projection CRUD. |
 | `AssetRepository` | assets/tags/overrides/events and their simple entries/postings | `AssetRecord` old keys, JSON override dictionary serialized at boundary; `post` indexes preserved source-owned Expense records, not new journal entries. |
-| `MileageRepository` | mileage/tags plus import provenance when known | Native `MileageTrip`/`MileageTag`; fresh tag validation, positive mileage and import duplicate rules; #253 additive commercial update/delete baseline. |
+| `MileageRepository` | mileage/tags plus import provenance when known | Native `MileageTrip`/`MileageTag`; fresh tag validation, positive mileage and import duplicate rules; mutation baseline contract additive commercial update/delete baseline. |
 | `ReceiptRepository` | documents/links and eligible target aggregate | Portable `DocumentReference`/`ReceiptAssociation`; SQL link/unlink with entity/ownership checks. Mixed source-aware adapter reads the shared source link set. |
 | `DocumentStore` | External bytes/inventory; documents persist accepted metadata | Existing Drive adapter remains; no DB repository calls Drive. Composition maps authorized entity/profile scope to the store. |
 | `TransactionImportRepository` | references, simple entries/postings/tags/links, import batches/records | Preview remains pure/current normalization; commit revalidates duplicate selection and inserts participating references/accounting in one transaction. |
 
-Full-entity bookkeeping export in #260 reads these same canonical relationships
-plus retained migration/import mappings in one coherent snapshot, including
-inspectable supported states and explicit diagnostics. It excludes unrelated
-entities, authentication/membership data, credentials, and bytes. Filtered CSVs
-and managed backups are different capabilities.
+Full-entity bookkeeping export in complete entity export reads these same canonical
+relationships plus retained migration/import mappings in one coherent snapshot,
+including inspectable supported states and explicit diagnostics. It excludes unrelated
+entities, authentication/membership data, credentials, and bytes. Filtered CSVs and
+managed backups are different capabilities.
 
-## Current Sheets-to-canonical mapping (#254–#256)
+## Current Sheets-to-canonical mapping
 
-Issue #254 implements extraction of the live frozen format-13 workbook through
-shared header and domain validators. It does not import backup archives. The
-v13 archive policy remains authoritative for Sheets backup/restore and does
-not expand migration input scope. Earlier/unsupported live schemas fail before
-source-ledger or target mutation; no historical conversion is invoked.
+The migration framework implements extraction of the live frozen format-13 workbook
+through shared header and domain validators. It does not import backup archives. The v13
+archive policy remains authoritative for Sheets backup/restore and does not expand
+migration input scope. Earlier/unsupported live schemas fail before Source-ledger or
+target mutation; no historical conversion is invoked.
 
 `manifest_version`, `mapping_version`, the PostgreSQL revision and aggregate
 `version` baselines are independent. Profile key + configured workbook identity
@@ -676,10 +672,11 @@ mutation, period regeneration, automatic pair repair, or dual-writing occurs.
 
 ### Dependency-complete load units
 
-The dependency is a domain graph, not a "Transactions tab first" import.
-#254 owns unit planning/idempotency; #255 and #256 cooperate on a *single* unit's
-rows. A unit may be planned by the core loader while its owner comes from the
-secondary loader. All references must resolve before committing it.
+The dependency is a domain graph, not a "Transactions tab first" import. Sheets
+migration framework owns unit planning/idempotency; core migration loaders and secondary
+migration loaders cooperate on a *single* unit's rows. A unit may be planned by the core
+loader while its owner comes from the secondary loader. All references must resolve
+before committing it.
 
 | Unit | Contents required together | Prerequisites and order inside the transaction |
 | --- | --- | --- |
@@ -703,52 +700,54 @@ one giant transaction, but every committed occurrence has its owner. Existing
 entries already loaded by a prerequisite are reused by stable ID only after
 content/owner equality checks; neither loader inserts a second copy.
 
-Each unit has a stable manifest key/digest and a `migration_units` record in the
-same commit. On restart, a loaded matching unit is skipped; differing content
-for the same run/key is a conflict, and a failed uncommitted unit can be retried.
-Mapping rows are deterministic and immutable. Resume only the same frozen
-source snapshot/target binding. A different source snapshot requires a new
-explicit run into an empty/rebuilt inactive target or #258's controlled final
-reconciliation procedure; no overwrite or partial refresh of an active ledger.
-Roll back failed units normally; whole-run abandonment uses an explicitly
-approved inactive migration target reset, never the configured live Sheets file.
+Each unit has a stable manifest key/digest and a `migration_units` record in the same
+commit. On restart, a loaded matching unit is skipped; differing content for the same
+run/key is a conflict, and a failed uncommitted unit can be retried. Mapping rows are
+deterministic and immutable. Resume only the same frozen source snapshot/target binding.
+A different source snapshot requires a new explicit run into an empty/rebuilt inactive
+target or authority cutover's controlled final reconciliation procedure; no overwrite or
+partial refresh of an active ledger. Roll back failed units normally; whole-run
+abandonment uses an explicitly approved inactive migration target reset, never the
+configured live Sheets file.
 
 Core-only fixtures can achieve core acceptance independently. When secondary
-owners/history/problem states are incomplete, #255's totals are provisional
-evidence only. #257 must verify the complete profile: stable counts/IDs and
-mapping, balances/P&L/date ranges, openings, hierarchies, owner/projection/event
-relations, receipts/tags, and supported secondary state. #258 also requires
-#260's complete entity export before migrated-entity activation. Commercial
-production additionally requires #253 and #259 evidence as the EPIC states.
+owners/history/problem states are incomplete, the core loaders' totals are provisional
+evidence only. whole-profile acceptance must verify the complete profile: stable
+counts/IDs and mapping, balances/P&L/date ranges, openings, hierarchies,
+owner/projection/event relations, receipts/tags, and supported secondary state.
+authority cutover also requires complete entity export's complete entity export before
+migrated-entity activation. Commercial production additionally requires mutation
+baseline contract and managed database recovery evidence as required for authority
+activation.
 
 ## Boundaries and resolved questions
 
 | Question | V1 decision / implementation owner |
 | --- | --- |
-| Is entity scope an organization or authorization model? | One ledger root only. #222 attaches its organization/entity ownership FK through a later control-plane migration; membership grants and actor schema stay there. No speculative user/member tables or trusted client profile selection. |
+| Is entity scope an organization or authorization model? | One ledger root only. identity and tenancy attaches its organization/entity ownership FK through a later control-plane migration; membership grants and actor schema stay there. No speculative user/member tables or trusted client profile selection. |
 | Do Categories become tags or hidden revenue/expense accounts? | Neither. They remain typed accounting targets and preserve their existing hierarchy/report semantics; Tags remain separate joins. |
-| Can simple and journal repositories both expose one entry? | No. Immutable discriminant and disjoint reads, tested by #246/#247. |
+| Can simple and journal repositories both expose one entry? | No. Immutable discriminant and disjoint reads, tested by transaction and journal repositories and reporting repository. |
 | Are opening values duplicated as postings? | No. Signed account initial values only; dated openings/closing policy require later accounting-policy work. |
 | Is depreciation a new journal in v1? | No. Current non-cash source-owned Expense plus event index; preserve IDs/zero periods. |
 | Does failure isolation permit half an SQL source/pair? | No. Pair writes are atomic; recurring occurrences commit independently; explicit historical inspectable states retain diagnostics without weakening entry/entity constraints. |
-| How do identity and audit attach later? | Through stable entity/object identities. #222/#223 own memberships, actors, audit event content, period locks, and correction policies. They must not be invented by repository slices. |
-| Is a schema/tool/provider choice still needed? | #244 chooses driver/migration tooling and supported PostgreSQL release. This ADR requires ordinary relational types plus deferred constraint triggers, partial indexes, and coherent SQL snapshots; it requires no extensions, provider-specific hosting, or native enum. |
-| How are baselines transported? | Row/aggregate version and loaded-record policy fixed here; #253 adds neutral token/expected transport and #221 carries it through forms/API. Legacy no-baseline calls remain explicitly limited. |
-| Which inputs does #254 accept? | Live final-format-13 workbooks only; shared validators reject earlier/unsupported schemas before writes. Format-13 backup/restore remains separate and does not add archive import to this framework. |
-| What remains for export/recovery/launch? | #260 versioned complete entity artifact; #259 real restore/PITR; #258 authority switch; #224 customer lifecycle. None changes v1 accounting identity/projection rules. |
+| How do identity and audit attach later? | Through stable entity/object identities. identity and tenancy and platform operations own memberships, actors, audit event content, period locks, and correction policies. They must not be invented by repository slices. |
+| Is a schema/tool/provider choice still needed? | database runtime chooses driver/migration tooling and supported PostgreSQL release. This ADR requires ordinary relational types plus deferred constraint triggers, partial indexes, and coherent SQL snapshots; it requires no extensions, provider-specific hosting, or native enum. |
+| How are baselines transported? | Row/aggregate version and loaded-record policy fixed here; mutation baseline contract adds neutral token/expected transport and browser and API workflows carries it through forms/API. Legacy no-baseline calls remain explicitly limited. |
+| Which inputs does Sheets migration framework accept? | Live final-format-13 workbooks only; shared validators reject earlier/unsupported schemas before writes. Format-13 backup/restore remains separate and does not add archive import to this framework. |
+| What remains for export/recovery/launch? | complete entity export versioned complete entity artifact; managed database recovery real restore/PITR; authority switching; customer lifecycle. None changes v1 accounting identity/projection rules. |
 
-No unresolved product choice is required to implement v1 table shapes or the
-core repositories. The named downstream issues own tool selection, operational
-policy, and additive interface implementation; they are not reasons to create
-incompatible accounting schemas. A deliberate change to a decision here must
-update this ADR and its mappings before dependent slices consume it.
+No unresolved product choice is required to implement v1 table shapes or the core
+repositories. The component guides define tool selection, operational policy, and
+additive interface implementation; they are not reasons to create incompatible
+accounting schemas. A deliberate change to a decision here must update this ADR and its
+mappings before dependent slices consume it.
 
 ## Validation handoff
 
-This ticket validates documentation against current contracts/domain owners and
-checks repository/link integrity; it does not claim executable SQL validation.
-#244/#253 use real PostgreSQL, not SQLite substitutes. Required evidence for
-the implementing slices includes:
+The schema contract requires executable PostgreSQL verification in addition to
+documentation and link checks. Database runtime and mutation baseline contract use real
+PostgreSQL, not SQLite substitutes. Required evidence for the implementing slices
+includes:
 
 - Two synthetic entities with overlapping local IDs: all direct FK, owner,
   tags, documents, migration mappings, and export attempts remain isolated.
@@ -773,7 +772,7 @@ the implementing slices includes:
 - A live final-format-13 workbook passes shared schema/domain preflight;
   representative retired/unsupported headers and invalid provenance fail before
   source-ledger or target writes, including on resume. Archive validation remains
-  in Sheets backup/restore; #254 does not accept archive inputs or invoke converters.
+  in Sheets backup/restore; Sheets migration framework does not accept archive inputs or invoke converters.
 - A concurrent-write reporting/export scenario proves one coherent snapshot;
   core query plans use the entity/date, target, and reverse-tag indexes at
   representative beta scale. Add indexes only for demonstrated query needs.

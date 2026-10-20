@@ -85,7 +85,7 @@ def audited_keys(revision):
 
 
 class AuditReader:
-    """#341/#345 consume this contract after server authorization.
+    """Privileged inspection and authorized export require server authorization.
 
     Capabilities come from trusted operator provisioning, never tenant input.
     Ordinary bookkeeping:read/export deliberately do not grant audit access.

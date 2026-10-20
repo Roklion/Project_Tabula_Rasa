@@ -1,4 +1,4 @@
-"""The hosted #288 journey uses the same actual compiled HTTP/PostgreSQL path."""
+"""The hosted alpha journey uses the actual compiled browser/HTTP/PostgreSQL path."""
 
 from uuid import uuid4
 from time import sleep

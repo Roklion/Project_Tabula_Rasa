@@ -379,6 +379,25 @@ documentation burden.
 
 ## Tests and documentation
 
+- Keep repository documentation organized around application behavior, technical
+  components, architecture decisions and reusable operating procedures. Do not
+  add issue- or PR-specific documentation files, progress logs, review handoffs,
+  dated acceptance reports or evidence bundles to the repository.
+- Incorporate lasting requirements, design decisions and procedures coherently
+  into the relevant canonical guide. Keep task-specific plans, implementation
+  chronology, validation results and review/acceptance evidence in the owning
+  issue or PR description/comment instead. Link to that discussion when useful;
+  do not duplicate its status or checklist in a repository guide.
+- Define each feature, invariant, operating procedure and technical owner in the
+  repository's component documentation or code. Issue/PR links may supply
+  evidence, provenance or historical decisions; they must not substitute for
+  the feature specification, name a feature by ticket number, or require the
+  reader to open a tracker to understand supported behavior. Apply this rule to
+  all documentation, code/test docstrings and comments, CLI help and examples.
+- Before removing historical documentation, check the owning GitHub discussion.
+  Move any unique relevant history into a comment, or delete the repository copy
+  directly when the discussion already preserves it. Preserve reusable technical
+  guidance in the canonical docs and update affected links and examples.
 - Behavior changes need regression coverage for both the success path and
   relevant failure paths.
 - Profile-sensitive changes need an isolation test using at least two profiles.

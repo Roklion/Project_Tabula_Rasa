@@ -1,7 +1,7 @@
 """Bounded diagnostic telemetry. Never accept exception text or business payloads.
 
 HTTP owns request/context extraction; this module owns redaction and delivery.
-Logs are best effort diagnostics, not the immutable accounting history (#335).
+Logs are best effort diagnostics, separate from immutable accounting audit history.
 """
 
 from dataclasses import dataclass, field
@@ -96,7 +96,7 @@ class Telemetry:
         """Allowlist every field before either sink. Callers never supply a dict.
 
         operation/route/action come from the compiled HTTP registry, not a URL.
-        System producers have a closed operation vocabulary pending #333/#294.
+        Job, backup and deployment producers use the closed system-operation vocabulary.
         """
         if event not in SIGNALS:
             return

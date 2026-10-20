@@ -1,6 +1,6 @@
 # OAuth-only Sheets migration runbook
 
-Issue #215 changes authentication, not ledger data or workbook schema. One
+OAuth migration changes authentication while preserving ledger data and workbook schema. One
 existing shared Google Cloud project and web OAuth client serve all businesses.
 Keep every profile's workbook ID, grant, account identity, and Drive destinations
 separate. The application password remains shared across the deployment.

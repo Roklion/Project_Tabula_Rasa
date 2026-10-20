@@ -155,7 +155,7 @@ def test_alpha_entity_selection_is_per_client_and_server_bounded(database, comme
         assert first.get('/api/v1/entities/beta/transactions').json()['items'] == []
         assert second.get('/api/v1/session').json()['entity']['id'] == 'alpha'
         assert len(second.get(PREFIX + 'transactions').json()['items']) == 1
-        # Functional selection is not offered as a bypass on a #222 resolver.
+        # Development selection cannot bypass the named membership resolver.
         assert commercial[2][0].post('/api/v1/session/entity', headers=HEADERS, json={'entity_id': 'alpha'}).status_code == 403
 
 

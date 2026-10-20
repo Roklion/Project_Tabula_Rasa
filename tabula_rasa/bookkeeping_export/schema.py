@@ -14,7 +14,7 @@ FORMAT_VERSION = 1
 # inventory remains complete; cutover controls are deployment records.
 # Identity control-plane tables contain no canonical bookkeeping fields and
 # intentionally do not travel in entity exports or restore artifacts.
-# Operations history is private and has a separate authorized export owner (#345).
+# Operations history is private and requires a separate authorized export contract.
 # 0012 changes no v1 bookkeeping field; audit/job tables are deliberately excluded.
 # 0013 adds separately protected operational policy/correction relationships.
 # Reversing journals use existing entries/postings; those remain portable v1 data.

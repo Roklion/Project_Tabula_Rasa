@@ -1,4 +1,4 @@
-"""Offline, fail-closed resource-disposition preview for #339. Never deletes."""
+"""Offline, fail-closed resource-disposition preview. Never deletes."""
 
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256

@@ -1,4 +1,4 @@
-"""Preview #339 exact-target retirement using a sanitized offline inventory."""
+"""Preview exact-target resource retirement using a sanitized offline inventory."""
 
 import argparse
 import json
