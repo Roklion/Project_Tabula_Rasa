@@ -8,6 +8,11 @@ monitoring, incident response, document recovery and retention. Neon is selected
 by [ADR 0002](adr/0002-commercial-web-runtime.md); this guide does not select or
 purchase a plan, provision resources, enable protection or execute a restore.
 
+[#339 resource retirement](RESOURCE_RETIREMENT.md) owns any later exact-target
+disposition. Its [desk inventory](operations/RESOURCE_INVENTORY.md) retains the
+#259/#294/#342 drill sets and records unresolved identities; a successful drill
+or retired format never supplies deletion approval.
+
 ## Status and production checkpoint
 
 The read-only verifier and rehearsal procedure are implemented. [#259](https://github.com/Roklion/Project_Tabula_Rasa/issues/259)
