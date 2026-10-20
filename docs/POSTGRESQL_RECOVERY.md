@@ -186,14 +186,16 @@ Run the verifier for every expected bookkeeping entity; investigate missing or
 unexpected entities. Each invocation checks only its explicitly selected entity.
 An entity match cannot prove complete database inventory, provider lineage,
 recovery objectives, restored roles/grants, triggers/functions, authority records,
-identity/job/audit schemas or external document bytes. The current audit/job
-tables and activation watermark require #342's separate recovery validation;
-see [jobs and audit recovery boundaries](OPERATIONS_JOBS_AUDIT.md#inspection-immutability-retention-and-recovery).
+identity/job/audit schemas or external document bytes. Use the separate
+[audit-aware verification procedure](AUDIT_RECOVERY.md) with this CLI's
+`audit-capture`/`audit-verify` commands for each expected entity. Synthetic checks
+do not replace #342's actual snapshot/PITR/NAS audit recovery evidence; broader
+identity/job/role inventory and external byte recovery remain separate checks.
 
 Use the application release and immutable Alembic chain appropriate to the
 requested point. Do not upgrade, stamp or downgrade the restored target before
 checking it: that changes the state being verified. The current verifier accepts
-only #260's supported revisions (`0004_mileage_order` through `0013_accounting_controls`)
+only #260's supported revisions (`0004_mileage_order` through `0015_support_controls`)
 and requires the exact expected revision. Older/unknown points stop explicitly;
 use their retained release/tooling in an isolated environment and record the gap.
 Never extend ordinary startup with historical format conversion.

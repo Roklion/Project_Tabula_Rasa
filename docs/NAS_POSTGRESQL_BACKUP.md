@@ -652,6 +652,14 @@ not the completion state of a particular installation or drill.
 
 ## Developer validation
 
+For audit-aware acceptance, retain an independent per-entity audit oracle while
+the source and archive capture are frozen, then run
+[`audit-verify`](AUDIT_RECOVERY.md) on the isolated archive restore before any
+upgrade. This checks full retained event identity/content, activation/baseline,
+ledger consistency and restored protections. #294's completed owner-operated
+technical drill did not execute that comparison and does not by itself satisfy
+#335. Keep any unavailable old-point audit tail explicit; never synthesize it.
+
 Focused unit tests are in `tests/test_nas_postgres_backup.py`. The self-contained
 synthetic client drill starts a new private PostgreSQL cluster inside the image,
 uses verified TLS/SCRAM channel binding, backs up two entities with overlapping

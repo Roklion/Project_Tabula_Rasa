@@ -52,6 +52,8 @@ jobs:
       - name: Lint Python
         run: ruff check .
       - name: Run complete Python suite
+        env:
+          TABULA_RASA_TEST_PG_CONTAINER: ${{ job.services.postgres.id }}
         run: python -m pytest -ra --durations=20 --junitxml=python-results.xml
       - name: Upload Python results
         if: ${{ always() }}

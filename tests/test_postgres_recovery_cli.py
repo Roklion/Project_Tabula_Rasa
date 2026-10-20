@@ -100,3 +100,36 @@ def test_inspection_is_read_only_and_disposes_pool(monkeypatch, capsys):
         "connected": True, "revision": "0005_bookkeeping_cutover", "database_sha256": "b" * 64,
     }
     assert disposed == [True]
+
+
+def test_audit_capture_is_private_no_clobber_and_prints_no_manifest(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv('TABULA_RASA_RECOVERY_DATABASE_URL', 'postgresql://test@127.0.0.1/synthetic')
+    output = tmp_path / 'audit.json'
+    class Pool:
+        def __init__(self, settings):
+            assert settings.url.database == 'synthetic'
+        def dispose(self):
+            pass
+    def capture(database, entity, *, capabilities):
+        assert entity == 'alpha' and capabilities == frozenset({'platform:operate','audit:inspect'})
+        return {'private-sentinel': 'only-in-private-file'}
+    monkeypatch.setattr(command, 'Database', Pool)
+    monkeypatch.setattr(command, 'capture_audit_recovery', capture)
+    args = ['audit-capture','--entity','alpha','--output',str(output)]
+    assert command.main(args) == 0
+    assert 'private-sentinel' not in capsys.readouterr().out
+    assert json.loads(output.read_text()) == {'private-sentinel': 'only-in-private-file'}
+    assert command.main(args) == 1
+    assert json.loads(capsys.readouterr().out)['code'] == 'output_exists'
+    assert 'only-in-private-file' in output.read_text()
+
+
+def test_audit_invalid_manifest_is_rejected_before_pool_creation(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv('TABULA_RASA_RECOVERY_DATABASE_URL', 'postgresql://test@127.0.0.1/synthetic')
+    path = tmp_path / 'audit.json'
+    path.write_text('{"private-sentinel":true}')
+    monkeypatch.setattr(command, 'Database', lambda settings: pytest.fail('Invalid oracle must not create pool'))
+    args = arguments(path)
+    args[0] = 'audit-verify'
+    assert command.main(args) == 1
+    assert json.loads(capsys.readouterr().out) == {'status':'failed','code':'audit_manifest_invalid'}
