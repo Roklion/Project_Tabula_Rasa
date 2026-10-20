@@ -4,7 +4,7 @@ from dataclasses import replace
 import json
 from threading import Event
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 from fastapi.testclient import TestClient
 import pytest
@@ -228,6 +228,29 @@ def test_exporter_initialization_failure_is_sanitized(monkeypatch, caplog):
     telemetry.close()
     assert events(caplog)[-1]["provider_status"] == "unavailable"
     assert PRIVATE not in caplog.text
+
+
+def test_shutdown_drains_already_queued_confirmed_outcomes(monkeypatch):
+    started, release = Event(), Event()
+    session = MagicMock()
+    session.__enter__.return_value = session
+    session.post.return_value.__enter__.return_value.status_code = 202
+
+    def open_session():
+        started.set()
+        assert release.wait(3)
+        return session
+
+    monkeypatch.setattr('tabula_rasa.telemetry.requests.Session', open_session)
+    telemetry = Telemetry('test', 'release', SOURCE)
+    assert started.wait(3)
+    telemetry.record('job_run', 'job_execute', provider_status='ok')
+    telemetry.stopped.set()
+    release.set()
+    telemetry.close()
+    assert not telemetry.thread.is_alive()
+    assert telemetry.queue.empty()
+    assert session.post.call_args.kwargs['json'][0]['outcome'] == 'success'
 
 
 def test_smoke_only_returns_safe_release_and_server_correlation():

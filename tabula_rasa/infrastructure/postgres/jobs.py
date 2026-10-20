@@ -71,13 +71,27 @@ class JobQueue:
     Construct only in operator/worker composition after exact environment/entity
     approval. Member-triggered controls must first use #313 authorization.
     """
-    def __init__(self, database, entity_id, registry, *, service_id):
+    def __init__(self, database, entity_id, registry, *, service_id, telemetry=None):
         if not all(isinstance(v, str) and v.strip() and len(v) <= 200 for v in (entity_id, service_id)):
             raise ValueError('An explicit entity and service identity are required.')
         self.database = database
         self.entity_id = entity_id
         self.registry = registry
         self.service_id = service_id
+        self.telemetry = telemetry
+
+    def _record_outcome(self, job_id, code=None):
+        """Best effort, after durable confirmation; never expose handler content."""
+        if self.telemetry is None:
+            return
+        try:
+            self.telemetry.record('job_run', 'job_execute', job_id=str(job_id),
+                context=AuditContext('worker', self.service_id, 'job', self.entity_id),
+                failure_code='job_' + code if code else None,
+                provider='application', provider_status='ok')
+        except Exception:
+            # Telemetry must not change a committed result or retry its effects.
+            pass
 
     def enqueue(self, job_type, key, *, due_at=None, max_attempts=3, target_id=None, business_date=None,
                 generation_revision=None):
@@ -162,15 +176,19 @@ class JobQueue:
             if row['attempts'] >= row['max_attempts']:
                 connection.execute(text('''UPDATE jobs SET state='dead',lease_id=NULL,lease_until=NULL,
                     failure_code='lease_expired',finished_at=clock_timestamp() WHERE entity_id=:scope AND id=:id'''), params)
-                return None
-            lease = uuid4()
-            params.update(lease=lease, worker=self.service_id, seconds=lease_seconds)
-            connection.execute(text('''UPDATE jobs SET state='running',attempts=attempts+1,lease_id=:lease,
-                lease_until=clock_timestamp()+:seconds * interval '1 second',failure_code=NULL
-                WHERE entity_id=:scope AND id=:id'''), params)
-            connection.execute(text('''INSERT INTO job_attempts(entity_id,job_id,lease_id,worker_id)
-                VALUES (:scope,:id,:lease,:worker)'''), params)
-            return str(row['id']), str(lease)
+                result = None
+            else:
+                lease = uuid4()
+                params.update(lease=lease, worker=self.service_id, seconds=lease_seconds)
+                connection.execute(text('''UPDATE jobs SET state='running',attempts=attempts+1,lease_id=:lease,
+                    lease_until=clock_timestamp()+:seconds * interval '1 second',failure_code=NULL
+                    WHERE entity_id=:scope AND id=:id'''), params)
+                connection.execute(text('''INSERT INTO job_attempts(entity_id,job_id,lease_id,worker_id)
+                    VALUES (:scope,:id,:lease,:worker)'''), params)
+                result = str(row['id']), str(lease)
+        if result is None:
+            self._record_outcome(row['id'], 'lease_expired')
+        return result
 
     def execute(self, job_id, lease_id):
         """Return false for an obsolete/completed claim; never repeat its effects."""
@@ -202,12 +220,16 @@ class JobQueue:
                     finished_at=clock_timestamp() WHERE entity_id=:scope AND id=:id'''), params)
                 connection.execute(text('''UPDATE job_attempts SET outcome='succeeded',finished_at=clock_timestamp()
                     WHERE entity_id=:scope AND job_id=:id AND lease_id=:lease'''), params)
-                return True
+            self._record_outcome(job_id)
+            return True
         except Exception as error:
             # No exception messages or arbitrary handler content enter diagnostics.
             code = 'transient' if isinstance(error, (DatabaseError, StorageError)) and error.code in {
                 'unavailable', 'concurrent_write', 'database_exhausted'} else 'poison'
-        return self._fail(params, code)
+        confirmed_success = self._fail(params, code)
+        if confirmed_success:
+            self._record_outcome(job_id)
+        return confirmed_success
 
     def _invoke(self, registration, execution):
         if not registration.independent_idempotent:
@@ -241,7 +263,9 @@ class JobQueue:
                 {**params, 'state': state, 'code': code, 'backoff': min(300, 2 ** row['attempts'])})
             connection.execute(text('''UPDATE job_attempts SET outcome=:code,finished_at=clock_timestamp()
                 WHERE entity_id=:scope AND job_id=:id AND lease_id=:lease'''), {**params, 'code': code})
-            return False
+        if state == 'dead':
+            self._record_outcome(params['id'], code)
+        return False
 
     def cancel(self, job_id):
         with self.database.transaction(require_outer=True) as connection:
