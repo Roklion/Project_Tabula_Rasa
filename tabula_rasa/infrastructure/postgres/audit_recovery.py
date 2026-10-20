@@ -16,11 +16,13 @@ from tabula_rasa.bookkeeping_export.format import build_artifact, canonical_json
 from .audit import audited_keys, AuditReader
 from .cutover import database_identity
 from .entity_export import PostgresEntityExportRepository
-from .migrations import current_revision
+from .migrations import MIGRATION_ROOT, current_revision
 
 FORMAT = 'tabula-rasa-audit-recovery-v1'
 SUPPORTED_REVISIONS = {'0013_accounting_controls', '0014_document_locations', '0015_support_controls'}
 AUDIT_TABLES = ('audit_events', 'audit_baseline', 'audit_activation')
+AUDIT_FUNCTIONS = frozenset({'audit_immutable', 'audit_insert_guard', 'audit_summary',
+                             'audit_row_digest', 'capture_bookkeeping_audit'})
 
 
 def _digest(value):
@@ -29,6 +31,40 @@ def _digest(value):
 
 def _rows(connection, query, params=None):
     return [dict(row) for row in connection.execute(text(query), params or {}).mappings()]
+
+
+def _validate_function_sources(functions):
+    """Use frozen migration SQL as the owner of required function definitions.
+
+    All supported recovery revisions include 0013's minimizer replacement.
+    This parses only our known declarations, not arbitrary SQL or restore input.
+    It neither executes migrations nor opens a temporary database.
+    """
+    expected = {}
+    declaration = re.compile(
+        r'CREATE (?:OR REPLACE )?FUNCTION (\w+)\(([^)]*)\)\s+RETURNS (\w+)\s+'
+        r'LANGUAGE (\w+)(.*?)\bAS \$\$(.*?)\$\$;', re.DOTALL | re.IGNORECASE,
+    )
+    for filename in ('0012_operations.sql', '0013_accounting_controls.sql'):
+        for name, args, result_type, language, modifiers, body in declaration.findall(
+                (MIGRATION_ROOT / 'versions' / filename).read_text(encoding='utf-8')):
+            if name in AUDIT_FUNCTIONS:
+                expected[name] = {
+                    'args': args, 'source': body.strip(), 'result_type': result_type, 'language': language,
+                    'security_definer': 'SECURITY DEFINER' in modifiers.upper(),
+                    'volatility': 'i' if 'IMMUTABLE' in modifiers.upper() else 'v',
+                    'config': ['search_path=public, pg_temp'] if 'search_path' in modifiers else None,
+                    'strict': False, 'leakproof': False,
+                }
+    if set(expected) != AUDIT_FUNCTIONS:
+        raise ExportError('audit_schema_unsupported')
+    for name, definition in expected.items():
+        actual = [row for row in functions if row['proname'] == name]
+        if len(actual) != 1 or any(
+            (actual[0][field].strip() if field == 'source' else actual[0][field]) != value
+            for field, value in definition.items()
+        ):
+            raise ExportError('audit_schema_incomplete')
 
 
 def _inventory(connection, revision):
@@ -70,8 +106,12 @@ def _inventory(connection, revision):
         # an audit prefix. Function ACL/owner/search_path are part of the oracle.
         'functions': _rows(connection, """SELECT p.proname,pg_get_function_identity_arguments(p.oid) AS args,
             pg_get_functiondef(p.oid) AS definition,pg_get_userbyid(p.proowner) AS owner,
+            p.prosrc AS source,format_type(p.prorettype,NULL) AS result_type,l.lanname AS language,
+            p.prosecdef AS security_definer,p.provolatile AS volatility,p.proconfig AS config,
+            p.proisstrict AS strict,p.proleakproof AS leakproof,
             ARRAY(SELECT a::text FROM unnest(COALESCE(p.proacl,acldefault('f',p.proowner))) a ORDER BY a::text)::text AS acl
             FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+            JOIN pg_language l ON l.oid=p.prolang
             WHERE n.nspname='public' AND p.prokind IN ('f','p','w') ORDER BY p.proname,args"""),
         'sequences': _rows(connection, """SELECT s.schemaname,s.sequencename,s.sequenceowner,s.data_type::text,
             s.start_value,s.min_value,s.max_value,s.increment_by,s.cycle,s.cache_size,
@@ -80,6 +120,7 @@ def _inventory(connection, revision):
             JOIN pg_class c ON c.relnamespace=n.oid AND c.relname=s.sequencename
             WHERE s.schemaname='public' AND s.sequencename='audit_events_sequence_seq'"""),
     }
+    _validate_function_sources(inventory['functions'])
     triggers = {(r['relname'], r['tgname']): r for r in inventory['triggers']}
     # Validate supported capture/immutability semantics before trusting a source
     # oracle; a drifted trigger with the right name is not a valid protection.

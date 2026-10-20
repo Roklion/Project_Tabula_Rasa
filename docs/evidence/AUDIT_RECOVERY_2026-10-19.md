@@ -34,6 +34,18 @@ The initial publication exposed an invalid job-level service context in CI;
 moving that binding to the pytest step fixed workflow evaluation. The failed
 initial run is not passing evidence for the corrected head.
 
+The owner subsequently paused **all real provider/NAS drill work** for another
+agent and requested completion of implementation and the PR feedback loop only.
+No Neon authentication, cloud restore or retained NAS operation was performed.
+The real-drill rows below are therefore also **user-paused**, with their original
+prerequisites retained for handoff; they are not passing evidence.
+
+Final source-function remediation: **106 affected audit/recovery/migration/CLI/
+CI-policy tests passed in 51.20 seconds**, with no skips/failures; Ruff/diff passed.
+The source oracle rejects changed audit function bodies and search paths by
+comparing the five required functions against the frozen migration definitions,
+including a same-name weakened immutability function with an older event removed.
+
 ## Test and evidence matrix
 
 | Check | Execution/result | Evidence and limit |

@@ -291,6 +291,32 @@ def test_drifted_source_protections_cannot_be_blessed_as_an_oracle(database, dri
         capture(database)
 
 
+@pytest.mark.parametrize('function', ['audit_immutable','audit_insert_guard','audit_summary',
+                                     'audit_row_digest','capture_bookkeeping_audit','capture-search-path'])
+def test_source_function_drift_is_checked_against_frozen_migration_definitions(database, function):
+    alpha, _ = seed_core(database)
+    original = alpha.transactions.create(transaction_id='older-event', **expense())
+    alpha.transactions.update('older-event', expected=original, amount='20')
+    with database.engine.begin() as connection:
+        sql = {
+            'audit_immutable': "CREATE OR REPLACE FUNCTION audit_immutable() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RETURN OLD; END'",
+            'audit_insert_guard': "CREATE OR REPLACE FUNCTION audit_insert_guard() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RETURN NEW; END'",
+            'audit_summary': "CREATE OR REPLACE FUNCTION audit_summary(value jsonb) RETURNS jsonb LANGUAGE sql IMMUTABLE AS 'SELECT value'",
+            'audit_row_digest': "CREATE OR REPLACE FUNCTION audit_row_digest(value jsonb,table_name text) RETURNS text LANGUAGE sql IMMUTABLE AS $$SELECT 'wrong'::text$$",
+            'capture_bookkeeping_audit': "CREATE OR REPLACE FUNCTION capture_bookkeeping_audit() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS 'BEGIN RETURN NULL; END'",
+            'capture-search-path': 'ALTER FUNCTION capture_bookkeeping_audit() SET search_path=pg_temp,public',
+        }[function]
+        connection.execute(text(sql))
+        if function == 'audit_immutable':
+            # Same-name no-op protection permits this deletion. A latest-event
+            # scan still matches, so function validation must reject capture.
+            connection.execute(text("DELETE FROM audit_events WHERE target_type='entries' AND action='create'"))
+    if function == 'audit_immutable':
+        assert reader(database).verify()['status'] == 'matched'
+    with pytest.raises(ExportError, match='audit_schema_incomplete'):
+        capture(database)
+
+
 def test_real_pg_dump_restore_retains_audit_archive(database):
     """Use the same pg_dump -Fc / pg_restore path as #294, with real SQL.
 

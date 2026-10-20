@@ -32,6 +32,11 @@ table/function/sequence ACLs. Source capture checks trigger function/schema,
 operation type, deferral and key arguments, and exact scoped-read policies
 (including refusal of additional permissive audit policies), RLS and sequence
 presence before trusting an oracle. A right name with weakened semantics fails.
+The five required audit functions' bodies, argument/result types, language,
+security mode, volatility and search path must also match the frozen 0012/0013
+migration SQL for these supported revisions. The verifier reads those release
+sources without executing them; a weakened same-name function cannot bless a
+truncated source history as a valid oracle.
 The verifier also runs the shared current-state reconciliation, including #336
 period/correction evidence and #341 support history at applicable revisions.
 Matching an Alembic revision alone is insufficient.
