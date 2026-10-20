@@ -337,6 +337,23 @@ def test_source_period_and_correction_guards_are_required_before_capture(databas
         capture(database)
 
 
+@pytest.mark.parametrize('drift', ['rls', 'read-policy', 'insert-policy', 'extra-policy', 'immutable'])
+def test_source_support_history_protections_are_required_before_capture(database, drift):
+    seed_core(database)
+    query = {
+        'rls': 'ALTER TABLE support_actions DISABLE ROW LEVEL SECURITY',
+        'read-policy': 'ALTER POLICY scoped_support_read ON support_actions USING (true)',
+        'insert-policy': 'ALTER POLICY scoped_support_insert ON support_actions WITH CHECK (true)',
+        'extra-policy': 'CREATE POLICY unrestricted ON support_actions FOR SELECT USING (true)',
+        'immutable': 'DROP TRIGGER immutable ON support_actions',
+    }[drift]
+    with database.engine.begin() as connection:
+        connection.execute(text(query))
+    assert reader(database).verify()['status'] == 'matched'
+    with pytest.raises(ExportError, match='audit_schema_incomplete'):
+        capture(database)
+
+
 def test_initial_revision_reports_preaudit_history_unavailable(empty_database):
     with empty_database.engine.begin() as connection:
         command.upgrade(migration_config(connection), '0001_initial')

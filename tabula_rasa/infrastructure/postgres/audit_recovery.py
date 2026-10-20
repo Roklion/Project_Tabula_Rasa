@@ -154,18 +154,35 @@ def _inventory(connection, revision):
         required[(table, 'action_history')] = (21, 'capture_period_action', False, False, '')
     for table in ('accounting_period_policy', 'accounting_periods', 'entry_corrections'):
         required[(table, 'immutable_truncate')] = (34, 'audit_immutable', False, False, '')
+    if revision == '0015_support_controls':
+        required[('support_actions', 'immutable')] = (58, 'audit_immutable', False, False, '')
     valid_triggers = all(
         key in triggers and triggers[key]['tgenabled'] == 'O' and triggers[key]['function_schema'] == 'public'
         and tuple(triggers[key][field] for field in ('tgtype','proname','tgdeferrable','tginitdeferred','arguments')) == expected
         for key, expected in required.items()
     )
     scoped_tables = {'audit_events', 'audit_baseline', 'accounting_period_actions'}
-    scoped_policies = [row for row in inventory['policies'] if row['tablename'] in scoped_tables]
     expected_policies = [{
         'tablename': table, 'policyname': name, 'permissive': 'PERMISSIVE', 'roles': '{public}', 'cmd': 'SELECT',
         'qual': "(entity_id = current_setting('tabula.audit_reader_entity'::text, true))", 'with_check': None,
     } for table, name in [('accounting_period_actions','scoped_period_action_read'),
                          ('audit_baseline','scoped_baseline_read'), ('audit_events','scoped_audit_read')]]
+    if revision == '0015_support_controls':
+        scoped_tables.add('support_actions')
+        context = "(NULLIF(current_setting('tabula.audit_context'::text, true), ''::text))::jsonb"
+        expected_policies.extend([
+            {'tablename': 'support_actions', 'policyname': 'scoped_support_insert',
+             'permissive': 'PERMISSIVE', 'roles': '{public}', 'cmd': 'INSERT', 'qual': None,
+             'with_check': f"((entity_id = ({context} ->> 'entity_id'::text)) "
+                 f"AND (({context} ->> 'actor_type'::text) = 'operator'::text) "
+                 f"AND (({context} ->> 'source'::text) = 'support'::text) "
+                 "AND (operation = ANY (ARRAY['diagnostics'::text, 'audit'::text, 'preview'::text, "
+                 "'revoke_sessions'::text, 'suspend_member'::text, 'suspend_organization'::text])))"},
+            {'tablename': 'support_actions', 'policyname': 'scoped_support_read',
+             'permissive': 'PERMISSIVE', 'roles': '{public}', 'cmd': 'SELECT',
+             'qual': "(entity_id = current_setting('tabula.audit_reader_entity'::text, true))", 'with_check': None},
+        ])
+    scoped_policies = [row for row in inventory['policies'] if row['tablename'] in scoped_tables]
     secured = {r['relname'] for r in inventory['tables'] if r['relrowsecurity']}
     if (not valid_triggers or not scoped_tables <= secured
             or scoped_policies != expected_policies
