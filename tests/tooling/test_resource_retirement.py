@@ -87,9 +87,10 @@ def test_requires_recent_observation(age):
     assert 'inventory_stale_or_future' in preview(document, ['synthetic-a'], now=NOW)['targets'][0]['blockers']
 
 
-def test_cascade_requires_each_effect_and_blocks_protected_child():
+@pytest.mark.parametrize('child_kind', ['postgres_database', 'postgres_role'])
+def test_cascade_requires_each_effect_and_blocks_protected_child(child_kind):
     branch = resource(kind='postgres_branch', effects=['synthetic-a', 'child'])
-    child = resource('child', provider_id='child-db', depends_on=['synthetic-a'],
+    child = resource('child', kind=child_kind, provider_id='child-db', depends_on=['synthetic-a'],
                      protections=['drill_evidence'])
     document = inventory(branch, child)
     result = preview(document, ['synthetic-a'], now=NOW)

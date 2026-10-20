@@ -47,8 +47,10 @@ outside scope.
 | Created / last updated | October 17 23:39:12 / October 18 06:08:12, as displayed by console |
 | Children | None in the complete seven-branch list; recheck before execution |
 | Database | `neondb`; one database reported and enumerated |
-| Compute | `ep-round-glade-b5jwtro3`; one primary, suspended since October 17 23:44 console-local time; no read replica listed |
-| Deletion effects | Exact branch, its database and primary compute; historical state/recovery at this branch would be lost |
+| Compute | `ep-round-glade-b5jwtro3`; one primary, initially suspended since October 17 23:44 console-local time; no read replica listed. Later read-only SQL inspection can wake it and consume compute; initial suspension is not a current-state guarantee |
+| Branch-local roles | `cloud_admin`, `neon_service`, `neon_superuser`, `neondb_owner`, `tabula_dev_runtime`; these objects are scoped to this branch, not global Neon account grants |
+| Deletion effects | Exact branch, its database, primary compute and five branch-local roles; historical state/recovery at this branch would be lost |
+| Read-only metadata | Connected to the exact candidate endpoint with existing local configuration without printing credentials; revision `0005_bookkeeping_cutover`. A boolean query confirmed all business entities are the known `alpha-synthetic` fixture; no business rows/values were printed |
 | Preserved parent | Active `development` / `br-cold-cell-b5ph2jz2` |
 | Preserved newer checkpoint | `development-pre0015-20261020` / `br-sweet-cherry-b5winx0t`; created October 20 10:43:19 console-local time; one database/one compute reported |
 | Tracked references | No match for old branch name/endpoint in tracked scripts, runtime, workflows, tests or canonical docs, excluding inventory |
@@ -56,12 +58,12 @@ outside scope.
 | Hosted/manual references | Effective Render/GitHub/private manual bindings not fully inspected; confirmation/recheck outstanding |
 | Authority | No live authority observed; suspended compute does not prove absence of consumers |
 | Latest operational evidence | [#332 approved development maintenance and successful smoke](https://github.com/Roklion/Project_Tabula_Rasa/issues/332#issuecomment-6293893668) records 0014→0015 upgrade and healthy compatible development. It does not release this old checkpoint or verify its contents |
-| D4/D7 decision | Owner must confirm synthetic-only contents, no remaining rollback/recovery/hold/consumer and intentional retirement of this exact old checkpoint |
+| D4/D7 decision | Synthetic fixture scope is confirmed. Owner must release any remaining rollback/recovery/hold/manual consumer and approve retirement of this exact checkpoint |
 | Recovery limitation | New checkpoint is a different point, not a copy of October 17 state. Do not promise undelete or identical historical-state recovery |
 | Exact-set approval | Pending; no deletion executed |
 
 The [candidate inventory](retirement-candidate-2026-10-20.json) records the known
-three-resource cascade, retained parent, replacement and default branch.
+eight-resource cascade, retained parent, replacement and default branch.
 The [preview](retirement-preview-2026-10-20.json) is **blocked**. Coverage remains
 unverified until owner release, private reference checks and recovery decision
 are complete. Do not override blockers or treat candidate selection as approval.

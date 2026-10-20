@@ -91,7 +91,7 @@ record. `rollback` links the tested recovery/recreation procedure.
 `depends_on` lists resource IDs consumed by this resource (e.g. a database depends
 on its parent branch). `effects` lists **every exact resource affected by deletion**,
 including itself. An empty list means unreviewed effects. Add affected endpoints,
-children, files and config references as separate inventory rows; no cascaded
+children, branch-local roles, files and config references as separate inventory rows; no cascaded
 effect may be silently omitted. All effects must be selected and independently
 eligible, and any consumer outside the set blocks the operation. Do not clear
 references without inspecting/removing obsolete bindings through their normal

@@ -1,8 +1,8 @@
 {
   "applied": false,
-  "inventory_sha256": "0934ccbbcf7c6195ae933877599ca20da771188446774a487eff0b4c241d9209",
+  "inventory_sha256": "5884699d2103cd0c28480aac95039e8a7b1f210f6d94622936536809b6fd167c",
   "observed_at": "2026-10-20T15:15:00Z",
-  "plan_sha256": "b07d7c8e590ea4fefc54cbbf45290b8011894895cff73940d7a8e3dfbdf36f5d",
+  "plan_sha256": "66f8b3e519a5525762637e10f37124872b697fbaedb6e740de6d11060838c948",
   "required_approvals": [
     "exact_target_set_operator_approval",
     "fresh_reference_and_effects_recheck",
@@ -27,10 +27,15 @@
       "effects": [
         "old-development-backup",
         "old-development-database",
-        "old-development-compute"
+        "old-development-compute",
+        "old-development-role-cloud_admin",
+        "old-development-role-neon_service",
+        "old-development-role-neon_superuser",
+        "old-development-role-neondb_owner",
+        "old-development-role-tabula_dev_runtime"
       ],
       "environment": "development",
-      "evidence": "neon-live-inventory-2026-10-20",
+      "evidence": "neon-live-metadata-2026-10-20",
       "handoff": "issue-377-D7-release-pending",
       "id": "old-development-backup",
       "kind": "postgres_branch",
@@ -62,7 +67,7 @@
         "old-development-compute"
       ],
       "environment": "development",
-      "evidence": "neon-live-inventory-2026-10-20",
+      "evidence": "neon-live-metadata-2026-10-20",
       "handoff": "issue-377-D7-release-pending",
       "id": "old-development-compute",
       "kind": "postgres_endpoint",
@@ -94,7 +99,7 @@
         "old-development-database"
       ],
       "environment": "development",
-      "evidence": "neon-live-inventory-2026-10-20",
+      "evidence": "neon-live-metadata-2026-10-20",
       "handoff": "issue-377-D7-release-pending",
       "id": "old-development-database",
       "kind": "postgres_database",
@@ -102,6 +107,166 @@
       "owner": "Roklion",
       "protections": [],
       "provider_id": "neondb",
+      "references": [
+        "owner-retention-release-pending",
+        "hosted-manual-reference-check-pending"
+      ],
+      "retained_consumers": [],
+      "rollback": null,
+      "scope": "weathered-term-80366172.br-bold-cherry-b51x0et0"
+    },
+    {
+      "authority": "inactive",
+      "blockers": [
+        "inventory_coverage_unverified",
+        "not_disposable_synthetic",
+        "live_or_retained_references",
+        "missing_preservation_or_handoff_evidence"
+      ],
+      "depends_on": [
+        "old-development-backup"
+      ],
+      "disposition": "unresolved",
+      "effects": [
+        "old-development-role-cloud_admin"
+      ],
+      "environment": "development",
+      "evidence": "neon-live-metadata-2026-10-20",
+      "handoff": "issue-377-D7-release-pending",
+      "id": "old-development-role-cloud_admin",
+      "kind": "postgres_role",
+      "last_backup": "development-pre0015-20261020",
+      "owner": "Roklion",
+      "protections": [],
+      "provider_id": "cloud_admin",
+      "references": [
+        "owner-retention-release-pending",
+        "hosted-manual-reference-check-pending"
+      ],
+      "retained_consumers": [],
+      "rollback": null,
+      "scope": "weathered-term-80366172.br-bold-cherry-b51x0et0"
+    },
+    {
+      "authority": "inactive",
+      "blockers": [
+        "inventory_coverage_unverified",
+        "not_disposable_synthetic",
+        "live_or_retained_references",
+        "missing_preservation_or_handoff_evidence"
+      ],
+      "depends_on": [
+        "old-development-backup"
+      ],
+      "disposition": "unresolved",
+      "effects": [
+        "old-development-role-neon_service"
+      ],
+      "environment": "development",
+      "evidence": "neon-live-metadata-2026-10-20",
+      "handoff": "issue-377-D7-release-pending",
+      "id": "old-development-role-neon_service",
+      "kind": "postgres_role",
+      "last_backup": "development-pre0015-20261020",
+      "owner": "Roklion",
+      "protections": [],
+      "provider_id": "neon_service",
+      "references": [
+        "owner-retention-release-pending",
+        "hosted-manual-reference-check-pending"
+      ],
+      "retained_consumers": [],
+      "rollback": null,
+      "scope": "weathered-term-80366172.br-bold-cherry-b51x0et0"
+    },
+    {
+      "authority": "inactive",
+      "blockers": [
+        "inventory_coverage_unverified",
+        "not_disposable_synthetic",
+        "live_or_retained_references",
+        "missing_preservation_or_handoff_evidence"
+      ],
+      "depends_on": [
+        "old-development-backup"
+      ],
+      "disposition": "unresolved",
+      "effects": [
+        "old-development-role-neon_superuser"
+      ],
+      "environment": "development",
+      "evidence": "neon-live-metadata-2026-10-20",
+      "handoff": "issue-377-D7-release-pending",
+      "id": "old-development-role-neon_superuser",
+      "kind": "postgres_role",
+      "last_backup": "development-pre0015-20261020",
+      "owner": "Roklion",
+      "protections": [],
+      "provider_id": "neon_superuser",
+      "references": [
+        "owner-retention-release-pending",
+        "hosted-manual-reference-check-pending"
+      ],
+      "retained_consumers": [],
+      "rollback": null,
+      "scope": "weathered-term-80366172.br-bold-cherry-b51x0et0"
+    },
+    {
+      "authority": "inactive",
+      "blockers": [
+        "inventory_coverage_unverified",
+        "not_disposable_synthetic",
+        "live_or_retained_references",
+        "missing_preservation_or_handoff_evidence"
+      ],
+      "depends_on": [
+        "old-development-backup"
+      ],
+      "disposition": "unresolved",
+      "effects": [
+        "old-development-role-neondb_owner"
+      ],
+      "environment": "development",
+      "evidence": "neon-live-metadata-2026-10-20",
+      "handoff": "issue-377-D7-release-pending",
+      "id": "old-development-role-neondb_owner",
+      "kind": "postgres_role",
+      "last_backup": "development-pre0015-20261020",
+      "owner": "Roklion",
+      "protections": [],
+      "provider_id": "neondb_owner",
+      "references": [
+        "owner-retention-release-pending",
+        "hosted-manual-reference-check-pending"
+      ],
+      "retained_consumers": [],
+      "rollback": null,
+      "scope": "weathered-term-80366172.br-bold-cherry-b51x0et0"
+    },
+    {
+      "authority": "inactive",
+      "blockers": [
+        "inventory_coverage_unverified",
+        "not_disposable_synthetic",
+        "live_or_retained_references",
+        "missing_preservation_or_handoff_evidence"
+      ],
+      "depends_on": [
+        "old-development-backup"
+      ],
+      "disposition": "unresolved",
+      "effects": [
+        "old-development-role-tabula_dev_runtime"
+      ],
+      "environment": "development",
+      "evidence": "neon-live-metadata-2026-10-20",
+      "handoff": "issue-377-D7-release-pending",
+      "id": "old-development-role-tabula_dev_runtime",
+      "kind": "postgres_role",
+      "last_backup": "development-pre0015-20261020",
+      "owner": "Roklion",
+      "protections": [],
+      "provider_id": "tabula_dev_runtime",
       "references": [
         "owner-retention-release-pending",
         "hosted-manual-reference-check-pending"

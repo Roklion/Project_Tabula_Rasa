@@ -11,7 +11,7 @@ class InventoryError(ValueError):
 
 
 KINDS = {
-    'postgres_branch', 'postgres_database', 'postgres_endpoint', 'managed_snapshot',
+    'postgres_branch', 'postgres_database', 'postgres_endpoint', 'postgres_role', 'managed_snapshot',
     'nas_generation', 'sheets_workbook', 'drive_artifact', 'local_artifact',
     'deployment_binding', 'fixture', 'schema_history',
 }
