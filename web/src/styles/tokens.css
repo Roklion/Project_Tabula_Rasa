@@ -56,6 +56,10 @@ button:disabled, button:disabled:hover, .button[aria-disabled="true"], .button[a
 .pageHeader .lead { margin: 0; }
 .pageHeader .actions { margin: 0; }
 .sectionHeader { margin-bottom: var(--space-4); }
+/* Independent page sections need more separation than a heading and its content. */
+main > :is(section, form, .actions) + :is(section, form, h2, .sectionHeader),
+main > p + :is(section, form),
+main > :is(section, form) ~ h2 { margin-top: var(--space-8); }
 .sectionHeader p { color: var(--secondary); margin: 0; overflow-wrap: anywhere; }
 .surface { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-surface); padding: var(--space-4); overflow-wrap: anywhere; min-width: 0; box-shadow: var(--shadow-surface); }
 .surface-secondary { background: var(--surface-secondary); }
@@ -152,6 +156,11 @@ dd { margin: 0 0 var(--space-3); }
 .reportSection .tableScroll + .tableScroll { margin-top: var(--space-4); }
 .tableEmpty { white-space: normal; color: var(--text-secondary); padding-block: var(--space-4); }
 .ledgerFilters { margin-bottom: var(--space-6); }
+.filterPanel { max-width: 960px; margin-bottom: var(--space-6); }
+.filterToggle { width: 100%; justify-content: space-between; text-align: left; font-weight: var(--weight-heading); }
+.filterToggle > span { min-width: 0; }
+.filterToggle > span:last-child { font-size: var(--type-secondary); font-weight: var(--weight-normal); }
+.filterContent { margin-top: var(--space-4); }
 .ledgerFilterGrid { grid-template-columns: repeat(6, minmax(0, 1fr)); margin: var(--space-4) 0; align-items: start; }
 .ledgerFilterGrid > .field { grid-column: span 2; }
 .ledgerFilterGrid > .field:has(select[multiple]), .ledgerFilterGrid > .field:has(#sort-field), .ledgerFilterGrid > .field:has(#entry-order) { grid-column: span 3; }

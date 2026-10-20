@@ -23,13 +23,14 @@ export function ConfirmationDialog({ title, children, keepLabel, confirmLabel, o
     onCancel={event => { event.preventDefault(); if (!pending) onKeep(); }}
     onKeyDown={event => {
       if (event.key !== 'Tab') return;
-      const buttons = Array.from(ref.current!.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled)'));
+      const buttons = Array.from(ref.current!.querySelectorAll<HTMLElement>('a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled)'));
       const first = buttons[0], last = buttons.at(-1);
       if (!first || !last) { event.preventDefault(); return; }
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     }}>
-    <p id={description}>{children}</p>
+    <div id={description}>{children}</div>
+    {pending && <p role="status" aria-live="polite" className="notice neutral">Working… Please wait for confirmation before trying again.</p>}
     <div className="actions"><ActionButton disabled={pending} onClick={onKeep}>{keepLabel}</ActionButton>
       <ActionButton tone={confirmTone} disabled={confirmDisabled} pending={pending} onClick={onConfirm}>{confirmLabel}</ActionButton></div>
   </dialog>, document.body);

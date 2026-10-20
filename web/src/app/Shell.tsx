@@ -50,7 +50,7 @@ export function Shell() {
       {!session.trusted_development && <button onClick={auth.logout}>Sign out</button>}
     </aside>
     <div className={styles.content}>
-      <header className={styles.topbar}><span>{workflowName ?? navigation.find(([path]) => matchesRoute(location.pathname, path))?.[1] ?? 'Page'}</span>
+      <header className={styles.topbar}><span>{workflowName ?? navigation.find(([path]) => matchesRoute(location.pathname, path))?.[1] ?? (['/workspace', '/workspace/'].includes(location.pathname) ? 'Workspace & members' : 'Tabula Rasa')}</span>
         <span className="muted">{session.entity.name}</span></header>
       <main ref={main} id="main" tabIndex={-1} className={styles.main} key={location.key}>{isEntryRoute(location.pathname) ? <WorkflowNav label="Entries" routes={entryRoutes} canWrite={session.capabilities.includes('bookkeeping:write')} />
         : matchesRoute(location.pathname, '/mileage') ? <WorkflowNav label="Mileage workflows" routes={mileageRoutes} canWrite={session.capabilities.includes('bookkeeping:write')} />

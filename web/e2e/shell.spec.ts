@@ -61,8 +61,11 @@ test('visible validation, conflict and unavailable states with request reference
 });
 
 test('unknown route and unavailable context are safe', async ({ page }) => {
-  await page.goto('/missing');
-  await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
+  for (const path of ['/missing', '/workspace/missing']) {
+    await page.goto(path);
+    await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
+    await expect(page.locator('header').first()).toContainText('Tabula Rasa');
+  }
   await page.route('**/api/v1/session', route => route.fulfill({
     status: 401, json: { error: { code: 'unauthorized', message: 'Sign in' }, request_id: 'context-ref' },
   }));

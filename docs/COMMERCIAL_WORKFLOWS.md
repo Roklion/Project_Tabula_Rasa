@@ -15,6 +15,14 @@ does not expand the default alpha or authorize #303 live cutover.
 
 ## Business selection
 
+Transactions filters can be collapsed with **Hide filters** and restored with
+**Show filters** using mouse, Enter or Space. The active scope remains visible;
+collapsing does not change filters, results, sorting or entry selection. **Clear
+filters** remains inside the expanded panel. The collapse preference survives
+navigation in this browser tab, separately per page and authorized business/user
+scope when session storage is available. Filter values still reset on navigation.
+Report-period controls and create/edit forms remain expanded.
+
 The local development seed creates Alpha and Beta demonstration entities in the
 disposable loopback database. Startup validates both configured fixtures and fails
 closed if either is missing; it never creates missing entities. A disposable fixture

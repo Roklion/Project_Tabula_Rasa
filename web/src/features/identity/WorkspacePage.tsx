@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, type Schemas } from '../../api/client';
+import { api, ApiError, type Schemas } from '../../api/client';
 import { resourceKey } from '../../api/query';
 import { useEntity } from '../../app/context';
-import { ErrorNotice, Field, LoadingState } from '../../components/States';
+import { ErrorNotice, Field, LoadingState, SuccessNotice } from '../../components/States';
 import { ActionButton, FormSection, PageHeader } from '../../components/VisualPrimitives';
 import { InvitationAcceptance } from './InvitationAcceptance';
 import { LedgerSetup } from './Onboarding';
@@ -20,6 +20,17 @@ function MemberEditor({ member, owner, onSave, onGrant }: { member: Schemas['Mem
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>();
   const [grant, setGrant] = useState(false);
+  const submitting = useRef(false);
+  const [uncertain, setUncertain] = useState(false);
+  async function submit(operation: () => Promise<void>, close: () => void) {
+    if (submitting.current || uncertain) return;
+    submitting.current = true; setPending(true); setError(undefined);
+    try { await operation(); close(); }
+    catch (failure) {
+      setError(failure);
+      setUncertain(!(failure instanceof ApiError && ['validation', 'invariant', 'required', 'forbidden', 'unauthorized', 'reauthentication_required', 'stale', 'conflict', 'concurrent_write'].includes(failure.code)));
+    } finally { submitting.current = false; setPending(false); }
+  }
   const allowed = owner || member.role === 'admin' && member.user_id === actor || !['owner', 'admin'].includes(member.role);
   return <section className="surface"><h3>{member.display_name || 'Workspace member'}</h3>
     <p>Current role: {roleNames[member.role]} · {member.state}</p>
@@ -29,16 +40,18 @@ function MemberEditor({ member, owner, onSave, onGrant }: { member: Schemas['Mem
     </select></Field>
     <label><input type="checkbox" checked={active} disabled={pending} onChange={event => setActive(event.target.checked)} /> Active membership</label>
     <div className="actions"><ActionButton disabled={pending} onClick={() => setConfirm(true)}>Review membership change</ActionButton></div></>}
-    {owner && (member.role !== 'owner' || member.state !== 'active') && <ActionButton disabled={pending} onClick={() => setGrant(true)}>Grant ownership</ActionButton>}
-    {grant && <ConfirmationDialog title="Grant ownership" keepLabel="Keep current role" confirmLabel="Confirm ownership grant" pending={pending} onKeep={() => setGrant(false)}
-      onConfirm={() => { setPending(true); setError(undefined); void onGrant().then(() => setGrant(false)).catch(setError).finally(() => setPending(false)); }}>
+    {owner && (member.role !== 'owner' || member.state !== 'active') && <div className="actions"><ActionButton disabled={pending} onClick={() => setGrant(true)}>Grant ownership</ActionButton></div>}
+    {grant && <ConfirmationDialog title="Grant ownership" keepLabel="Keep current role" confirmLabel="Confirm ownership grant" pending={pending} confirmDisabled={uncertain} onKeep={() => setGrant(false)}
+      onConfirm={() => void submit(onGrant, () => setGrant(false))}>
       Give this member full Owner authority, including business administration and recovery approval?
       {error !== undefined && <ErrorNotice error={error} />}
+      {uncertain && <p role="alert">The outcome could not be confirmed. Close this dialog and reload the member list before making another change.</p>}
     </ConfirmationDialog>}
-    {confirm && <ConfirmationDialog title="Change membership" keepLabel="Keep current membership" confirmLabel="Confirm membership change" pending={pending} onKeep={() => setConfirm(false)}
-      onConfirm={() => { setPending(true); setError(undefined); void onSave(role, active).then(() => setConfirm(false)).catch(setError).finally(() => setPending(false)); }}>
+    {confirm && <ConfirmationDialog title="Change membership" keepLabel="Keep current membership" confirmLabel="Confirm membership change" pending={pending} confirmDisabled={uncertain} onKeep={() => setConfirm(false)}
+      onConfirm={() => void submit(() => onSave(role, active), () => setConfirm(false))}>
       Set this member to {roleNames[role]} and {active ? 'active' : 'inactive'}? Access changes on their next request. A workspace must retain an active Owner.
       {error !== undefined && <ErrorNotice error={error} />}
+      {uncertain && <p role="alert">The outcome could not be confirmed. Close this dialog and reload the member list before making another change.</p>}
     </ConfirmationDialog>}
     {error !== undefined && !confirm && !grant && <ErrorNotice error={error} />}
   </section>;
@@ -52,6 +65,7 @@ function MemberAdministration() {
   const invitationKey = resourceKey(session, 'invitations');
   const members = useQuery({ queryKey: key, queryFn: ({ signal }) => api.members(session, signal) });
   const invitations = useQuery({ queryKey: invitationKey, queryFn: ({ signal }) => api.invitations(session, signal) });
+  const [result, setResult] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<Schemas['InviteRequest']['role']>('read_only');
   const [issued, setIssued] = useState<string>();
@@ -78,14 +92,18 @@ function MemberAdministration() {
     <ActionButton onClick={() => setIssued(undefined)}>Dismiss credential</ActionButton></section>}
   {error !== undefined && <ErrorNotice error={error} />}
   <h2>Members</h2>
+  {result && <SuccessNotice>{result}</SuccessNotice>}
   {members.isPending && <LoadingState />}{members.error && <ErrorNotice error={members.error} operation="read" />}
   {members.data?.items.map(member => <MemberEditor key={member.user_id + ':' + member.authorization_version} member={member} owner={owner} onSave={async (role, active) => {
+    setResult('');
     try {
       await api.changeMember(session, member.user_id, { role, active, authorization_version: member.authorization_version });
+      setResult('Membership change confirmed.');
       window.dispatchEvent(new Event('tabula:identity-check'));
     } finally { await cache.invalidateQueries({ queryKey: key }); }
   }} onGrant={async () => {
-    try { await api.grantOwnership(session, member.user_id, member.authorization_version); }
+    setResult('');
+    try { await api.grantOwnership(session, member.user_id, member.authorization_version); setResult('Ownership grant confirmed.'); }
     finally { await cache.invalidateQueries({ queryKey: key }); }
   }} />)}
   <h2>Invitations</h2>
