@@ -3,7 +3,7 @@
 .brand { font-size: var(--type-app-title); font-weight: var(--weight-heading); letter-spacing: -.5px; line-height: 1.2; }
 .context { display: grid; gap: 8px; overflow-wrap: anywhere; min-width: 0; }
 .context > * { min-width: 0; max-width: 100%; }
-.context select { width: 100%; text-overflow: ellipsis; }
+.context select { width: 100%; text-overflow: ellipsis; contain: paint; }
 .badge { font-size: var(--type-secondary); color: var(--secondary); }
 .navigation, .open { display: grid; gap: 4px; }
 .navigation a, .open a { display: flex; align-items: center; min-height: var(--control-height); padding: 8px 12px; border-radius: var(--radius-control); color: var(--secondary); text-decoration: none; }

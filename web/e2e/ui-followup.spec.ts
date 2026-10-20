@@ -29,7 +29,10 @@ test('shared shell and section rhythm with long business labels at three widths'
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       await expect(page.getByRole('status').filter({ hasText: /Loading|Checking/ })).toHaveCount(0);
       if (!process.env.TABULA_RASA_UI_401_BEFORE) {
-        expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+        const overflow = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth,
+          elements: Array.from(document.querySelectorAll('body *')).filter(element => element.getBoundingClientRect().right > document.documentElement.clientWidth)
+            .map(element => ({ tag: element.tagName, id: element.id, class: element.className, right: element.getBoundingClientRect().right })).slice(0, 10) }));
+        expect(overflow.scroll <= overflow.width, `${path} at ${width}px: ${JSON.stringify(overflow)}`).toBe(true);
         const selector = page.getByLabel('Select business', { exact: true });
         await expect(selector).toHaveValue('alpha');
         await selector.focus(); await expect(selector).toBeFocused();
@@ -77,6 +80,7 @@ test('table filters retain active values, results and scoped collapse preference
   await page.getByRole('button', { name: 'Clear filters', exact: true }).click();
   await expect(page.getByText('3 matching entries', { exact: true })).toBeVisible();
   await toggle.click();
+  if (await page.getByRole('button', { name: 'Menu', exact: true }).isVisible()) await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page.getByRole('link', { name: 'Mileage', exact: true }).click();
   await expect(page.getByRole('button', { name: /Hide filters/ })).toBeVisible();
   await page.getByLabel('From', { exact: true }).fill('2026-10-08');
@@ -87,6 +91,7 @@ test('table filters retain active values, results and scoped collapse preference
   await page.getByRole('button', { name: /Show filters/ }).click();
   await page.getByRole('button', { name: 'Clear filters', exact: true }).click();
   await expect(page.getByText('Trips: 1', { exact: false })).toBeVisible();
+  if (await page.getByRole('button', { name: 'Menu', exact: true }).isVisible()) await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page.getByRole('link', { name: 'Transactions', exact: true }).first().click();
   await expect(page.getByRole('button', { name: /Show filters/ })).toHaveAttribute('aria-expanded', 'false');
   // Navigation resets filter values as before; only the presentation preference persists.
