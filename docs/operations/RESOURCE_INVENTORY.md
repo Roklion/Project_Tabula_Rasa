@@ -9,7 +9,11 @@ from repository/issue evidence only. No credentials, connection strings, receipt
 contents or financial records are included. **No blanket deletion is approved.**
 The [first exact synthetic development checkpoint set](RETIREMENT_EXECUTION_2026-10-20.md)
 was separately approved and manually deleted by the owner, with bounded
-postchecks. Other resources remain retained/unresolved.
+postchecks. [#339's later owner-directed closure](https://github.com/Roklion/Project_Tabula_Rasa/issues/339#issuecomment-6300537453)
+records additional owner-reported removals without a complete target-by-target
+audit. This dated desk inventory is not a current existence attestation; its
+unverified families remain retained/deferred until refreshed evidence and owner
+disposition exist. Do not treat historical entries as fresh deletion candidates.
 
 The recorded evidence review checkpoint is `2026-10-20T03:00:00Z` (October 19,
 11 PM Eastern); this is not an observation of live provider state. JSON coverage

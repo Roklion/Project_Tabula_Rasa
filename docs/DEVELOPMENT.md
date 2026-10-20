@@ -58,8 +58,10 @@ commercial recovery acceptance and #224's release decisions remain separate.
 
 [#339 resource retirement](RESOURCE_RETIREMENT.md) provides a sanitized desk
 inventory, fail-closed offline preview and exact-target manual approval/post-check
-procedure under #223/#124. Live enumeration and deletion approvals remain pending;
-the tooling preserves #261 source artifacts, #294 indefinite NAS retention and
+procedure under #223/#124. Its [bounded execution record](operations/RETIREMENT_EXECUTION_2026-10-20.md)
+covers only the approved target set; #339 records broader retained/deferred
+inventory and owner-reported outcomes. Every later set needs its own current
+preview and exact approval. The tooling preserves #261 source artifacts, #294 indefinite NAS retention and
 #377 D4/D7 recovery ownership. It adds no alpha or owner-cutover activation gate.
 
 [Identity ADR 0003](adr/0003-commercial-identity-and-tenancy.md) and

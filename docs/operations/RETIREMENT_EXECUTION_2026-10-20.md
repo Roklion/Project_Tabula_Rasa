@@ -2,7 +2,10 @@
 
 Exact-target execution under #339 / #223 / #124, with #377 D7 owner release.
 This records one approved set, not completion of the whole resource inventory
-or authorization for any other cleanup. PR #406 remains unmerged.
+or authorization for any other cleanup. PR #406 was unmerged at execution time; it subsequently merged as
+`dae715d7a004998830406afaa4569301b38b6471`. The observations below remain
+scoped to that execution, before the later owner-reported cleanup in
+[#339](https://github.com/Roklion/Project_Tabula_Rasa/issues/339).
 
 ## Authority and exact scope
 
