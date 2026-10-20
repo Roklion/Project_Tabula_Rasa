@@ -185,6 +185,26 @@ records active callers, owners, eligible cleanup, retained regression
 contracts and concrete conditions for deferred removals. It consumes this routing
 matrix without adding a release or owner-cutover prerequisite.
 
+### Restricted-alpha cleanup disposition (#221/#321, D2)
+
+[#321's accepted closure](https://github.com/Roklion/Project_Tabula_Rasa/issues/321#issuecomment-6293694820)
+completed a narrowed synthetic-staging handoff. Provider recovery and wider
+security/operational acceptance remain with #320/#348/#332/#342/#353/#298.
+The following source paths retain independent callers; named staging alone does
+not make them obsolete:
+
+| Capability | Current caller / reason to retain | Owner and later removal condition |
+| --- | --- | --- |
+| `http/alpha.py`, `alpha_documents.py` | `http/app.py` gates explicitly restricted hosted requests; `http/composition.py` loads the synthetic document binding. Focused HTTP and native document tests protect these boundaries. | #221 with #321/#288: retire only after affected environment transitions and remaining synthetic/document consumers have an explicit replacement or retirement decision. |
+| `TrustedDevelopmentContext` | `http/composition.py` supports loopback development and gated hosted synthetic scope; native API/browser fixtures reuse it. | #221/#288: retain local development and isolation tests until their own supported replacement or explicit retirement. |
+| `deployment/alpha.py`, `commercial-alpha.yml` and focused fixtures/tests | The explicit restricted-alpha journey remains the repeatable #288 contract; the workflow refuses named staging before checkout. | #221/#288: retain independently useful synthetic journeys; do not switch a named deployment back to Basic access to run them. |
+
+The executed single-use schema bridge is removed separately; see the
+[retired bridge and preserved migration coverage](COMMERCIAL_DEPLOYMENT.md#retired-staging-bridge-0012-to-0014-321).
+This disposition does not require completion of an entire EPIC or add a live
+cutover prerequisite. #303 still owns actual three-profile authority and legacy
+writer retirement evidence.
+
 ## Acceptance record and outstanding evidence
 
 Use this template for each newly selected candidate; it is not a status board.
