@@ -1,0 +1,156 @@
+{
+  "version": 1,
+  "stage": "technical_alpha",
+  "observed_at": "2026-10-20T15:15:00Z",
+  "coverage": "unverified",
+  "resources": [
+    {
+      "id": "old-development-backup",
+      "kind": "postgres_branch",
+      "scope": "weathered-term-80366172",
+      "provider_id": "br-bold-cherry-b51x0et0",
+      "environment": "development",
+      "owner": "Roklion",
+      "disposition": "unresolved",
+      "authority": "inactive",
+      "protections": [],
+      "references": [
+        "owner-retention-release-pending",
+        "hosted-manual-reference-check-pending"
+      ],
+      "depends_on": [
+        "active-development"
+      ],
+      "last_backup": "development-pre0015-20261020",
+      "handoff": "issue-377-D7-release-pending",
+      "rollback": null,
+      "evidence": "neon-live-inventory-2026-10-20",
+      "effects": [
+        "old-development-backup",
+        "old-development-database",
+        "old-development-compute"
+      ]
+    },
+    {
+      "id": "old-development-database",
+      "kind": "postgres_database",
+      "scope": "weathered-term-80366172.br-bold-cherry-b51x0et0",
+      "provider_id": "neondb",
+      "environment": "development",
+      "owner": "Roklion",
+      "disposition": "unresolved",
+      "authority": "inactive",
+      "protections": [],
+      "references": [
+        "owner-retention-release-pending",
+        "hosted-manual-reference-check-pending"
+      ],
+      "depends_on": [
+        "old-development-backup"
+      ],
+      "last_backup": "development-pre0015-20261020",
+      "handoff": "issue-377-D7-release-pending",
+      "rollback": null,
+      "evidence": "neon-live-inventory-2026-10-20",
+      "effects": [
+        "old-development-database"
+      ]
+    },
+    {
+      "id": "old-development-compute",
+      "kind": "postgres_endpoint",
+      "scope": "weathered-term-80366172",
+      "provider_id": "ep-round-glade-b5jwtro3",
+      "environment": "development",
+      "owner": "Roklion",
+      "disposition": "unresolved",
+      "authority": "inactive",
+      "protections": [],
+      "references": [
+        "owner-retention-release-pending",
+        "hosted-manual-reference-check-pending"
+      ],
+      "depends_on": [
+        "old-development-backup"
+      ],
+      "last_backup": "development-pre0015-20261020",
+      "handoff": "issue-377-D7-release-pending",
+      "rollback": null,
+      "evidence": "neon-live-inventory-2026-10-20",
+      "effects": [
+        "old-development-compute"
+      ]
+    },
+    {
+      "id": "active-development",
+      "kind": "postgres_branch",
+      "scope": "weathered-term-80366172",
+      "provider_id": "br-cold-cell-b5ph2jz2",
+      "environment": "development",
+      "owner": "Roklion",
+      "disposition": "active_recoverable",
+      "authority": "active",
+      "protections": [
+        "live"
+      ],
+      "references": [
+        "render-development",
+        "local-development"
+      ],
+      "depends_on": [
+        "default-test"
+      ],
+      "last_backup": null,
+      "handoff": "issue-377-D7-release-pending",
+      "rollback": null,
+      "evidence": "neon-live-inventory-2026-10-20",
+      "effects": []
+    },
+    {
+      "id": "retained-development-pre0015",
+      "kind": "postgres_branch",
+      "scope": "weathered-term-80366172",
+      "provider_id": "br-sweet-cherry-b5winx0t",
+      "environment": "development",
+      "owner": "Roklion",
+      "disposition": "required_evidence",
+      "authority": "unknown",
+      "protections": [
+        "recovery"
+      ],
+      "references": [
+        "issue-332-maintenance-checkpoint"
+      ],
+      "depends_on": [
+        "active-development"
+      ],
+      "last_backup": null,
+      "handoff": "issue-377-D7-release-pending",
+      "rollback": null,
+      "evidence": "neon-live-inventory-2026-10-20",
+      "effects": []
+    },
+    {
+      "id": "default-test",
+      "kind": "postgres_branch",
+      "scope": "weathered-term-80366172",
+      "provider_id": "br-green-pond-b5qy3v5n",
+      "environment": "test",
+      "owner": "Roklion",
+      "disposition": "active_recoverable",
+      "authority": "active",
+      "protections": [
+        "live"
+      ],
+      "references": [
+        "integration-test-harness"
+      ],
+      "depends_on": [],
+      "last_backup": null,
+      "handoff": "issue-377-D7-release-pending",
+      "rollback": null,
+      "evidence": "neon-live-inventory-2026-10-20",
+      "effects": []
+    }
+  ]
+}

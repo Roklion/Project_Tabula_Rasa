@@ -16,6 +16,11 @@ Names below are historical identifiers, not proof of current identity or absence
 Rows describing families must be expanded into exact provider-scoped resources;
 the table does not claim a complete hosted enumeration.
 
+[October 20 live Neon inspection](NEON_INVENTORY_2026-10-20.md) supplements
+these historical facts with observed project/branch IDs, current branch lists
+and a concrete first candidate. Other families and private/hosted consumer
+checks remain unverified; no exact-set deletion is approved.
+
 Owner: **Roklion** is the recorded human operator for the known recovery evidence.
 This assigns the follow-up for the desk inventory, not new access or approval.
 Confirm an environment owner/retention decision for every actual resource.
