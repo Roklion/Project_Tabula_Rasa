@@ -77,6 +77,7 @@ The documentation index is this section of the root README. Go directly to:
 | Configure technical Render/Neon environments and deploy a tested image | [Technical deployment and operator checkpoint](docs/COMMERCIAL_DEPLOYMENT.md) |
 | Configure tenant-safe diagnostics, alerts and operational triage | [Operational observability](docs/OBSERVABILITY.md) |
 | Respond to incidents, roll back compatible images and rotate secrets | [Incident response](docs/INCIDENT_RESPONSE.md), [secret operations](docs/SECRETS_OPERATIONS.md) and [staging drill](docs/INCIDENT_DRILL.md) |
+| Inventory obsolete resources and preview separately approved retirement | [Resource retirement](docs/RESOURCE_RETIREMENT.md) and [disposition inventory](docs/operations/RESOURCE_INVENTORY.md) |
 | Review commercial visual, responsive and accessibility evidence | [Integrated UI acceptance](docs/COMMERCIAL_UI_ACCEPTANCE.md) |
 | Verify technical alpha and track the Streamlit transition | [Alpha release gate and retirement boundary](docs/TECHNICAL_ALPHA.md) |
 | Review retained capabilities, cleanup evidence and retirement conditions | [Issue #377: transition retirement inventory](https://github.com/Roklion/Project_Tabula_Rasa/issues/377) |
