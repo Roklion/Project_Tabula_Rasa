@@ -11,8 +11,11 @@ recovery acceptance and production activation authority.
 ## Status and policy
 
 The offline inventory validator, exact-target preview and manual execution
-procedure are implemented. **No resource deletion or retention change is approved
-or executed.** The [inventory and disposition table](operations/RESOURCE_INVENTORY.md)
+procedure are implemented. One exact synthetic development checkpoint set was
+separately approved and manually deleted by the operator; [execution and
+bounded postchecks](operations/RETIREMENT_EXECUTION_2026-10-20.md) record its scope.
+No other deletion or retention-policy change is approved or executed.
+The [inventory and disposition table](operations/RESOURCE_INVENTORY.md)
 and [machine inventory](operations/resource-inventory.json) cover the relevant
 resource families and known safe identifiers as of October 19, 2026 Eastern.
 They are a desk inventory from tracked configuration and issue evidence, not a
@@ -183,7 +186,7 @@ history or overwrite the retained source as a cleanup repair.
 Retain a sanitized audit record with target/plan hashes, owner approval reference,
 UTC start/end, exact operation/result, pre/post-check outcomes, retained inventory
 hashes, recovery limitations and remaining owner/re-review conditions. Keep
-private results separately protected. If no set is approved (the current state),
+private results separately protected. If no set is approved,
 record **retained; no deletion executed** and leave actual-resource acceptance
 pending. #342 consumes the evidence; #224/#298 decide stage/release acceptance.
 

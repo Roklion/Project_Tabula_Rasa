@@ -6,7 +6,10 @@ Issue [#339](https://github.com/Roklion/Project_Tabula_Rasa/issues/339), parent
 Follow the [retirement runbook](../RESOURCE_RETIREMENT.md) before changing any
 resource. This table and [JSON](resource-inventory.json) contain safe identifiers
 from repository/issue evidence only. No credentials, connection strings, receipt
-contents or financial records are included. **No deletion is approved.**
+contents or financial records are included. **No blanket deletion is approved.**
+The [first exact synthetic development checkpoint set](RETIREMENT_EXECUTION_2026-10-20.md)
+was separately approved and manually deleted by the owner, with bounded
+postchecks. Other resources remain retained/unresolved.
 
 The recorded evidence review checkpoint is `2026-10-20T03:00:00Z` (October 19,
 11 PM Eastern); this is not an observation of live provider state. JSON coverage
@@ -67,8 +70,10 @@ backup, active/retained consumers, collateral effects and separate D4/D7
 evidence for each. Keep all unresolved items retained and re-review when the
 owner has provider access and #303/#321/#222/#342 replacement evidence applies.
 
-There are currently **zero approved disposable target sets**. No provider cleanup,
-post-deletion verification, policy change, customer deletion or issue closure is
-claimed. A synthetic passing preview proves only the implemented decision path.
+One exact disposable target set has been approved and manually removed; the
+linked execution record distinguishes actual provider/postcheck observations
+from synthetic tests. No additional cleanup, policy change, customer deletion
+or issue closure is claimed. A synthetic passing preview alone proves only the
+implemented decision path.
 Record any later execution through the exact approval and pre/post-check protocol
 in the runbook; do not turn this desk inventory into blanket deletion consent.

@@ -1,5 +1,11 @@
 # Live Neon inventory and first retirement candidate — October 20, 2026
 
+The inventory below records the **pre-deletion** observations. The operator later
+approved and manually deleted only the exact old development checkpoint set;
+[execution and postchecks](RETIREMENT_EXECUTION_2026-10-20.md) supersede the
+initial pending status. The test-project count is now six, with retained
+development data hashes and development/staging health unchanged.
+
 Read-only inspection through the owner's existing desktop Chrome Neon session
 under #339/#223/#124. No account switch, authentication change, schema/data write,
 provider deletion or retention change occurred. Only safe provider identifiers
@@ -55,18 +61,20 @@ outside scope.
 | Preserved newer checkpoint | `development-pre0015-20261020` / `br-sweet-cherry-b5winx0t`; created October 20 10:43:19 console-local time; one database/one compute reported |
 | Tracked references | No match for old branch name/endpoint in tracked scripts, runtime, workflows, tests or canonical docs, excluding inventory |
 | Local effective references | Both application/test database URLs parsed privately; neither points to the old endpoint, including pooler normalization. No URL/credential printed |
-| Hosted/manual references | Effective Render/GitHub/private manual bindings not fully inspected; confirmation/recheck outstanding |
+| Hosted/manual references | Tracked/local effective references checked; owner released remaining consumer/recovery obligations in the exact-set approval. Effective hosted secrets were not independently enumerated |
 | Authority | No live authority observed; suspended compute does not prove absence of consumers |
 | Latest operational evidence | [#332 approved development maintenance and successful smoke](https://github.com/Roklion/Project_Tabula_Rasa/issues/332#issuecomment-6293893668) records 0014→0015 upgrade and healthy compatible development. It does not release this old checkpoint or verify its contents |
-| D4/D7 decision | Synthetic fixture scope is confirmed. Owner must release any remaining rollback/recovery/hold/manual consumer and approve retirement of this exact checkpoint |
+| D4/D7 decision | Synthetic fixture scope confirmed; owner released the exact checkpoint and approved irreversible retirement |
 | Recovery limitation | New checkpoint is a different point, not a copy of October 17 state. Do not promise undelete or identical historical-state recovery |
-| Exact-set approval | Pending; no deletion executed |
+| Exact-set approval | Approved by the owner in chat; subsequently deleted manually by the owner, with observed postchecks linked above |
 
 The [candidate inventory](retirement-candidate-2026-10-20.json) records the known
 eight-resource cascade, retained parent, replacement and default branch.
-The [preview](retirement-preview-2026-10-20.json) is **blocked**. Coverage remains
-unverified until owner release, private reference checks and recovery decision
-are complete. Do not override blockers or treat candidate selection as approval.
+The [preview](retirement-preview-2026-10-20.json) records the refreshed approved
+preflight and returns `requires_manual_approval`; the tool remains read-only.
+Scoped owner verification and separate exact approval are recorded in the
+execution report. This does not verify every other resource family or private
+hosted binding, or authorize repeating deletion of the historical candidate.
 
 ## Execution handoff
 
@@ -74,8 +82,8 @@ Before separately approved execution, recheck target IDs/cascade, no new child
 or consumer, retained parent/checkpoint and live environment baselines. Record
 the exact-set approval under the [runbook](../RESOURCE_RETIREMENT.md), execute
 only that set, read back absence and retained-resource postconditions, and append
-sanitized actual outcomes to this PR. No deletion result or preserved-data
-postcheck is claimed now.
+sanitized actual outcomes to this PR. The first set's actual outcomes are now
+recorded in the linked execution report; later sets still require this procedure.
 
 All other resources remain retained or unresolved: staging migration checkpoints,
 #259/#294/#342 evidence, NAS generations, frozen Sheets sources, receipt bytes,

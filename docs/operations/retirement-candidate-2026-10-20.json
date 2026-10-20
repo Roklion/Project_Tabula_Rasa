@@ -1,8 +1,8 @@
 {
   "version": 1,
   "stage": "technical_alpha",
-  "observed_at": "2026-10-20T15:15:00Z",
-  "coverage": "unverified",
+  "observed_at": "2026-10-20T15:24:11.340244+00:00",
+  "coverage": "operator_verified",
   "resources": [
     {
       "id": "old-development-backup",
@@ -11,20 +11,17 @@
       "provider_id": "br-bold-cherry-b51x0et0",
       "environment": "development",
       "owner": "Roklion",
-      "disposition": "unresolved",
+      "disposition": "disposable_synthetic",
       "authority": "inactive",
       "protections": [],
-      "references": [
-        "owner-retention-release-pending",
-        "hosted-manual-reference-check-pending"
-      ],
+      "references": [],
       "depends_on": [
         "active-development"
       ],
-      "last_backup": "development-pre0015-20261020",
-      "handoff": "issue-377-D7-release-pending",
-      "rollback": null,
-      "evidence": "neon-live-metadata-2026-10-20",
+      "last_backup": "retained-source-and-current-fixture-recreation",
+      "handoff": "issue-377-D7-owner-release-2026-10-20",
+      "rollback": "current-synthetic-fixture-recreation",
+      "evidence": "neon-approved-preflight-2026-10-20",
       "effects": [
         "old-development-backup",
         "old-development-database",
@@ -43,20 +40,17 @@
       "provider_id": "neondb",
       "environment": "development",
       "owner": "Roklion",
-      "disposition": "unresolved",
+      "disposition": "disposable_synthetic",
       "authority": "inactive",
       "protections": [],
-      "references": [
-        "owner-retention-release-pending",
-        "hosted-manual-reference-check-pending"
-      ],
+      "references": [],
       "depends_on": [
         "old-development-backup"
       ],
-      "last_backup": "development-pre0015-20261020",
-      "handoff": "issue-377-D7-release-pending",
-      "rollback": null,
-      "evidence": "neon-live-metadata-2026-10-20",
+      "last_backup": "retained-source-and-current-fixture-recreation",
+      "handoff": "issue-377-D7-owner-release-2026-10-20",
+      "rollback": "current-synthetic-fixture-recreation",
+      "evidence": "neon-approved-preflight-2026-10-20",
       "effects": [
         "old-development-database"
       ]
@@ -68,20 +62,17 @@
       "provider_id": "ep-round-glade-b5jwtro3",
       "environment": "development",
       "owner": "Roklion",
-      "disposition": "unresolved",
+      "disposition": "disposable_synthetic",
       "authority": "inactive",
       "protections": [],
-      "references": [
-        "owner-retention-release-pending",
-        "hosted-manual-reference-check-pending"
-      ],
+      "references": [],
       "depends_on": [
         "old-development-backup"
       ],
-      "last_backup": "development-pre0015-20261020",
-      "handoff": "issue-377-D7-release-pending",
-      "rollback": null,
-      "evidence": "neon-live-metadata-2026-10-20",
+      "last_backup": "retained-source-and-current-fixture-recreation",
+      "handoff": "issue-377-D7-owner-release-2026-10-20",
+      "rollback": "current-synthetic-fixture-recreation",
+      "evidence": "neon-approved-preflight-2026-10-20",
       "effects": [
         "old-development-compute"
       ]
@@ -164,20 +155,17 @@
       "provider_id": "cloud_admin",
       "environment": "development",
       "owner": "Roklion",
-      "disposition": "unresolved",
+      "disposition": "disposable_synthetic",
       "authority": "inactive",
       "protections": [],
-      "references": [
-        "owner-retention-release-pending",
-        "hosted-manual-reference-check-pending"
-      ],
+      "references": [],
       "depends_on": [
         "old-development-backup"
       ],
-      "last_backup": "development-pre0015-20261020",
-      "handoff": "issue-377-D7-release-pending",
-      "rollback": null,
-      "evidence": "neon-live-metadata-2026-10-20",
+      "last_backup": "retained-source-and-current-fixture-recreation",
+      "handoff": "issue-377-D7-owner-release-2026-10-20",
+      "rollback": "current-synthetic-fixture-recreation",
+      "evidence": "neon-approved-preflight-2026-10-20",
       "effects": [
         "old-development-role-cloud_admin"
       ]
@@ -189,20 +177,17 @@
       "provider_id": "neon_service",
       "environment": "development",
       "owner": "Roklion",
-      "disposition": "unresolved",
+      "disposition": "disposable_synthetic",
       "authority": "inactive",
       "protections": [],
-      "references": [
-        "owner-retention-release-pending",
-        "hosted-manual-reference-check-pending"
-      ],
+      "references": [],
       "depends_on": [
         "old-development-backup"
       ],
-      "last_backup": "development-pre0015-20261020",
-      "handoff": "issue-377-D7-release-pending",
-      "rollback": null,
-      "evidence": "neon-live-metadata-2026-10-20",
+      "last_backup": "retained-source-and-current-fixture-recreation",
+      "handoff": "issue-377-D7-owner-release-2026-10-20",
+      "rollback": "current-synthetic-fixture-recreation",
+      "evidence": "neon-approved-preflight-2026-10-20",
       "effects": [
         "old-development-role-neon_service"
       ]
@@ -214,20 +199,17 @@
       "provider_id": "neon_superuser",
       "environment": "development",
       "owner": "Roklion",
-      "disposition": "unresolved",
+      "disposition": "disposable_synthetic",
       "authority": "inactive",
       "protections": [],
-      "references": [
-        "owner-retention-release-pending",
-        "hosted-manual-reference-check-pending"
-      ],
+      "references": [],
       "depends_on": [
         "old-development-backup"
       ],
-      "last_backup": "development-pre0015-20261020",
-      "handoff": "issue-377-D7-release-pending",
-      "rollback": null,
-      "evidence": "neon-live-metadata-2026-10-20",
+      "last_backup": "retained-source-and-current-fixture-recreation",
+      "handoff": "issue-377-D7-owner-release-2026-10-20",
+      "rollback": "current-synthetic-fixture-recreation",
+      "evidence": "neon-approved-preflight-2026-10-20",
       "effects": [
         "old-development-role-neon_superuser"
       ]
@@ -239,20 +221,17 @@
       "provider_id": "neondb_owner",
       "environment": "development",
       "owner": "Roklion",
-      "disposition": "unresolved",
+      "disposition": "disposable_synthetic",
       "authority": "inactive",
       "protections": [],
-      "references": [
-        "owner-retention-release-pending",
-        "hosted-manual-reference-check-pending"
-      ],
+      "references": [],
       "depends_on": [
         "old-development-backup"
       ],
-      "last_backup": "development-pre0015-20261020",
-      "handoff": "issue-377-D7-release-pending",
-      "rollback": null,
-      "evidence": "neon-live-metadata-2026-10-20",
+      "last_backup": "retained-source-and-current-fixture-recreation",
+      "handoff": "issue-377-D7-owner-release-2026-10-20",
+      "rollback": "current-synthetic-fixture-recreation",
+      "evidence": "neon-approved-preflight-2026-10-20",
       "effects": [
         "old-development-role-neondb_owner"
       ]
@@ -264,20 +243,17 @@
       "provider_id": "tabula_dev_runtime",
       "environment": "development",
       "owner": "Roklion",
-      "disposition": "unresolved",
+      "disposition": "disposable_synthetic",
       "authority": "inactive",
       "protections": [],
-      "references": [
-        "owner-retention-release-pending",
-        "hosted-manual-reference-check-pending"
-      ],
+      "references": [],
       "depends_on": [
         "old-development-backup"
       ],
-      "last_backup": "development-pre0015-20261020",
-      "handoff": "issue-377-D7-release-pending",
-      "rollback": null,
-      "evidence": "neon-live-metadata-2026-10-20",
+      "last_backup": "retained-source-and-current-fixture-recreation",
+      "handoff": "issue-377-D7-owner-release-2026-10-20",
+      "rollback": "current-synthetic-fixture-recreation",
+      "evidence": "neon-approved-preflight-2026-10-20",
       "effects": [
         "old-development-role-tabula_dev_runtime"
       ]
