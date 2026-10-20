@@ -316,10 +316,11 @@ Database triggers reject event update/delete/truncate and direct inserts.
 Row-level read policies scope non-owner roles to a server-selected reader entity;
 the read contract also includes an explicit entity predicate for owner connections.
 Deploy with a separate migration/function-owner role and a runtime role that has
-only canonical bookkeeping DML and required job DML; **no audit INSERT/UPDATE/
+only required bookkeeping, job and scoped support DML; **no audit INSERT/UPDATE/
 DELETE/TRUNCATE, DDL, schema CREATE, trigger bypass, table ownership or BYPASSRLS**.
-Grant SELECT on `audit_events`, `audit_baseline` and `audit_activation` only to the
-separately provisioned inspector role (plus selected canonical SELECT for verification). Context
+Grant audit SELECT only to provisioned inspectors or the trusted API serving
+separately provisioned, expiring [support grants](SUPPORT_OPERATIONS.md).
+Direct recovery inspection also needs canonical and sequence SELECT for verification. Context
 settings and capabilities are server infrastructure, never browser claims.
 DB owners/superusers can bypass these controls, as PostgreSQL documents in its
 [row-security model](https://www.postgresql.org/docs/current/ddl-rowsecurity.html).
