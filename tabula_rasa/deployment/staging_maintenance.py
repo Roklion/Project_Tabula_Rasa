@@ -25,13 +25,30 @@ SCOPE = {
 }
 
 
-def validate_scope(environ):
-    if any(environ.get(key) != expected for key, expected in SCOPE.items()):
-        raise ValueError('Maintenance scope does not match the reviewed staging bridge.')
+def recovery_checkpoint(environ):
     checkpoint = environ.get('MAINTENANCE_RECOVERY_SHA256', '')
     if not isinstance(checkpoint, str) or not re.fullmatch('[0-9a-f]{64}', checkpoint) or checkpoint == '0' * 64:
         raise ValueError('An operator-verified private recovery checkpoint record is required.')
     return checkpoint
+
+
+def validate_scope(environ):
+    if any(environ.get(key) != expected for key, expected in SCOPE.items()):
+        raise ValueError('Maintenance scope does not match the reviewed staging bridge.')
+    return recovery_checkpoint(environ)
+
+
+def suspended_service(environ, *, read=None):
+    read = read or release.api
+    service = environ['RENDER_SERVICE_ID']
+    token = environ['RENDER_API_KEY']
+    state = read('/services/' + service, token)
+    if state.get('id') != service or state.get('suspended') != 'suspended':
+        raise ValueError('The exact service must remain suspended during maintenance.')
+    deployments = read('/services/' + service + '/deploys?limit=100', token)
+    pending = {'created', 'queued', 'build_in_progress', 'update_in_progress', 'pre_deploy_in_progress'}
+    if any(item['deploy']['status'] in pending for item in deployments):
+        raise ValueError('A deployment is in progress; inspect before maintenance.')
 
 
 def preflight(environ, *, metadata=None, verify=None, read=None):
@@ -40,16 +57,7 @@ def preflight(environ, *, metadata=None, verify=None, read=None):
     if candidate['release'] != RELEASE or candidate['schema'] != TARGET:
         raise ValueError('Candidate does not match the reviewed release and schema.')
     (verify or release.validated_main)(RELEASE, environ)
-    read = read or release.api
-    service = SCOPE['RENDER_SERVICE_ID']
-    token = environ['RENDER_API_KEY']
-    state = read('/services/' + service, token)
-    if state.get('id') != service or state.get('suspended') != 'suspended':
-        raise ValueError('The exact staging service must remain suspended during maintenance.')
-    deployments = read('/services/' + service + '/deploys?limit=100', token)
-    pending = {'created', 'queued', 'build_in_progress', 'update_in_progress', 'pre_deploy_in_progress'}
-    if any(item['deploy']['status'] in pending for item in deployments):
-        raise ValueError('A deployment is in progress; inspect before maintenance.')
+    suspended_service(environ, read=read)
     return {'status': 'preflight_passed', 'image': IMAGE, 'release': RELEASE,
             'source_schema': SOURCE, 'target_schema': TARGET, 'checkpoint_sha256': checkpoint}
 
