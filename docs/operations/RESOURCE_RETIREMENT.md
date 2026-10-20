@@ -12,7 +12,9 @@ the [resource disposition discussion](https://github.com/Roklion/Project_Tabula_
 Those reports are historical observations, not current provider state. Before
 any operation, build a fresh private inventory with exact identities, authority,
 owners, references, recovery obligations and preservation evidence. Unresolved
-resources remain retained; issue closure supplies no deletion consent.
+resources remain retained; issue closure supplies no deletion consent. Owner-reported
+housekeeping is distinct from verified target-by-target postchecks. Each later target
+set requires its own current preview and exact approval.
 
 Preserve frozen Sheets sources, last verified legacy snapshots, complete exports,
 checksums, receipts/document bytes, audit history, production/staging/UAT, recovery
@@ -34,10 +36,11 @@ source/last snapshot.
 
 ## Prepare an operator inventory
 
-Work outside Git in protected operator storage. Copy the machine inventory and inspect
+Work outside Git in protected operator storage. Build an inventory using the schema
+below and inspect
 the applicable provider consoles/read-only APIs, NAS and configuration for the
 **selected stage**: `technical_alpha`, `owner_operated`, `external_beta` or
-`commercial`. The seed uses owner-operated scope; it asserts no current live authority
+`commercial`. Record that stage explicitly; an inventory asserts no live authority
 switch. No whole-program completion is required to begin inventory.
 
 1. Enumerate exact Neon project/branch/database/endpoint IDs, parent/child
@@ -63,7 +66,7 @@ switch. No whole-program completion is required to begin inventory.
    disposition. Keep deferred resources unresolved or retained with a named
    owner and re-review condition in the protected operator record.
 5. For each candidate, confirm synthetic-only contents and no active, CLI, CI,
-   staging, rollback, audit/retention or recovery consumer. Obtain capability retirement inventory D4/D7's
+   staging, rollback, audit/retention or recovery consumer. Obtain the recovery and retained-resource owners’
    owner/evidence reference for this exact capability; operational readiness verification must establish the
    selected stage's replacement recovery guarantee where relevant. Database
    dumps do not protect document bytes. Link the accepted evidence with `handoff`.
@@ -116,7 +119,7 @@ exit 0 means `requires_manual_approval`, never deletion authorization. All modes
 only read the inventory; no provider/network/database/filesystem mutations occur.
 
 The preview lists exact scoped identities, deletion effects, incoming consumers,
-references, authority, last backup, D4/D7 handoff, rollback/evidence and blockers.
+references, authority, last backup, recovery and retained-resource handoff, rollback/evidence and blockers.
 It hashes the entire inventory and selected plan for the approval/audit record.
 Changing any inventory fact changes the plan. Observation must be no older than
 24 hours and not future-dated. That bound does not eliminate stale state: inspect
@@ -130,7 +133,7 @@ preview and evidence. In protected custody record:
 | Scope | Stage, owner, exact scoped provider IDs, complete cascade/effects set |
 | Plan | Inventory and plan SHA-256, observation instant, reviewed evidence |
 | Decision | Explicit delete approval for this set, human operator, UTC time and validity window |
-| Preservation | Last backup/recreation evidence, retained live/source/evidence checks, D4/D7 handoff |
+| Preservation | Last backup/recreation evidence, retained live/source/evidence checks, recovery and retained-resource handoff |
 | Authority | Current authority and retention/customer-hold review, separate policy decision if needed |
 | Recovery | Recovery route and irreversible limitations; no promise that deleted provider IDs can be restored |
 | Execution | Authorized executor, method, immediate preflight and planned post-checks |

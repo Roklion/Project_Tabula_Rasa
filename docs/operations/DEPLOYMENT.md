@@ -224,46 +224,27 @@ runbook. The bridge cannot be enabled by a wildcard environment variable. Ordina
 `upgrade` remains the PostgreSQL persistence forward-migration owner, and
 startup/readiness never run it. Bootstrap is manual and initial only.
 
-### Reviewed staging bridge: 0012 to 0014
+### Retired staging bridge: 0012 to 0014
 
-The manual **Staging 0012 to 0014 maintenance** workflow is a narrowly scoped
-exception for the reviewed retained-staging transition. It does not change
-ordinary promotion's head-only rules. Its image is pinned to release
-`ea8c2de39a171a4010c821edc8648dbf241cd3dd`, index
-`sha256:4bb275f4dc8475bc08ee45d32b3648d4fc33f03c823e3cf3a0c001a9a9bf0c3d`.
-It cannot select another image, environment, source revision or target schema.
+The one-time retained-staging bridge completed its approved forward upgrade and
+compatible-image promotion. The [protected maintenance run](https://github.com/Roklion/Project_Tabula_Rasa/actions/runs/39187928399)
+and [staging handoff evidence](https://github.com/Roklion/Project_Tabula_Rasa/issues/321)
+preserve the source/target revisions, immutable image and recovery-checkpoint
+reference. The dedicated `commercial-staging-maintenance.yml` workflow and
+`staging_maintenance` command are retired. Do not dispatch or reuse historical
+revisions for another upgrade; each new transition requires a reviewed procedure.
+Canonical Alembic revisions and the ordinary forward-upgrade CLI remain intact.
 
-1. Obtain explicit maintenance approval. Privately verify an isolated staging
-   recovery checkpoint, its source, time and retention, and preserve Google-grant
-   and identity configuration custody separately. Record its SHA-256 for the
-   workflow. The hash records operator attestation; it does not independently
-   verify provider recoverability. Reconfirm checkpoint currency before execution.
-2. Reserve the staging window and suspend/drain the exact Render staging service.
-   Keep it suspended through migration and first-image selection. Do not allow
-   concurrent provider changes outside the shared deployment lock.
-3. Dispatch the maintenance workflow on `main` with approval `0012_to_0014` and
-   the private checkpoint record's SHA-256. Preflight verifies the exact tested
-   main release/schema, approved staging binding, suspended service and absence
-   of in-progress deployments. The migration step alone receives the existing
-   GitHub staging migration secret; the Render/GitHub tokens are not passed into
-   that container. No credential is extracted to an operator workstation.
-4. The approved immutable container checks the source is exactly
-   `0012_operations` and reuses the canonical locked forward upgrade to
-   `0014_document_locations`. An unexpected or already-upgraded source stops;
-   inspect state before any retry. It does not reset, stamp, seed, downgrade,
-   enable accounting policies or activate connections. Both revisions are
-   forward-only. A failure leaves service state untouched and requires inspection.
-5. After successful schema health, manually select the same approved digest and
-   resume/deploy it using the retained named-user settings. Verify provider index
-   and runtime digest, readiness, version and named anonymous smoke. Do not resume
-   the old schema-0012 image or attempt an incompatible rollback.
-6. With a compatible image live, run ordinary **Promote commercial staging** for
-   its serialized verification record, then continue named-user acceptance.
-   Maintenance success alone is not login, receipt, recovery or hosted identity rollout acceptance.
+The support-schema command below owns its recovery-checkpoint and suspended-service
+guards. Migration tests independently preserve two-business ledger/isolation and
+disabled-accounting-policy checks from `0012_operations` to the current head.
+Bridge-specific pinned-image and workflow tests retired with the single-use entry point.
 
-This workflow does not suspend, resume or deploy services and does not fetch
-private business data. It must run only within the separately approved operator
-window. A new schema transition requires its own reviewed procedure.
+Restricted-alpha routes, synthetic contexts and their deployment/tests remain
+supported independently. A named staging handoff does not retire those callers.
+Streamlit/Sheets writers and owner migration, conversion and recovery paths retain
+[controlled cutover](../accounting/CUTOVER.md) and capability-specific retirement
+conditions. Bridge cleanup supplies no live-cutover or deletion authority.
 
 ### Reviewed support-schema maintenance: 0014 to 0015
 

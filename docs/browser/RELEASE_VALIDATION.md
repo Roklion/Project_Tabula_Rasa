@@ -184,6 +184,21 @@ callers, owners, eligible cleanup, retained regression contracts and concrete co
 for deferred removals. It consumes this routing matrix without adding a release or
 owner-cutover prerequisite.
 
+## Restricted-alpha support and retirement
+
+Named staging acceptance does not retire independently supported synthetic paths.
+Provider recovery and wider security/operational acceptance remain separate.
+
+| Capability | Current callers and retention condition |
+| --- | --- |
+| `http/alpha.py`, `alpha_documents.py` | `http/app.py` gates restricted hosted requests; `http/composition.py` loads the synthetic document binding. Retain focused HTTP/native document tests until the affected environments and document consumers have an explicit replacement or retirement decision. |
+| `TrustedDevelopmentContext` | Composition supports loopback development and gated hosted synthetic scope; native API/browser fixtures reuse it. Retain development and isolation coverage until a supported replacement or explicit retirement. |
+| `deployment/alpha.py`, `commercial-alpha.yml` and focused fixtures/tests | The restricted-alpha journey remains repeatable and refuses named staging before checkout. Retain useful synthetic journeys; never switch named staging back to Basic access to run them. |
+
+The [single-use staging schema bridge](../operations/DEPLOYMENT.md#retired-staging-bridge-0012-to-0014)
+has retired separately. Actual multi-profile authority and legacy writer retirement
+still require controlled cutover evidence; synthetic handoff supplies no live authority.
+
 ## Acceptance record and outstanding evidence
 
 Use this template for each newly selected candidate; it is not a status board. The
