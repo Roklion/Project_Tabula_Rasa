@@ -31,3 +31,24 @@ def test_cli_provider_failures_are_sanitized_and_close_resources(monkeypatch, ca
     assert result['error'] == 'job_operation_unconfirmed'
     assert 'private' not in str(result)
     database.dispose.assert_called_once()
+
+
+def test_tick_composes_and_closes_shared_telemetry(monkeypatch, capsys):
+    database, telemetry, queue = Mock(), Mock(), Mock()
+    queue.tick.return_value = True
+    monkeypatch.setattr(job_cli, 'configure_console', lambda: None)
+    monkeypatch.setattr(job_cli.TelemetrySettings, 'from_environment', lambda: object())
+    factory = Mock(return_value=telemetry)
+    monkeypatch.setattr(job_cli, 'Telemetry', factory)
+    monkeypatch.setattr(job_cli.DatabaseSettings, 'from_environment', lambda **kwargs: object())
+    monkeypatch.setattr(job_cli, 'Database', lambda settings: database)
+    queue_factory = Mock(return_value=queue)
+    monkeypatch.setattr(job_cli, 'JobQueue', queue_factory)
+    monkeypatch.setenv('TABULA_RASA_ENVIRONMENT', 'staging')
+    monkeypatch.setenv('TABULA_RASA_RELEASE_ID', 'release')
+    assert job_cli.main(['tick', '--entity', 'alpha', '--service-id', 'worker', '--allow-mutations']) == 0
+    assert json.loads(capsys.readouterr().out) == {'executed': 1}
+    assert factory.call_args.args[:2] == ('staging', 'release')
+    assert queue_factory.call_args.kwargs['telemetry'] is telemetry
+    telemetry.close.assert_called_once()
+    database.dispose.assert_called_once()

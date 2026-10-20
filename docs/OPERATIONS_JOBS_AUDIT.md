@@ -145,6 +145,28 @@ No HTTP job-control route is added. Future member-triggered creation must use
 the existing #313 capability/membership resolver before selecting entity/service;
 role membership alone never provisions a platform worker.
 
+The explicit `tick` command composes the shared sanitized telemetry sink using
+the existing `TABULA_RASA_ENVIRONMENT`, image `TABULA_RASA_RELEASE_ID` and optional
+`TABULA_RASA_TELEMETRY_*` settings. No collector settings selects console only.
+Confirmed successful execution emits `job_run` / `job_execute` after commit;
+confirmed terminal poison, exhausted transient retry and exhausted lease budgets
+emit fixed `job_poison`, `job_transient` and `job_lease_expired` failure codes.
+Recurring handlers execute through this same queue. Job type, target, schedule,
+business date, payload and exception text are never telemetry fields. Job,
+entity and worker references use the existing stage-specific HMAC policy; no key
+omits them. Empty ticks, obsolete claims, cancellation and retryable attempts do
+not manufacture terminal outcomes. A lost success response emits success only
+after durable readback confirms it; an unconfirmed result emits neither success
+nor a fabricated failure. Durable attempt history remains authoritative.
+
+Telemetry failure never changes a committed result or repeats effects. Shutdown
+attempts to drain queued events within the existing four-second bound; crashes,
+quota failures and incomplete delivery can still lose diagnostics. No outbox or
+exactly-once event guarantee is introduced. Configure terminal-failure alerts
+and explicit-success recovery at the collector, verify actual hosted delivery,
+and retain missing-timer/manual inspection ownership separately. Source changes
+alone do not establish a hosted scheduler, notification or recovery acceptance.
+
 | Stage | Selected execution ownership |
 | --- | --- |
 | Development | Explicit local CLI against disposable PostgreSQL; no hosted schedule. |

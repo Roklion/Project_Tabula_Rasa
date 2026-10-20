@@ -166,7 +166,7 @@ class Telemetry:
             return
         with session:
             session.trust_env = False
-            while not self.stopped.is_set():
+            while not self.stopped.is_set() or not self.queue.empty():
                 try:
                     batch = [self.queue.get(timeout=0.2)]
                 except Empty:

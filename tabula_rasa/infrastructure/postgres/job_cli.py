@@ -3,6 +3,9 @@
 import argparse
 from datetime import datetime, timezone
 import json
+import os
+
+from tabula_rasa.telemetry import Telemetry, TelemetrySettings, configure_console
 
 from .config import DatabaseSettings
 from .jobs import JobQueue
@@ -44,9 +47,16 @@ def main(argv=None):
     if not 1 <= args.budget <= 100:
         parser.error('Budget must be between 1 and 100.')
     database = None
+    telemetry = None
     try:
+        if args.command == 'tick':
+            configure_console()
+            telemetry = Telemetry(os.environ.get('TABULA_RASA_ENVIRONMENT', 'test'),
+                os.environ.get('TABULA_RASA_RELEASE_ID', 'development'),
+                TelemetrySettings.from_environment(),
+                failure_codes={'job_poison', 'job_transient', 'job_lease_expired'})
         database = Database(DatabaseSettings.from_environment(required=True))
-        queue = JobQueue(database, args.entity, operator_registry(), service_id=args.service_id)
+        queue = JobQueue(database, args.entity, operator_registry(), service_id=args.service_id, telemetry=telemetry)
         if args.command == 'inspect':
             result = queue.diagnostics()
         elif args.command == 'recurring-status':
@@ -88,6 +98,8 @@ def main(argv=None):
         print(json.dumps({'error': 'job_operation_unconfirmed', 'guidance': 'Inspect durable job status before retrying.'}))
         return 1
     finally:
+        if telemetry is not None:
+            telemetry.close()
         if database is not None:
             database.dispose()
 
