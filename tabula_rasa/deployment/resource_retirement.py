@@ -122,7 +122,7 @@ def preview(document, targets, *, now=None):
             reasons.append('protected_or_unknown_environment')
         if row['authority'] not in {'inactive', 'not_applicable'}:
             reasons.append('active_or_unknown_authority')
-        if row['provider_id'] is None or row['scope'] == 'unknown' or row['owner'] == 'unknown':
+        if row['provider_id'] in {None, 'unknown'} or row['scope'] == 'unknown' or row['owner'] == 'unknown':
             reasons.append('identity_or_owner_unresolved')
         if row['references']:
             reasons.append('live_or_retained_references')

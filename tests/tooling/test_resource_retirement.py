@@ -61,6 +61,7 @@ def test_exact_preview_requires_manual_approval_and_is_deterministic():
     ({'references': ['ci-workflow']}, 'live_or_retained_references'),
     ({'references': ['retained-rehearsal']}, 'live_or_retained_references'),
     ({'provider_id': None}, 'identity_or_owner_unresolved'),
+    ({'provider_id': 'unknown'}, 'identity_or_owner_unresolved'),
     ({'scope': 'unknown'}, 'identity_or_owner_unresolved'),
     ({'owner': 'unknown'}, 'identity_or_owner_unresolved'),
     ({'last_backup': None}, 'missing_preservation_or_handoff_evidence'),
