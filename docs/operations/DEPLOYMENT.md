@@ -56,9 +56,9 @@ No subscription purchase is implied.
 
 For owner-operated migrated profiles, the standard image additionally accepts
 `TABULA_RASA_MIGRATED_BINDINGS_FILE`, pointing to private server-mounted binding
-metadata. Follow [the owner runtime configuration](BOOKKEEPING_CUTOVER.md#container-configuration-for-migrated-owner-profiles)
+metadata. Follow [the owner runtime configuration](../accounting/CUTOVER.md#container-configuration-for-migrated-owner-profiles)
 and the existing named-user/tenant-grant setup. Use the explicit migrated binding
-path for #303; the ordinary native workspace runtime does not establish its
+path for owner-operated migrations; the ordinary native workspace runtime does not establish their
 source/authority/document acceptance. This configuration changes neither the
 separate staging service nor the commercial activation policy.
 
