@@ -341,6 +341,52 @@ approved deployment has working authentication, document bindings and every requ
 workflow. Stop before live migration until that evidence is accepted. This is a
 setup/coverage checkpoint, not a second owner app.
 
+### Container configuration for migrated owner profiles
+
+The standard container entry point can compose the same `MigratedProfileServices`
+checks using its normal named-user identity, tenant connections and single pool.
+Set `TABULA_RASA_MIGRATED_BINDINGS_FILE` to a private server-mounted JSON file:
+
+```json
+{
+  "profiles": [
+    {
+      "entity_id": "entity-alpha",
+      "profile_key": "alpha",
+      "spreadsheet_id": "preserved-source-workbook",
+      "receipt_folder_id": "accepted-receipt-folder",
+      "mode": "rehearsal"
+    }
+  ]
+}
+```
+
+Each entry explicitly binds one canonical entity to one source profile. Include
+every selected profile; duplicate entity/profile bindings, unsupported modes,
+missing sources, unknown fields and unreadable/malformed files stop startup.
+The file contains binding metadata only. Keep it outside Git; do not include
+OAuth grants, passwords or connection strings. Tenant-owned encrypted grants
+continue to use the existing connection secret directory/key and approved
+ownership/connection records. Maps continue to use the deployment-wide Maps
+environment settings.
+
+This setting requires named-user mode and rejects synthetic fixture access. It
+does not load a source, create ownership, stage a grant or activate authority.
+Startup checks all configured claims, authority/source/database/document bindings
+and the schema head before serving. Each configured profile must have a connected
+document connection matching its organization, entity and profile, with readable
+encrypted grant material that can compose the scoped document adapter. Drive
+connections must match the accepted folder. An explicitly adopted S3 connection
+takes precedence under the existing managed-storage rules; startup validates that
+effective connection and never falls back to Drive when it is unavailable.
+This local startup check makes no provider requests; live provider access still
+requires the separate deployment verification. Requests reuse the existing migrated service
+owner, which rechecks the selected entity and organization. Workspace bootstrap
+is disabled for this configured owner deployment. An invalid configured file
+never falls back to the ordinary native runtime. Omitting the setting retains
+the ordinary runtime for independent native workspaces; explicitly verify the
+setting and mounted file in the selected owner deployment before cutover.
+
 ### Reuse and completion evidence
 
 Inspected/reused: `composition.py` owns authority/profile/document binding;

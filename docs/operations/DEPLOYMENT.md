@@ -54,6 +54,14 @@ secret values into issues, commits, logs or chat. Provider/resource creation,
 DNS, secrets and deployment execution require the operator's account access.
 No subscription purchase is implied.
 
+For owner-operated migrated profiles, the standard image additionally accepts
+`TABULA_RASA_MIGRATED_BINDINGS_FILE`, pointing to private server-mounted binding
+metadata. Follow [the owner runtime configuration](../accounting/CUTOVER.md#container-configuration-for-migrated-owner-profiles)
+and the existing named-user/tenant-grant setup. Use the explicit migrated binding
+path for owner-operated migrations; the ordinary native workspace runtime does not establish their
+source/authority/document acceptance. This configuration changes neither the
+separate staging service nor the commercial activation policy.
+
 1. Select two independently configured Render image web services and their
    canonical HTTPS origins. Review `deploy/commercial/render.yaml` as an operator
    template, replace its bootstrap image tags with a tested immutable digest,

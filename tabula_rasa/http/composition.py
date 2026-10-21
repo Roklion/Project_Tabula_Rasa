@@ -102,7 +102,11 @@ def open_runtime(settings):
     if settings.trusted_entity_id and settings.trusted_entity_id != "alpha-synthetic":
         raise RuntimeError("Default trusted runtime requires the explicit alpha-synthetic fixture.")
     database = None
+    identity = None
+    maps = None
     try:
+        from .migrated_configuration import load_migrated_bindings
+        migrated = load_migrated_bindings(settings, dict(os.environ))
         database = (open_alpha_database(dict(os.environ)) if settings.hosted_alpha
                     else Database(DatabaseSettings.from_environment(required=True)))
         from .alpha_documents import load_alpha_document_store
@@ -111,7 +115,6 @@ def open_runtime(settings):
             from tabula_rasa.infrastructure.postgres.documents import PostgresReceiptRepository
             PostgresReceiptRepository(database, document_store.entity_id,
                 store_kind="google_drive", store_scope_key=document_store.scope_key).validate_binding()
-        identity = None
         connections = None
         resolver = (
             TrustedDevelopmentContext(settings.trusted_entity_id, secrets.token_urlsafe(32),
@@ -144,17 +147,36 @@ def open_runtime(settings):
             return create_postgres_services(database, context.entity_id,
                 document_store=document_store, document_store_kind="google_drive")
 
+        service_factory = services
+        if migrated is not None:
+            from .migrated import MigratedProfileServices
+            entity_profiles, profile_secrets = migrated
+            service_factory = MigratedProfileServices(database, entity_profiles=entity_profiles,
+                                                      secrets=profile_secrets, connections=connections)
+            service_factory.validate()
         from .maps import environment_maps
-        runtime = PostgresRuntime(database, resolver, service_factory=services,
-                                  maps=environment_maps(dict(os.environ)), identity=identity, connections=connections)
+        maps = environment_maps(dict(os.environ))
+        runtime = PostgresRuntime(database, resolver, service_factory=service_factory,
+                                  maps=maps, identity=identity, connections=connections,
+                                  workspace_bootstrap=migrated is None)
+        if migrated is not None and not runtime.ready():
+            raise RuntimeError('The migrated database is not ready.')
         if settings.trusted_entity_id:
             # Only explicit seed tooling creates synthetic entities.
             for context in resolver.contexts:
                 runtime.services(context)
         return runtime
     except BaseException as error:
-        if database is not None:
-            database.dispose()
+        try:
+            if identity is not None:
+                identity.close()
+        finally:
+            try:
+                if maps is not None:
+                    maps.close()
+            finally:
+                if database is not None:
+                    database.dispose()
         if not isinstance(error, Exception):
             raise
         # Startup failures must not retain raw configuration/provider text.

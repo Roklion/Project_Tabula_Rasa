@@ -5,6 +5,8 @@ All databases are independently created/dropped by the native pytest fixture.
 """
 
 from copy import deepcopy
+import json
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 from fastapi.testclient import TestClient
@@ -29,6 +31,15 @@ from tests.postgres.test_identity import verified
 SETTINGS = HttpSettings("production", "https://owner.example.test", "owner-verification", access_mode='named_user')
 
 
+@pytest.fixture(autouse=True)
+def synthetic_document_grants(tmp_path, monkeypatch):
+    from cryptography.fernet import Fernet
+    monkeypatch.setenv('TABULA_RASA_CONNECTION_SECRETS_DIR', str(tmp_path))
+    monkeypatch.setenv('TABULA_RASA_CONNECTION_SECRETS_KEY', Fernet.generate_key().decode())
+    monkeypatch.setattr('tabula_rasa.http.connections.provider_store',
+        lambda row, payload, **kwargs: SimpleNamespace(scope_key=payload['scope_key'], store_kind='google_drive'))
+
+
 def context(database, profile, *, write=True):
     repository = PostgresIdentityRepository(database)
     user = repository.resolve_user(verified('owner-' + profile))
@@ -45,6 +56,10 @@ def named_sessions(database):
 
 
 def owned_profiles(database):
+    import os
+    from tabula_rasa.infrastructure.connection_secrets import ConnectionSecrets
+    from tabula_rasa.http.connections import TenantConnections
+    secrets = ConnectionSecrets.from_environment(os.environ)
     repo = PostgresIdentityRepository(database)
     sessions = named_sessions(database)
     credentials = {}
@@ -55,9 +70,13 @@ def owned_profiles(database):
         from tests.postgres.test_legacy_claims import apply_claim, claim_for
         from tabula_rasa.infrastructure.postgres.connections import PostgresConnections
         apply_claim(database, claim_for(database, profile, organization, user))
+        reference = secrets.put(dict(environment=SETTINGS.environment, organization_id=organization,
+            entity_id=profile, provider='google_drive', profile_key=profile, scope_key='folder-' + profile))
         PostgresConnections(database).stage(organization_id=organization, entity_id=profile,
             profile_key=profile, scope_key='folder-' + profile,
-            secret_ref=('a' if profile == 'alpha' else 'b') * 32, expected_revision=0)
+            secret_ref=reference, expected_revision=0)
+        TenantConnections(database, SETTINGS.environment, secrets).change(context(database, profile),
+            SimpleNamespace(authenticated_at=identity.authenticated_at), revision=1, connect=True)
         credentials[profile] = sessions.issue(identity)
         if profile == 'alpha':
             reader = verified('reader-alpha')
@@ -87,15 +106,37 @@ def activated_profiles(database):
     return plans, controller, settings_for("alpha", "beta")
 
 
-def test_owner_authority_survives_production_restart_writes_reports_and_complete_export(database, monkeypatch):
+def container_factory(database, config, tmp_path, monkeypatch):
+    from tabula_rasa.http.composition import open_runtime
+    from tabula_rasa.http.migrated_configuration import FILE_ENV
+    source = tmp_path / 'bindings.json'
+    source.write_text(json.dumps({'profiles': [
+        {'entity_id': profile, 'profile_key': profile, 'spreadsheet_id': values['spreadsheet_id'],
+         'receipt_folder_id': values['google_drive']['receipt_folder']['id'],
+         'mode': config['bookkeeping_backends'][profile]['mode']}
+        for profile, values in config['business_profiles'].items()
+    ]}), encoding='utf-8')
+    monkeypatch.setenv(FILE_ENV, str(source))
+    monkeypatch.setattr(DatabaseSettings, 'from_environment', Mock(return_value=DatabaseSettings(database.engine.url)))
+    monkeypatch.setattr('tabula_rasa.infrastructure.oidc.OidcSettings.from_environment',
+                        Mock(return_value=SimpleNamespace(configuration_hash='a' * 64)))
+    monkeypatch.setattr('tabula_rasa.infrastructure.oidc.OidcProvider', Mock())
+    return open_runtime
+
+
+@pytest.mark.parametrize('deployment', ['injected_factory', 'container_configuration'])
+def test_owner_authority_survives_production_restart_writes_reports_and_complete_export(database, monkeypatch,
+                                                                                     tmp_path, deployment):
     plans, controller, config = activated_profiles(database)
     monkeypatch.setattr("tabula_rasa.composition.GoogleSheetsStorage.from_secrets",
                         lambda _: pytest.fail("Migrated production must not initialize Sheets."))
     assert smoke_application("alpha", config, database, plans["alpha"])["passed"]
     before = create_postgres_export_service(database, "alpha").export()
     credentials = owned_profiles(database)
+    factory = (container_factory(database, config, tmp_path, monkeypatch)
+               if deployment == 'container_configuration' else runtime_factory(database, config))
     for restart in range(2):
-        app = create_app(settings=SETTINGS, runtime_factory=runtime_factory(database, config))
+        app = create_app(settings=SETTINGS, runtime_factory=factory)
         with TestClient(app, base_url=SETTINGS.public_origin) as client:
             login(client, credentials)
             assert client.get("/health/ready").status_code == 200
@@ -136,6 +177,41 @@ def test_owner_authority_survives_production_restart_writes_reports_and_complete
     config["bookkeeping_backends"]["alpha"]["mode"] = "commercial_production"
     with pytest.raises(RuntimeError, match="startup failed"):
         runtime_factory(database, config)(SETTINGS)
+
+
+@pytest.mark.parametrize('failure', ['folder', 'inactive_authority', 'missing_connection', 'pending',
+                                    'disconnected', 'missing_grant', 'profile_connection', 'folder_connection'])
+def test_container_runtime_refuses_invalid_live_bindings_without_native_fallback(database, tmp_path,
+                                                                                monkeypatch, failure):
+    plans, controller, config = activated_profiles(database)
+    owned_profiles(database)
+    if failure == 'folder':
+        config['business_profiles']['alpha']['google_drive']['receipt_folder']['id'] = 'folder-beta'
+    elif failure == 'inactive_authority':
+        controller.rollback(plans['alpha'])
+    else:
+        from sqlalchemy import text
+        with database.transaction() as connection:
+            if failure == 'missing_connection':
+                connection.execute(text("DELETE FROM external_connections WHERE entity_id='alpha'"))
+            elif failure in {'pending', 'disconnected'}:
+                connection.execute(text("UPDATE external_connections SET status=:status WHERE entity_id='alpha'"),
+                                   {'status': failure})
+            elif failure == 'missing_grant':
+                connection.execute(text("UPDATE external_connections SET secret_ref=:ref WHERE entity_id='alpha'"),
+                                   {'ref': 'c' * 32})
+            elif failure == 'profile_connection':
+                connection.execute(text("UPDATE external_connections SET profile_key='wrong' WHERE entity_id='alpha'"))
+            else:
+                connection.execute(text("UPDATE external_connections SET store_scope_key='wrong' WHERE entity_id='alpha'"))
+    factory = container_factory(database, config, tmp_path, monkeypatch)
+    native = Mock()
+    monkeypatch.setattr('tabula_rasa.http.composition.create_postgres_services', native)
+    with pytest.raises(RuntimeError, match='startup failed') as caught:
+        factory(SETTINGS)
+    assert caught.value.__context__ is None
+    native.assert_not_called()
+    assert not controller.inspect(plans['beta'].snapshot.binding)['divergent']
 
 
 def test_owner_runtime_preserves_identity_capability_origin_and_csrf_guards(database):
