@@ -36,6 +36,17 @@ class PostgresConnections:
             row = self._row(connection, context)
             return ConnectionStatus(status=row['status'], revision=row['revision']) if row else ConnectionStatus()
 
+    def validate_migrated_binding(self, *, organization_id, entity_id, profile_key, scope_key):
+        """Operator startup check; request access still requires fresh membership."""
+        from types import SimpleNamespace
+        context = SimpleNamespace(organization_id=organization_id, entity_id=entity_id)
+        with identity_operation(self.database, read_only=True) as connection:
+            row = self._row(connection, context)
+            if (row is None or row['status'] != 'connected'
+                    or row['profile_key'] != profile_key or row['store_scope_key'] != scope_key):
+                raise IdentityError('unavailable')
+            return dict(row)
+
     def grant(self, context, *, require_connected=True, action='read', provider='google_drive'):
         with identity_operation(self.database, read_only=True) as connection:
             authorized_entity(connection, context, action)

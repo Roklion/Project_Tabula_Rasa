@@ -50,6 +50,26 @@ def fixture(database, tmp_path):
     return repo, manager, store, calls, alpha, beta, refs, session
 
 
+def test_migrated_startup_validates_scoped_connected_grants_without_provider_io(database, tmp_path):
+    repo, manager, secrets, calls, alpha, beta, refs, session = fixture(database, tmp_path)
+    def validate(ctx):
+        manager.validate_migrated_binding(organization_id=ctx.organization_id, entity_id=ctx.entity_id,
+            profile_key=ctx.entity_id, scope_key='folder-' + ctx.entity_id)
+    validate(alpha)
+    validate(beta)
+    assert calls == [('alpha', 'fake-refresh-alpha'), ('beta', 'fake-refresh-beta')]
+    with pytest.raises(IdentityError, match='unavailable'):
+        validate(replace(alpha, organization_id=beta.organization_id))
+    # Ciphertext from the other profile remains unusable at this boundary.
+    (tmp_path / (refs[0] + '.grant')).write_bytes((tmp_path / (refs[1] + '.grant')).read_bytes())
+    with pytest.raises(IdentityError, match='unavailable'):
+        validate(alpha)
+    validate(beta)
+    manager.change(beta, session, revision=2, connect=False)
+    with pytest.raises(IdentityError, match='unavailable'):
+        validate(beta)
+
+
 def test_two_org_grants_restart_disconnect_reconnect_and_no_exported_tokens(database, tmp_path):
     repo, manager, secrets, calls, alpha, beta, refs, session = fixture(database, tmp_path)
     cached = manager.document_store(alpha)

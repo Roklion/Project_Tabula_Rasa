@@ -38,7 +38,7 @@ def test_explicit_bindings_preserve_two_profile_source_and_document_scopes(tmp_p
 
 
 @pytest.mark.parametrize('failure', ['missing', 'empty', 'json', 'unknown', 'duplicate_entity',
-                                    'duplicate_profile', 'mode', 'source', 'fixture'])
+                                    'duplicate_profile', 'mode', 'source', 'folder', 'fixture'])
 def test_invalid_config_never_falls_back_or_exposes_private_values(tmp_path, failure):
     values = rows()
     payload = {'profiles': values}
@@ -53,6 +53,8 @@ def test_invalid_config_never_falls_back_or_exposes_private_values(tmp_path, fai
         values[0]['mode'] = 'sheets'
     elif failure == 'source':
         values[0]['spreadsheet_id'] = ''
+    elif failure == 'folder':
+        values[0]['receipt_folder_id'] = ''
     elif failure == 'fixture':
         settings = HttpSettings('test', 'http://testserver', trusted_entity_id='alpha-synthetic')
     path = write(tmp_path, payload)

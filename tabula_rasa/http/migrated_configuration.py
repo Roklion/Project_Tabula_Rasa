@@ -42,7 +42,7 @@ def load_migrated_bindings(settings, environment):
             entity, profile = row['entity_id'], row['profile_key']
             if (not entity or len(entity) > 256 or entity in entities or profile in profiles
                     or not re.fullmatch(r'[a-z][a-z0-9_-]{0,47}', profile)
-                    or not row['spreadsheet_id']
+                    or not row['spreadsheet_id'] or not row['receipt_folder_id']
                     or row['mode'] not in {'rehearsal', 'commercial_production'}):
                 raise ValueError
             entities[entity] = profile
