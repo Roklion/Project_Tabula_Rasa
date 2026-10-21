@@ -25,7 +25,7 @@ class EntityExportRepository(Protocol):
 
 
 class EntityExportService:
-    """Produce verified canonical content; delivery/authorization belongs to #224."""
+    """Produce verified canonical content; callers enforce export and delivery policy."""
 
     def __init__(self, repository: EntityExportRepository):
         self.repository = repository

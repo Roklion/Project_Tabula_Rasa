@@ -1,4 +1,4 @@
-"""#287 accessibility, responsive keyboard use and actual HTTP failure states."""
+"""Browser accessibility, responsive keyboard use and actual HTTP failure states."""
 
 from threading import Event
 

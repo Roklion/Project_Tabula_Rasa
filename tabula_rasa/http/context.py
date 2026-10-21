@@ -1,4 +1,4 @@
-"""#222 replaces the resolver; path/body/header IDs never grant access."""
+"""Server-resolved request context; path/body/header IDs never grant access."""
 
 from dataclasses import dataclass, field
 from hmac import compare_digest

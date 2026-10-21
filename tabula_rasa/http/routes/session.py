@@ -59,8 +59,8 @@ def select_entity(body: EntitySelection, request: Request, response: Response):
     context = resolve_context(request)
     resolver = runtime.resolve_context
     # Selection is functional alpha context, never proof of membership. Only the
-    # configured development resolver implements this cookie-based seam; #222
-    # owns selection for authenticated sessions.
+    # configured development resolver implements this cookie-based seam. Named
+    # sessions use the authenticated selection and membership-validation path.
     from ..context import TrustedDevelopmentContext
     if not isinstance(resolver, TrustedDevelopmentContext):
         raise TransportError('forbidden')

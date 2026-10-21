@@ -1,4 +1,4 @@
-"""Opt-in repository service graph; production authority selection belongs to #258."""
+"""Opt-in repository service graph; cutover controls select production authority."""
 
 from dataclasses import replace
 

@@ -1,4 +1,4 @@
-"""Temporary deployment-wide operator gate; #222 owns commercial sessions."""
+"""Temporary deployment-wide operator gate, separate from named-user sessions."""
 
 import base64
 import binascii
