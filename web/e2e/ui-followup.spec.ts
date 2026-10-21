@@ -40,16 +40,13 @@ test('shared shell and section rhythm with long business labels at three widths'
         const selectorFits = await selector.evaluate(element => element.getBoundingClientRect().right <= element.parentElement!.getBoundingClientRect().right);
         expect(selectorFits).toBe(true);
         if (path === '/workspace') {
-          await expect(page.locator('header').first()).toContainText('Workspace & members');
+          await expect(page.locator('header').first()).toContainText('Business & members');
           const review = await page.getByRole('button', { name: 'Review membership change' }).boundingBox();
           const grant = await page.getByRole('button', { name: 'Grant ownership', exact: true }).boundingBox();
           if (review && grant && grant.y >= review.y + review.height) expect(grant.y - review.y - review.height).toBeGreaterThanOrEqual(8);
           const invitationsEnd = await page.getByText('No invitations.', { exact: true }).boundingBox();
-          const addHeading = await page.getByRole('heading', { name: 'Add a business', exact: true }).boundingBox();
-          expect(addHeading!.y - invitationsEnd!.y - invitationsEnd!.height).toBeGreaterThanOrEqual(24);
-          const setupAction = await page.getByRole('button', { name: 'Review defaults', exact: true }).boundingBox();
           const respond = await page.getByRole('heading', { name: 'Respond to an invitation', exact: true }).boundingBox();
-          expect(respond!.y - setupAction!.y - setupAction!.height).toBeGreaterThanOrEqual(32);
+          expect(respond!.y - invitationsEnd!.y - invitationsEnd!.height).toBeGreaterThanOrEqual(24);
         }
         if (path === '/') {
           const actions = await page.getByRole('region', { name: 'Ledger next actions' }).boundingBox();

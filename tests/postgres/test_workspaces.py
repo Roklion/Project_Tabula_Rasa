@@ -43,29 +43,29 @@ def test_bootstrap_atomic_retry_restart_multiple_orgs_and_isolation(database, mo
         raise StorageError(code='unavailable')
     monkeypatch.setattr(PostgresLedgerSetupRepository, 'ensure_defaults', fail_after_defaults)
     with pytest.raises(StorageError):
-        service.bootstrap(alice, key, 'A', 'First business')
+        service.create_business(alice, key, 'First business')
     with database.transaction(read_only=True) as connection:
         for table in ('organizations', 'memberships', 'organization_entities', 'business_entities', 'accounts', 'categories', 'workspace_bootstraps'):
             assert connection.scalar(text(f'SELECT count(*) FROM {table}')) == 0
     monkeypatch.setattr(PostgresLedgerSetupRepository, 'ensure_defaults', original)
     with ThreadPoolExecutor(max_workers=2) as workers:
-        results = list(workers.map(lambda _: service.bootstrap(alice, key, 'A', 'First business'), range(2)))
+        results = list(workers.map(lambda _: service.create_business(alice, key, 'First business'), range(2)))
     assert results[0] == results[1]
     database.dispose()  # Cold pool/repository, persisted receipt survives.
     service = WorkspaceService(PostgresWorkspaceRepository(database))
     assert service.bootstrap_status(alice, key) == results[0]
-    assert service.bootstrap(alice, key, 'A', 'First business') == results[0]
+    assert service.create_business(alice, key, 'First business') == results[0]
     with pytest.raises(IdentityError, match='conflict'):
         service.bootstrap(alice, key, 'A', 'Changed business')
     assert service.bootstrap_status(bob, key)['state'] == 'not_started'
-    second = create(service, alice, 'Second')
+    create(service, alice, 'Second')
     foreign = create(service, bob, 'Foreign')
     for org in (foreign['organization_id'], 'unknown'):
         with pytest.raises(IdentityError, match='forbidden'):
             service.bootstrap(alice, uuid4().hex, 'A', 'Attack', org)
-    third = service.bootstrap(alice, uuid4().hex, 'A', 'Another business', results[0]['organization_id'])
-    assert third['organization_id'] == results[0]['organization_id'] != second['organization_id']
-    assert len(sessions.identity.allowed_entities(alice.user_id)) == 3
+    with pytest.raises(IdentityError, match='forbidden'):
+        service.bootstrap(alice, uuid4().hex, 'A', 'Another business', results[0]['organization_id'])
+    assert len(sessions.identity.allowed_entities(alice.user_id)) == 2
     assert len(sessions.identity.allowed_entities(bob.user_id)) == 1
     with database.transaction(read_only=True) as connection:
         from tabula_rasa.ledger_defaults import DEFAULT_ACCOUNTS, DEFAULT_CATEGORIES
@@ -222,6 +222,8 @@ def test_workspace_http_setup_csrf_foreign_scope_and_secret_safe_errors(database
 
 
 @pytest.mark.parametrize('method,path', [
+    ('POST', '/api/v1/businesses'),
+    ('GET', '/api/v1/businesses/creation/unknown-request-id'),
     ('GET', '/api/v1/workspaces/foreign/members'),
     ('GET', '/api/v1/workspaces/foreign/invitations'),
     ('GET', '/api/v1/workspaces/bootstrap/unknown'),
@@ -303,3 +305,70 @@ def test_bootstrap_additional_business_denies_admin_and_removed_receipt_owner(da
         service.bootstrap_status(alice, key)
     with pytest.raises(IdentityError, match='forbidden'):
         service.bootstrap(alice, key, 'A', 'Business')
+
+
+def test_business_only_http_contract_and_independent_owner_access(database):
+    client, auth, _ = client_for(database)
+    raw, alice = auth.sessions.issue(replace(verified(), email='alice@example.test'))
+    _, bob = auth.sessions.issue(replace(verified('bob'), email='bob@example.test'))
+    repo = PostgresIdentityRepository(database)
+    service = WorkspaceService(PostgresWorkspaceRepository(database))
+    with client:
+        client.cookies.set(auth.session_cookie, raw, domain='127.0.0.1', path='/')
+        headers = {'origin': auth.settings.public_origin, 'x-csrf-token': alice.csrf_token}
+        body = {'request_id': uuid4().hex, 'business_name': ' Business A '}
+        for invalid in ({**body, 'business_name': '  '}, {**body, 'business_name': 'x' * 161},
+                        {**body, 'request_id': 'invalid'}, {**body, 'organization_id': 'forged'},
+                        {**body, 'workspace_name': 'forged'}, {**body, 'entity_id': 'forged'}):
+            assert client.post('/api/v1/businesses', json=invalid, headers=headers).status_code == 422
+        first = client.post('/api/v1/businesses', json=body, headers=headers)
+        assert first.status_code == 200
+        assert set(first.json()) == {'state', 'entity_id'}
+        assert first.json()['state'] == 'ready'
+        assert client.post('/api/v1/businesses', json=body, headers=headers).json() == first.json()
+        assert client.get('/api/v1/businesses/creation/' + body['request_id']).json() == first.json()
+        assert client.post('/api/v1/businesses', json={**body, 'business_name': 'changed'}, headers=headers).status_code == 409
+        a = repo.allowed_entities(alice.user_id)[0]
+        assert a.name == 'Business A'
+        repo.set_membership(a.organization_id, bob.user_id, 'read_only')
+        before = service.members(alice, a.organization_id)
+        second = client.post('/api/v1/businesses', json={'request_id': uuid4().hex, 'business_name': 'Business B'}, headers=headers)
+        assert second.status_code == 200
+        b = next(item for item in repo.allowed_entities(alice.user_id) if item.entity_id == second.json()['entity_id'])
+        assert b.organization_id != a.organization_id and b.role == a.role == 'owner'
+        assert service.members(alice, a.organization_id) == before
+        assert [item.entity_id for item in repo.allowed_entities(bob.user_id)] == [a.entity_id]
+        for org in (a.organization_id, b.organization_id, 'forged'):
+            denied = client.post('/api/v1/workspaces/' + org + '/businesses',
+                json={'request_id': uuid4().hex, 'workspace_name': 'ignored', 'business_name': 'Attack'}, headers=headers)
+            assert denied.status_code == 403
+        # A read-only member may independently own a new business without changing A.
+        own = service.create_business(bob, uuid4().hex, 'Bob business')
+        assert len(repo.allowed_entities(bob.user_id)) == 2
+        assert own['entity_id'] not in {item.entity_id for item in repo.allowed_entities(alice.user_id)}
+        client.cookies.clear()
+        bob_raw, bob_session = auth.sessions.issue(replace(verified('bob'), email='bob@example.test'))
+        client.cookies.set(auth.session_cookie, bob_raw, domain='127.0.0.1', path='/')
+        assert client.get('/api/v1/businesses/creation/' + body['request_id']).json() == {'state': 'not_started', 'entity_id': None}
+        assert client.get('/api/v1/entities/' + b.entity_id + '/accounts').status_code == 403
+        assert client.post('/api/v1/session/entity', json={'entity_id': b.entity_id},
+            headers={**headers, 'x-csrf-token': bob_session.csrf_token}).status_code == 403
+
+
+def test_legacy_addition_receipt_can_be_replayed_without_creating(database):
+    import json
+    from hashlib import sha256
+
+    _, _, alice = context(database)
+    service = WorkspaceService(PostgresWorkspaceRepository(database))
+    original = service.create_business(alice, uuid4().hex, 'Existing business')
+    org, key = original['organization_id'], uuid4().hex
+    payload = sha256(json.dumps(['Legacy', 'Existing business', org]).encode()).hexdigest()
+    with database.transaction() as connection:
+        connection.execute(text("""INSERT INTO workspace_bootstraps
+            (user_id, request_id, payload_hash, organization_id, entity_id)
+            VALUES (:user, :key, :payload, :org, :entity)"""),
+            {'user': alice.user_id, 'key': key, 'payload': payload, 'org': org, 'entity': original['entity_id']})
+    assert service.bootstrap(alice, key, 'Legacy', 'Existing business', org) == original
+    with database.transaction(read_only=True) as connection:
+        assert connection.scalar(text('SELECT count(*) FROM business_entities')) == 1

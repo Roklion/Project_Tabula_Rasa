@@ -1338,6 +1338,59 @@
         "title": "BootstrapResult",
         "type": "object"
       },
+      "BusinessCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "business_name": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Business Name",
+            "type": "string"
+          },
+          "request_id": {
+            "maxLength": 128,
+            "minLength": 16,
+            "pattern": "^[A-Za-z0-9_-]{16,128}$",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "business_name"
+        ],
+        "title": "BusinessCreateRequest",
+        "type": "object"
+      },
+      "BusinessCreateResult": {
+        "additionalProperties": false,
+        "properties": {
+          "entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Id"
+          },
+          "state": {
+            "enum": [
+              "not_started",
+              "ready"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "BusinessCreateResult",
+        "type": "object"
+      },
       "Category": {
         "additionalProperties": false,
         "properties": {
@@ -5826,6 +5879,212 @@
         "summary": "Revoke All",
         "tags": [
           "Authentication"
+        ]
+      }
+    },
+    "/api/v1/businesses": {
+      "post": {
+        "operationId": "create_business",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BusinessCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessCreateResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Create Business",
+        "tags": [
+          "Business access",
+          "Businesses"
+        ]
+      }
+    },
+    "/api/v1/businesses/creation/{request_id}": {
+      "get": {
+        "operationId": "business_creation_status",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{16,128}$",
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessCreateResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Business Creation Status",
+        "tags": [
+          "Business access",
+          "Businesses"
         ]
       }
     },
@@ -16104,7 +16363,7 @@
         },
         "summary": "Respond Invitation",
         "tags": [
-          "Workspaces"
+          "Business access"
         ]
       }
     },
@@ -16673,6 +16932,7 @@
     },
     "/api/v1/workspaces/bootstrap": {
       "post": {
+        "deprecated": true,
         "operationId": "bootstrap_workspace",
         "requestBody": {
           "content": {
@@ -16768,7 +17028,7 @@
         },
         "summary": "Bootstrap Workspace",
         "tags": [
-          "Workspaces"
+          "Business access"
         ]
       }
     },
@@ -16871,12 +17131,13 @@
         },
         "summary": "Bootstrap Status",
         "tags": [
-          "Workspaces"
+          "Business access"
         ]
       }
     },
     "/api/v1/workspaces/{organization_id}/businesses": {
       "post": {
+        "deprecated": true,
         "operationId": "bootstrap_business",
         "parameters": [
           {
@@ -16983,7 +17244,7 @@
         },
         "summary": "Bootstrap Business",
         "tags": [
-          "Workspaces"
+          "Business access"
         ]
       }
     },
@@ -17085,7 +17346,7 @@
         },
         "summary": "List Invitations",
         "tags": [
-          "Workspaces"
+          "Business access"
         ]
       },
       "post": {
@@ -17195,7 +17456,7 @@
         },
         "summary": "Create Invitation",
         "tags": [
-          "Workspaces"
+          "Business access"
         ]
       }
     },
@@ -17299,7 +17560,7 @@
         },
         "summary": "Revoke Invitation",
         "tags": [
-          "Workspaces"
+          "Business access"
         ]
       }
     },
@@ -17401,7 +17662,7 @@
         },
         "summary": "List Members",
         "tags": [
-          "Workspaces"
+          "Business access"
         ]
       }
     },
@@ -17515,7 +17776,7 @@
         },
         "summary": "Change Member",
         "tags": [
-          "Workspaces"
+          "Business access"
         ]
       }
     },
@@ -17629,7 +17890,7 @@
         },
         "summary": "Grant Ownership",
         "tags": [
-          "Workspaces"
+          "Business access"
         ]
       }
     },

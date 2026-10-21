@@ -9,6 +9,16 @@ from tabula_rasa.application.workspaces import BOOTSTRAP_ID_PATTERN
 Role = Literal['owner', 'admin', 'editor', 'accountant', 'read_only']
 
 
+class BusinessCreateRequest(DTO):
+    request_id: str = Field(min_length=16, max_length=128, pattern=BOOTSTRAP_ID_PATTERN)
+    business_name: str = Field(min_length=1, max_length=160)
+
+
+class BusinessCreateResult(DTO):
+    state: Literal['not_started', 'ready']
+    entity_id: str | None = None
+
+
 class BootstrapRequest(DTO):
     request_id: str = Field(min_length=16, max_length=128, pattern=BOOTSTRAP_ID_PATTERN)
     workspace_name: str = Field(min_length=1, max_length=160)

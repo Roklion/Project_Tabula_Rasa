@@ -10,7 +10,7 @@ export function EntitySelector({ activeId }: { activeId: string }) {
   if (!selection || selection.items.length < 2) return null;
   return <><label htmlFor="business-selector">Select business</label>
     <select id="business-selector" disabled={pending} value={activeId} onChange={event => { event.currentTarget.focus(); setNext(event.target.value); }}>
-      {selection.items.map(item => <option key={item.id} value={item.id}>{item.organization_name ? item.organization_name + ' / ' : ''}{item.name}</option>)}
+      {selection.items.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
     </select>
     {next && next !== activeId && <ConfirmationDialog title="Switch business" keepLabel="Keep current business"
       confirmLabel="Discard draft and switch" pending={pending} onKeep={() => setNext(undefined)}

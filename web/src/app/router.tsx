@@ -15,6 +15,7 @@ import { AssetsPage, AssetDetail, NewAsset } from '../features/secondary/AssetsP
 import { MixedUsePage, MixedUseDetail, NewMixedUse, CopyMixedUse } from '../features/secondary/MixedUsePage';
 import { RecurringPage, RecurringDetail, NewRecurring } from '../features/secondary/RecurringPage';
 import { PageHeader } from '../components/VisualPrimitives';
+import { BusinessesPage } from '../features/identity/BusinessesPage';
 import { WorkspacePage } from '../features/identity/WorkspacePage';
 import { ExpenseToRecurring } from '../features/secondary/ExpenseToRecurring';
 import { DataBackupPage } from '../features/imports/DataBackupPage';
@@ -26,6 +27,7 @@ const routes = [{
     { index: true, element: <ReportsPage dashboard /> },
     { path: 'onboarding', element: <Navigate to="/" replace /> },
     { path: 'accounts', element: <Accounts /> },
+    { path: 'businesses', element: <BusinessesPage /> },
     { path: 'workspace', element: <WorkspacePage /> },
     { path: 'transactions', element: <LedgerPage /> },
     { path: 'reports', element: <ReportsPage /> },

@@ -72,9 +72,8 @@ export function createApi(fetcher: typeof fetch = (...args) => fetch(...args)) {
       if (!result.response.ok) throw new ApiError(result.error?.error.code ?? 'unavailable');
     }),
     entities: (signal?: AbortSignal) => safe(async () => unwrap(await client.GET('/api/v1/entities', { signal, headers: headers() }))),
-    bootstrapWorkspace: (s: SessionState, body: Schemas['BootstrapRequest']) => safe(async () => unwrap(await client.POST('/api/v1/workspaces/bootstrap', { body, headers: headers(s.csrf_token) }))),
-    bootstrapBusiness: (s: Session, body: Schemas['BootstrapRequest']) => safe(async () => unwrap(await client.POST('/api/v1/workspaces/{organization_id}/businesses', { params: { path: { organization_id: s.organization_id } }, body, headers: headers(s.csrf_token) }))),
-    bootstrapStatus: (request_id: string, signal?: AbortSignal) => safe(async () => unwrap(await client.GET('/api/v1/workspaces/bootstrap/{request_id}', { params: { path: { request_id } }, signal, headers: headers() }))),
+    createBusiness: (s: SessionState, body: Schemas['BusinessCreateRequest']) => safe(async () => unwrap(await client.POST('/api/v1/businesses', { body, headers: headers(s.csrf_token) }))),
+    bootstrapStatus: (request_id: string, signal?: AbortSignal) => safe(async () => unwrap(await client.GET('/api/v1/businesses/creation/{request_id}', { params: { path: { request_id } }, signal, headers: headers() }))),
     members: (s: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET('/api/v1/workspaces/{organization_id}/members', { params: { path: { organization_id: s.organization_id } }, signal, headers: headers() }))),
     invitations: (s: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET('/api/v1/workspaces/{organization_id}/invitations', { params: { path: { organization_id: s.organization_id } }, signal, headers: headers() }))),
     invite: (s: Session, body: Schemas['InviteRequest']) => safe(async () => unwrap(await client.POST('/api/v1/workspaces/{organization_id}/invitations', { params: { path: { organization_id: s.organization_id } }, body, headers: headers(s.csrf_token) }))),

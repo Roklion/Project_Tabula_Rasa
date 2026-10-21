@@ -73,7 +73,11 @@ class PostgresWorkspaceRepository:
                     raise IdentityError('conflict')
                 self._role(connection, actor, previous['organization_id'])
                 return self._bootstrap_result(previous)
-            org = organization_id or self.identity.create_organization(actor, workspace_name)
+            # Retain authorized replay of historical receipts, but never append a
+            # new business to an existing permission container.
+            if organization_id is not None:
+                raise IdentityError('forbidden')
+            org = self.identity.create_organization(actor, workspace_name)
             ledger = PostgresLedgerSetupRepository.create_entity(self.database, entity_id, business_name)
             self.identity.bind_entity(org, entity_id)
             LedgerSetupService(ledger).ensure_defaults()

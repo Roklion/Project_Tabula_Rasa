@@ -143,6 +143,9 @@ def test_shared_production_factory_validates_all_bindings_and_preserves_request_
             with pytest.raises(IdentityError, match='forbidden'):
                 runtime.workspaces.bootstrap(SimpleNamespace(user_id=profile), 'request-' + profile,
                                              'Workspace', 'Business', organization_id)
+    for profile in services:
+        with pytest.raises(IdentityError, match='forbidden'):
+            runtime.workspaces.create_business(SimpleNamespace(user_id=profile), 'request-' + profile, 'Business')
     bootstrap.assert_not_called()
     members = Mock(return_value=[{'user_id': 'alpha'}])
     monkeypatch.setattr(runtime.workspaces.repository, 'members', members)

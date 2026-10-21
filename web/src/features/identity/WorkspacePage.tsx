@@ -6,7 +6,6 @@ import { useEntity } from '../../app/context';
 import { ErrorNotice, Field, LoadingState, SuccessNotice } from '../../components/States';
 import { ActionButton, FormSection, PageHeader } from '../../components/VisualPrimitives';
 import { InvitationAcceptance } from './InvitationAcceptance';
-import { LedgerSetup } from './Onboarding';
 import { ConfirmationDialog } from '../../components/ConfirmationDialog';
 
 const roleNames = { owner: 'Owner', admin: 'Admin', editor: 'Editor', accountant: 'Accountant', read_only: 'Read-only' };
@@ -32,7 +31,7 @@ function MemberEditor({ member, owner, onSave, onGrant }: { member: Schemas['Mem
     } finally { submitting.current = false; setPending(false); }
   }
   const allowed = owner || member.role === 'admin' && member.user_id === actor || !['owner', 'admin'].includes(member.role);
-  return <section className="surface"><h3>{member.display_name || 'Workspace member'}</h3>
+  return <section className="surface"><h3>{member.display_name || 'Business member'}</h3>
     <p>Current role: {roleNames[member.role]} · {member.state}</p>
     {allowed && <><Field id={'role-' + member.user_id} label="Member role"><select id={'role-' + member.user_id} value={role} disabled={pending}
       onChange={event => setRole(event.target.value as Role)}>
@@ -49,7 +48,7 @@ function MemberEditor({ member, owner, onSave, onGrant }: { member: Schemas['Mem
     </ConfirmationDialog>}
     {confirm && <ConfirmationDialog title="Change membership" keepLabel="Keep current membership" confirmLabel="Confirm membership change" pending={pending} confirmDisabled={uncertain} onKeep={() => setConfirm(false)}
       onConfirm={() => void submit(() => onSave(role, active), () => setConfirm(false))}>
-      Set this member to {roleNames[role]} and {active ? 'active' : 'inactive'}? Access changes on their next request. A workspace must retain an active Owner.
+      Set this member to {roleNames[role]} and {active ? 'active' : 'inactive'}? Access changes on their next request. A business must retain an active Owner.
       {error !== undefined && <ErrorNotice error={error} />}
       {uncertain && <p role="alert">The outcome could not be confirmed. Close this dialog and reload the member list before making another change.</p>}
     </ConfirmationDialog>}
@@ -87,7 +86,7 @@ function MemberAdministration() {
     <p>Share the credential privately with the intended recipient. It expires after 48 hours and can be used once.</p>
     <div className="actions"><ActionButton type="submit" disabled={pending}>Create invitation</ActionButton></div>
   </form>
-  {issued && <section className="notice neutral"><h2>Share this credential once</h2><p>This value disappears when you leave this workspace or dismiss it.</p>
+  {issued && <section className="notice neutral"><h2>Share this credential once</h2><p>This value disappears when you leave this business or dismiss it.</p>
     <Field id="issued-invitation" label="New invitation credential"><input id="issued-invitation" readOnly value={issued} autoComplete="off" spellCheck={false} /></Field>
     <ActionButton onClick={() => setIssued(undefined)}>Dismiss credential</ActionButton></section>}
   {error !== undefined && <ErrorNotice error={error} />}
@@ -118,10 +117,9 @@ function MemberAdministration() {
 
 export function WorkspacePage() {
   const session = useEntity();
-  return <><PageHeader title="Workspace & members" description={session.entity.organization_name ?? 'Your workspace'} />
-    <p>Membership roles apply to every active business in this workspace.</p>
-    {session.capabilities.includes('members:manage') && !session.trusted_development ? <MemberAdministration /> : <p>Workspace administration requires Owner or Admin access.</p>}
-    {!session.trusted_development && session.capabilities.includes('entity:manage') && <LedgerSetup key={session.actor_id + session.organization_id} session={session} organization={session.organization_id} />}
+  return <><PageHeader title="Business & members" description={session.entity.name} />
+    <p>Manage members and invitations for the selected business.</p>
+    {session.capabilities.includes('members:manage') && !session.trusted_development ? <MemberAdministration /> : <p>Business administration requires Owner or Admin access.</p>}
     {!session.trusted_development && <InvitationAcceptance session={session} />}
   </>;
 }

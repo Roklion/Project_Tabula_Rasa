@@ -4,7 +4,7 @@ Named authentication uses hosted OIDC, server-owned PostgreSQL sessions and
 application-owned memberships. [Provider setup](PROVIDER_SETUP.md) and
 [ADR 0003](../adr/0003-commercial-identity-and-tenancy.md) define configuration
 and security contracts. [Authorization](AUTHORIZATION.md) owns action policy;
-[workspaces](WORKSPACES.md) owns switching and onboarding. The Streamlit
+[business onboarding](WORKSPACES.md) owns switching and onboarding. The Streamlit
 administrator remains a separate loopback-only operator surface.
 Provider-hosted acceptance and live migration require their own approved procedures.
 
@@ -50,7 +50,7 @@ provisioned by this code.
 Signed-out, session-unavailable and workspace-setup-required views consume the shared
 commercial headers, surfaces and native action controls. They retain the context
 boundary's private-view removal, reload and sign-out behavior; workspace selection and
-onboarding follow the [workspace lifecycle contract](WORKSPACES.md).
+onboarding follow the [business lifecycle contract](WORKSPACES.md).
 
 The infrastructure adapter uses pinned Authlib 1.7.2 (BSD-3-Clause, Python 3.10+)
 and its joserfc 1.7.5 JOSE implementation. Authlib owns authorization-code/PKCE

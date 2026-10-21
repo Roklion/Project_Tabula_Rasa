@@ -33,7 +33,7 @@ and authority boundaries during transition; follow the guide for your runtime.
 - [Provider setup](identity/PROVIDER_SETUP.md) and
   [authentication and sessions](identity/AUTHENTICATION.md).
 - [Server authorization](identity/AUTHORIZATION.md) and
-  [workspace switching, membership and onboarding](identity/WORKSPACES.md).
+  [business switching, membership and onboarding](identity/WORKSPACES.md).
 - [External connections and existing entity claims](identity/CONNECTIONS_AND_CLAIMS.md).
 - [Hosted rollout](identity/HOSTED_ROLLOUT.md) and
   [identity/tenant security testing](identity/SECURITY_TESTING.md).

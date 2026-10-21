@@ -1,5 +1,8 @@
 """Two-user native workspace lifecycle and desktop/mobile cache isolation."""
 
+import os
+from pathlib import Path
+
 import pytest
 from playwright.sync_api import expect, sync_playwright
 from sqlalchemy import text
@@ -12,12 +15,20 @@ from tests.postgres.browser_quality_support import assert_accessible
 from tests.test_oidc import oidc as oidc
 
 
+@pytest.mark.parametrize('engine', ['chromium', 'firefox', 'webkit'])
 @pytest.mark.parametrize('width', [1440, 390, 320])
-def test_first_ledger_retry_refresh_repeat_visit_and_two_entity_switch(named_server, width):
+def test_first_ledger_retry_refresh_repeat_visit_and_two_entity_switch(named_server, width, engine):
     origin, repo, _, _, _, _, claims, info = named_server
     claims['sub'] = info['sub'] = 'new-owner'
+    first_name = 'IndependentStudio' * 9
+    def evidence(page, stage):
+        assert_accessible(page)
+        if root := os.environ.get('TABULA_RASA_BROWSER_EVIDENCE'):
+            target = Path(root)
+            target.mkdir(parents=True, exist_ok=True)
+            page.screenshot(path=str(target / f'{engine}-{width}-{stage}.png'), full_page=True)
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
+        browser = getattr(playwright, engine).launch()
         try:
             context = browser.new_context(viewport={'width': width, 'height': 1000})
             configure_login(context, origin, claims)
@@ -25,35 +36,43 @@ def test_first_ledger_retry_refresh_repeat_visit_and_two_entity_switch(named_ser
             page.add_init_script("Object.defineProperty(document, 'visibilityState', {get: () => 'hidden'})")
             page.goto(origin)
             page.get_by_role('link', name='Sign in', exact=True).click()
-            expect(page.get_by_role('button', name='Start fresh', exact=True)).to_be_visible()
+            expect(page.get_by_role('button', name='Create your first business', exact=True)).to_be_visible()
             actor = context.request.get(origin + '/api/v1/session').json()['actor_id']
-            page.get_by_role('button', name='Start fresh', exact=True).click()
-            page.get_by_label('Workspace name').fill('Fresh workspace')
-            page.get_by_label('Business name').fill('First business')
-            page.get_by_role('button', name='Review defaults').click()
+            page.get_by_role('button', name='Create your first business', exact=True).click()
+            page.get_by_label('Business name').fill(first_name)
+            page.get_by_role('button', name='Review defaults').focus()
+            page.keyboard.press('Enter')
             page.get_by_role('button', name='Back', exact=True).click()
-            expect(page.get_by_label('Business name')).to_have_value('First business')
+            expect(page.get_by_label('Business name')).to_have_value(first_name)
             page.get_by_role('button', name='Review defaults').click()
-            assert_accessible(page)
+            expect(page.get_by_label('Workspace name')).to_have_count(0)
+            page.get_by_role('button', name='Back', exact=True).focus()
+            page.keyboard.press('Tab')
+            expect(page.get_by_role('button', name='Create business', exact=True)).to_be_focused()
+            evidence(page, 'review-first')
             peer = context.new_page()
             # Disable focus/periodic authority checks: only the broadcast may refresh this peer.
             peer.add_init_script("Object.defineProperty(document, 'visibilityState', {get: () => 'hidden'})")
             peer.goto(origin)
-            peer.get_by_role('button', name='Start fresh', exact=True).click()
+            peer.get_by_role('button', name='Create your first business', exact=True).click()
             peer.get_by_label('Business name').fill('Unsubmitted peer draft')
             page.bring_to_front()
-            endpoint = '**/api/v1/workspaces/bootstrap'
-            page.route(endpoint, lambda route: route.fulfill(status=503, content_type='application/json',
-                body='{"error":{"code":"unavailable"},"request_id":"synthetic-failure"}'))
-            page.get_by_role('button', name='Create ledger', exact=True).click()
+            endpoint = '**/api/v1/businesses'
+            def unavailable(route):
+                expect(page.get_by_role('button', name='Retry same setup', exact=True)).to_be_disabled()
+                evidence(page, 'pending-first')
+                route.fulfill(status=503, content_type='application/json',
+                    body='{"error":{"code":"unavailable"},"request_id":"synthetic-failure"}')
+            page.route(endpoint, unavailable)
+            page.get_by_role('button', name='Create business', exact=True).click()
             expect(page.get_by_role('alert')).to_be_visible()
+            evidence(page, 'uncertain-first')
             expect(peer.get_by_label('Business name')).to_have_value('Unsubmitted peer draft')
             receipt = page.evaluate('Object.values(sessionStorage)[0]')
             page.reload()
-            page.get_by_role('button', name='Start fresh', exact=True).click()
+            page.get_by_role('button', name='Create your first business', exact=True).click()
             expect(page.get_by_text('Setup was interrupted.', exact=False)).to_be_visible()
-            page.get_by_label('Workspace name').fill('Fresh workspace')
-            page.get_by_label('Business name').fill('First business')
+            page.get_by_label('Business name').fill(first_name)
             page.get_by_role('button', name='Review defaults').click()
             # Commit on the real API, then lose only its response.
             def lost_response(route):
@@ -63,33 +82,41 @@ def test_first_ledger_retry_refresh_repeat_visit_and_two_entity_switch(named_ser
                     body='{"error":{"code":"unavailable"},"request_id":"synthetic-lost-response"}')
             page.unroute(endpoint)
             page.route(endpoint, lost_response)
-            page.get_by_role('button', name='Create ledger', exact=True).click()
+            page.get_by_role('button', name='Create business', exact=True).click()
             expect(page.get_by_role('heading', name='Your ledger is ready')).to_be_visible()
             expect(peer.get_by_role('heading', name='Your ledger is ready')).to_be_visible()
             expect(peer.get_by_label('Business name')).to_have_count(0)
-            assert context.request.get(origin + '/api/v1/workspaces/bootstrap/' + receipt).json()['state'] == 'ready'
+            assert context.request.get(origin + '/api/v1/businesses/creation/' + receipt).json()['state'] == 'ready'
             with repo.database.transaction(read_only=True) as connection:
                 assert connection.scalar(text('SELECT count(*) FROM workspace_bootstraps WHERE user_id=:user'), {'user': actor}) == 1
             page.reload()
             expect(page.get_by_role('heading', name='Your ledger is ready')).to_be_visible()
-            expect(page.get_by_role('button', name='Start fresh', exact=True)).to_have_count(0)
+            expect(page.get_by_role('button', name='Create your first business', exact=True)).to_have_count(0)
             page.get_by_role('link', name='Review accounts', exact=True).click()
             expect(page.get_by_role('heading', name='Accounts', exact=True)).to_be_visible()
+            expect(page.get_by_role('alert')).to_have_count(0)
             assert context.request.get(origin + '/api/v1/entities/alpha/accounts').status == 403
-            peer.goto(origin + '/workspace')
+            peer.goto(origin + '/businesses')
+            peer.get_by_role('button', name='Create another business', exact=True).click()
             peer.get_by_label('Business name').fill('Another unsubmitted peer draft')
             page.bring_to_front()
-            page.goto(origin + '/workspace')
+            page.goto(origin + '/businesses')
+            page.get_by_role('button', name='Create another business', exact=True).click()
             page.get_by_label('Business name').fill('Second business')
-            page.get_by_role('button', name='Review defaults').click()
-            page.get_by_role('button', name='Create ledger', exact=True).click()
+            review_action = page.get_by_role('button', name='Review defaults')
+            following = page.get_by_role('heading', name='Other ways to get started')
+            assert following.bounding_box()['y'] - (review_action.bounding_box()['y'] + review_action.bounding_box()['height']) >= 32
+            evidence(page, 'another-business')
+            review_action.click()
+            page.get_by_role('button', name='Create business', exact=True).click()
             expect(page.get_by_role('heading', name='Your ledger is ready')).to_be_visible()
             expect(peer.get_by_role('heading', name='Your ledger is ready')).to_be_visible()
             expect(peer.get_by_label('Select business')).to_have_value(
                 context.request.get(origin + '/api/v1/session').json()['entity']['id'])
             choices = context.request.get(origin + '/api/v1/entities').json()['items']
             assert len(choices) == 2
-            first = next(item['id'] for item in choices if item['name'] == 'First business')
+            assert len({item['organization_id'] for item in choices}) == 2
+            first = next(item['id'] for item in choices if item['name'] == first_name)
             page.get_by_label('Select business').select_option(first)
             page.get_by_role('button', name='Discard draft and switch').click()
             expect(page.get_by_role('heading', name='Your ledger is ready')).to_be_visible()
@@ -100,7 +127,9 @@ def test_first_ledger_retry_refresh_repeat_visit_and_two_entity_switch(named_ser
             browser.close()
 
 
-def test_onboarding_invitee_joins_existing_workspace_without_new_ownership(named_server):
+@pytest.mark.parametrize('engine', ['chromium', 'firefox', 'webkit'])
+@pytest.mark.parametrize('width', [1440, 390, 320])
+def test_onboarding_invitee_joins_existing_workspace_without_new_ownership(named_server, width, engine):
     from tabula_rasa.application.workspaces import WorkspaceService
     from tabula_rasa.infrastructure.postgres.workspaces import PostgresWorkspaceRepository
 
@@ -113,19 +142,25 @@ def test_onboarding_invitee_joins_existing_workspace_without_new_ownership(named
     service = WorkspaceService(PostgresWorkspaceRepository(repo.database))
     invitation = service.invite(owner, org, 'shared@example.test', 'editor')
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
+        browser = getattr(playwright, engine).launch()
         try:
-            context = browser.new_context()
+            context = browser.new_context(viewport={'width': width, 'height': 1000})
             context.add_cookies([{'name': 'tabula_dev_session', 'value': raw, 'url': origin, 'httpOnly': True, 'sameSite': 'Lax'}])
             page = context.new_page()
             page.add_init_script("Object.defineProperty(document, 'visibilityState', {get: () => 'hidden'})")
             page.goto(origin + '/invitations')
-            expect(page.get_by_role('button', name='Start fresh', exact=True)).to_have_count(0)
-            page.get_by_label('Invitation credential', exact=True).fill(invitation.credential)
+            expect(page.get_by_role('button', name='Create your first business', exact=True)).to_have_count(0)
+            credential_field = page.get_by_label('Invitation credential', exact=True)
+            credential_field.focus()
+            expect(credential_field).to_be_focused()
+            assert_accessible(page)
+            if root := os.environ.get('TABULA_RASA_BROWSER_EVIDENCE'):
+                page.screenshot(path=str(Path(root) / f'{engine}-{width}-invitation.png'), full_page=True)
+            credential_field.fill(invitation.credential)
             peer = context.new_page()
             peer.add_init_script("Object.defineProperty(document, 'visibilityState', {get: () => 'hidden'})")
             peer.goto(origin)
-            peer.get_by_role('button', name='Start fresh', exact=True).click()
+            peer.get_by_role('button', name='Create your first business', exact=True).click()
             peer.get_by_label('Business name').fill('Unsubmitted invitee draft')
             page.bring_to_front()
             page.get_by_role('button', name='Accept invitation').click()
@@ -174,7 +209,7 @@ def test_workspace_switch_invite_demote_remove_and_logout(named_server, width):
             owner.get_by_role('button', name='Discard draft and switch').click()
             expect(owner.get_by_text('Role: owner', exact=True)).to_be_visible()
             expect(owner).to_have_url(origin + '/')
-            owner.get_by_role('link', name='Workspace & members').click()
+            owner.get_by_role('link', name='Business & members').click()
             owner.get_by_label('Recipient email').fill('shared@example.test')
             owner.get_by_label('Invitation role').select_option('editor')
             owner.get_by_role('button', name='Create invitation', exact=True).click()
@@ -203,7 +238,7 @@ def test_workspace_switch_invite_demote_remove_and_logout(named_server, width):
             owner.get_by_role('button', name='Confirm membership change', exact=True).click()
             expect(owner.get_by_text('Current role: Read-only · inactive', exact=True)).to_be_visible()
             member.evaluate("window.dispatchEvent(new Event('focus'))")
-            expect(member.get_by_text('Workspace: B', exact=True)).to_be_visible()
+            expect(member.get_by_text('Role: owner', exact=True)).to_be_visible()
             assert second.request.get(origin + '/api/v1/entities/alpha/accounts').status == 403
             assert_accessible(owner)
             assert_accessible(member)

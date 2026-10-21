@@ -1,6 +1,6 @@
-# Workspace switching, membership and bootstrap
+# Business switching, membership and onboarding
 
-Workspace and business operations reuse durable named-user sessions, current
+Business operations reuse durable named-user sessions, current
 membership policy and the canonical PostgreSQL ledger. They create no Streamlit
 profile, live migration or provider grant. This guide covers switching,
 invitations, bootstrap and onboarding. [Connections and claims](CONNECTIONS_AND_CLAIMS.md)
@@ -9,9 +9,10 @@ owns provider verification.
 
 ## Switching and access changes
 
-The labeled business selector groups names as workspace / business and lists
-only current server-authorized entities. Workspace name and role are displayed
-from server claims. Read-only members can switch and sign out. Selection updates
+The labeled business selector lists only current server-authorized business names.
+The business name and role come from server claims; backing organization names are
+not product labels. My Businesses lists independently authorized business access
+and offers Create another business. Read-only members can switch and sign out. Selection updates
 the durable server session after Origin/CSRF and current membership validation;
 an arbitrary URL, entity ID or role never grants access.
 
@@ -28,14 +29,16 @@ Visible named tabs also check on focus/pageshow/visibility and every 60 seconds.
 Committed membership changes affect the next protected server request. Changed
 authorization versions replace the browser boundary on its next check; revoked
 selected entities fall back only to another currently permitted entity, or to
-Workspace setup required. An already authorized in-flight request may finish.
+My Businesses (no active business). An already authorized in-flight request may finish.
 There is no persistent private browser cache or client authorization fallback.
 
 ## Members and invitations
 
-Open **Workspace & members**. Owner/Admin members see current membership and
-invitation administration for their workspace. Roles apply to every active
-business in that workspace. Admins can grant Editor, Accountant and Read-only,
+Open **Business & members**. Owner/Admin members see current membership and
+invitation administration for the selected business. Newly created businesses each
+have an independent backing organization. Existing multi-business containers require
+explicit reconciliation before the business-centric model can be released; this UI
+does not split historical grants or change their scope. Admins can grant Editor, Accountant and Read-only,
 demote or deactivate themselves, and manage non-Owner/non-Admin members. Owners can manage
 all roles. Grant ownership is a separate explicitly confirmed Owner action;
 Owner grants and removal/demotion require provider authentication within five
@@ -65,8 +68,7 @@ Automated mail requires the separate sender/domain/provider checkpoint in
 [Commercial identity](PROVIDER_SETUP.md).
 
 The recipient signs in with the intended account and pastes the credential into
-**Respond to an invitation**, available in Workspace & members and Workspace
-setup required. Acceptance/decline requires verified provider login within five
+**Respond to an invitation**, available in Business & members and the no-business My Businesses screen. Acceptance/decline requires verified provider login within five
 minutes, with the same bounded 60-second future clock tolerance as verified
 OIDC login. The session retains that login's verified email server-side; a browser
 email or another session's later email change cannot substitute for it. Email
@@ -85,59 +87,73 @@ again after signing in. Pending invitations confer no discovery or ledger access
 ## Backend bootstrap and retry contract
 
 Bootstrap is available in the native PostgreSQL runtime. The migrated-profile
-runtime rejects workspace and additional-business creation before any records
+runtime rejects new-business creation before any records
 are written, because it serves only the operator-configured entity/profile
 bindings established at startup. Existing bound ledgers, memberships and
 invitations remain available there; bootstrap status remains a read-only lookup.
 
-Authenticated named users, including users without any memberships, can call
-`POST /api/v1/workspaces/bootstrap` with `request_id` (16–128 ASCII letters,
-digits, underscores or hyphens, so each accepted ID is one recoverable URL segment),
-`workspace_name` and `business_name` (required, trimmed, at most 160 characters).
-The acting internal user becomes Owner. No caller-supplied owner/entity IDs or
-legal/tax fields are accepted. Books use the existing standard chart of accounts
-and Income/Expense category defaults from `LedgerSetupService`; no second default
-inventory or new currency/tax setup is introduced.
+Authenticated named users, including users without memberships and Read-only
+members of another business, can call `POST /api/v1/businesses` with `request_id`
+(16–128 ASCII letters, digits, underscores or hyphens, one recoverable URL segment)
+and `business_name` (required, trimmed, at most 160 characters). The server creates
+a new private backing organization, grants the acting user Owner and creates one
+canonical business. There is no workspace-name field, existing-organization selector,
+caller-supplied owner/entity ID or implicit copy of other members. The result exposes
+only `state` and `entity_id`. Books reuse `LedgerSetupService`'s standard chart and
+Income/Expense categories; opening balances start at zero. No new tax/currency or
+default-accounting logic is introduced.
 
-`POST /api/v1/workspaces/{organization_id}/businesses` uses the same body and bootstrap
-owner, requiring current Owner `entity:manage` authority in that organization. There is
-no commercial entitlement/billing policy yet; external release and customer lifecycle
-owns that future boundary. Admin and ordinary memberships confer no creation right. The
-workspace name in this shared request does not rename an existing workspace.
+`POST /api/v1/workspaces/bootstrap` remains deprecated compatibility for older
+callers with `workspace_name` and `business_name`; it always creates a new container.
+The deprecated `/api/v1/workspaces/{organization_id}/businesses` rejects new additions,
+even for Owners, while permitting authorized exact replay of historical receipts.
+Internal organization/schema names remain implementation details. Existing
+multi-business containers require explicit role, invitation, provider and claim
+reconciliation plus persistent one-to-one enforcement before the business-centric
+model can be released. New creation does not convert those records. Do not silently
+convert existing staging or owner data or infer independent historical grants.
 
 One database transaction creates organization, Owner membership, canonical
 business entity, ownership binding, default records and an idempotency receipt.
 Failures roll everything back. Concurrent submissions with the same acting user
 and request ID serialize and return the same result. Reusing that ID with a
 different normalized payload returns conflict; distinct IDs deliberately create
-distinct workspaces/businesses. Preserve the request ID when retrying an uncertain
-response. `GET /api/v1/workspaces/bootstrap/{request_id}` returns `ready` with
-authorized result IDs or `not_started` for no committed receipt. Another user
+independent businesses. Preserve the request ID when retrying an uncertain
+response. `GET /api/v1/businesses/creation/{request_id}` (legacy status remains compatible) returns `ready` with
+the authorized business ID or `not_started` for no committed receipt. Another user
 cannot inspect the receipt. There is no half-created/incomplete durable state:
 resume means retrying the same request. Receipts and ledger defaults survive
 pool/worker restart. Session inspection then discovers the first available entity.
 
 ## Browser onboarding
 
-Sign in (or register with the configured hosted identity provider), then choose
-**Start fresh**, **Join an invited workspace**, or **Move existing Sheets books**.
-Fresh setup collects workspace/business names and offers the currently supported
-standard basic bookkeeping defaults. Back preserves names before submission.
-Create ledger uses the existing atomic bootstrap, then selects the authorized
-business, notifies peer tabs to discard stale scope through the existing data-free
-scope-change signal, and opens Dashboard with account, first-transaction and ledger actions.
-Repeat visits open the existing ledger; they do not create another workspace.
-Owners can add another business in Workspace & members using the same setup flow.
+Sign in (or register with the configured hosted identity provider). With no active
+business, **My Businesses** offers **Create your first business**, **Join an invited
+business**, or **Move existing Sheets books**. Existing members enter their selected
+ledger and can open **My Businesses → Create another business** regardless of their
+role in the currently selected business. Each deliberate creation uses a new private
+permission container, without copying other memberships. The membership settings
+page no longer offers Add business within an existing container.
 
-The tab stores only an opaque request ID keyed by authenticated user and target
-workspace in session storage. Names, invitation credentials, sessions and ledger
-contents are not persisted there. After refresh, choose Start fresh again to
-resume: a committed receipt opens its authorized business; otherwise re-enter
-the original names. After an uncertain create, one status readback can confirm
-completion. Explicit Retry same setup retains the original request and payload;
-there is no automatic create retry. Browser storage must be available before
-creation. Closing the tab ends this browser resume handle; server receipts and
-any created ledger remain durable and discoverable through authenticated login.
+Fresh setup asks only for a business name, then reviews standard bookkeeping defaults.
+Back preserves the name before submission. **Create business** uses the existing
+atomic bootstrap, selects through server-authorized session selection, signals peer
+tabs to discard stale scope and opens Dashboard with account review, first transaction
+and ledger actions. Visiting, returning or opening an invitation never creates records.
+Shared section spacing distinguishes heading-to-content gaps from independent sections,
+including the section following Review defaults. Feedback and focus use shared controls.
+
+The tab stores only an opaque request ID keyed by authenticated user, never names,
+invitation credentials, sessions or ledger contents. After refresh, reopen creation:
+a committed receipt selects its authorized business; otherwise re-enter the original
+business name. After an uncertain response, one bounded status readback may confirm
+completion. Explicit **Retry same setup** retains the same request and payload; no
+automatic create retry occurs. Browser storage must be available before creation.
+Closing the tab ends the browser resume handle; server receipts and completed businesses
+remain durable and discoverable at login. An old first-use receipt can still resume
+through the new business status endpoint without provisioning again. If a completed
+receipt cannot select its business, retry repeats only authorized selection, never
+creation.
 
 Privately distributed invitations are supported now: share the app's `/invitations`
 route separately from the credential. That route returns to acceptance after login for
@@ -173,7 +189,7 @@ bookkeeping exports and recovery comparisons. Restored sessions still require pl
 operations's existing revocation procedure.
 
 `tests/postgres/test_workspaces.py` covers native concurrency, rollback after
-default seeding, retry/restart, two-org isolation, multiple owned workspaces,
+default seeding, retry/restart, two-org isolation, independently owned businesses,
 verified-recipient/freshness/replay, lifecycle, role escalation, stale edits and
 HTTP/CSRF/secret-safe denials. `test_workspace_browser.py` exercises two users at
 desktop/mobile widths, switching, membership administration, revocation, logout

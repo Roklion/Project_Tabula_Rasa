@@ -20,7 +20,7 @@ export function InvitationAcceptance({ session }: { session: SessionState }) {
     finally { setPending(false); }
   }
   return <section className="surface"><h2>Respond to an invitation</h2>
-    <p>Sign in with the invited account, then paste the credential shared privately by your workspace administrator. A recent sign-in is required.</p>
+    <p>Sign in with the invited account, then paste the credential shared privately by the business administrator. A recent sign-in is required.</p>
     <form onSubmit={event => { event.preventDefault(); void respond(true); }}>
       <Field id="invitation-credential" label="Invitation credential"><input id="invitation-credential" type="password" autoComplete="off" spellCheck={false}
         value={credential} onChange={event => setCredential(event.target.value)} required disabled={pending} /></Field>
