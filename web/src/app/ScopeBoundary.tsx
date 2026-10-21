@@ -16,7 +16,7 @@ function PrivateScope({ session, children }: { session: Session; children: React
 }
 
 export function ScopeBoundary({ session, children }: { session: Session; children: ReactNode }) {
-  // #222 feeds refreshed membership context here. Changing scope remounts all
+  // Session validation supplies refreshed membership context. Scope changes remount all
   // private queries and feature drafts; no result from the old scope is reused.
   const key = JSON.stringify([session.cache_scope, session.actor_id, session.organization_id,
     session.entity.id, [...session.capabilities].sort()]);

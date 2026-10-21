@@ -362,7 +362,7 @@ def test_initial_revision_reports_preaudit_history_unavailable(empty_database):
 
 
 def test_real_pg_dump_restore_retains_audit_archive(database):
-    """Use the same pg_dump -Fc / pg_restore path as #294, with real SQL.
+    """Exercise the NAS archive pg_dump -Fc / pg_restore path with real SQL.
 
     CI explicitly passes its disposable PostgreSQL service ID. No application
     secret or existing database is selected; fixtures own source and new target.

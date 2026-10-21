@@ -3,7 +3,6 @@
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import json
-from pathlib import Path
 
 import pytest
 
@@ -13,7 +12,6 @@ from tabula_rasa.deployment.resource_retirement import (
 )
 
 NOW = datetime(2026, 10, 20, 3, tzinfo=timezone.utc)
-ROOT = Path(__file__).resolve().parents[2]
 
 
 def resource(identifier='synthetic-a', **overrides):
@@ -22,7 +20,7 @@ def resource(identifier='synthetic-a', **overrides):
         'provider_id': 'db-a', 'environment': 'test', 'owner': 'test-operator',
         'disposition': 'disposable_synthetic', 'authority': 'inactive',
         'protections': [], 'references': [], 'depends_on': [],
-        'last_backup': 'private-verified-export-sha256', 'handoff': 'issue-377-D7-reviewed',
+        'last_backup': 'private-verified-export-sha256', 'handoff': 'capability-retirement-reviewed',
         'rollback': 'synthetic-recreate-plan', 'evidence': 'private-reference-check-sha256',
         'effects': [identifier], **overrides,
     }
@@ -134,15 +132,22 @@ def test_malformed_inventory_is_refused(change):
         preview(document, ['synthetic-a'], now=NOW)
 
 
-def test_inventory_seed_is_complete_as_a_desk_inventory_and_blocks_every_row():
-    document = read_inventory(ROOT / 'docs/operations/resource-inventory.json')
+def test_unverified_inventory_blocks_protected_and_disposable_resources(tmp_path):
+    document = inventory(
+        resource('retained-source', provider_id='retained-db', environment='production', authority='active',
+                 disposition='active_recoverable', protections=['source']),
+        resource('disposable-fixture', provider_id='fixture-db'),
+    )
+    document['coverage'] = 'unverified'
+    path = tmp_path / 'inventory.json'
+    path.write_text(json.dumps(document), encoding='utf-8')
+    document = read_inventory(path)
     rows = validate_inventory(document)
     assert document['coverage'] == 'unverified'
     result = preview(document, list(rows), now=NOW)
     assert result['status'] == 'blocked'
     assert all('inventory_coverage_unverified' in r['blockers'] for r in result['targets'])
-    assert {'sheets-frozen-sources', 'nas-mislabeled-generation', 'audit-342-failed-empty-target',
-            'temporary-render-bindings', 'forward-alembic-history', 'snapshot-259'} <= rows.keys()
+    assert rows.keys() == {'retained-source', 'disposable-fixture'}
 
 
 @pytest.mark.parametrize('contents', [

@@ -1,16 +1,14 @@
 # ADR 0004: Drive-first receipt storage and optional managed providers
 
-Date: 2026-10-16; amended 2026-10-17 by the owner's Drive-first direction.
-Status: Google Drive remains active. S3 is optional engineering groundwork;
-commercial provider review/adoption belongs to #382. #337/#338 do not depend on
-AWS accounts, billing, buckets or credentials.
+Date: 2026-10-16; amended 2026-10-17 by the owner's Drive-first direction. Status:
+Google Drive remains active. S3 is optional engineering groundwork; commercial provider
+adoption requires a separate review. Drive storage and byte recovery require no AWS
+account, billing, bucket or credentials.
 
-Issues #337/#338 implement part of operations EPIC #223 and initiative #124.
-PostgreSQL remains authoritative for canonical document metadata and bookkeeping
-links (#251). `DocumentStore` owns bytes (#233); the existing authenticated
-same-origin #283 API owns transport. Drive and the restricted #288 alpha binding
-remain supported. This decision supplies no #303 live-use approval, #342 hosted
-evidence, #298 commercial recovery sign-off or #224 external-beta release.
+PostgreSQL owns document metadata and bookkeeping links; `DocumentStore` owns bytes and
+authenticated same-origin APIs own transport. Drive and the explicit restricted-alpha
+binding remain supported. Live use, hosted recovery evidence, commercial recovery
+agreement and external release require separate approval.
 
 ## Focused shortlist
 
@@ -45,14 +43,14 @@ The new explicit verified byte archives and isolated Drive restore do not need
 AWS setup. Actual Drive capacity/access/retention and hosted recovery evidence
 remain explicit selected-provider checkpoints, not assumptions.
 
-If #382 later elects managed object storage, **AWS S3 Standard** is the current
-implementation candidate for native recoverable versions and straightforward
-IAM boundaries; reassess this comparison and current costs before adoption.
-Its published design targets are 11 nines of durability and
-99.99% availability, not evidence of achieved application recovery. Avoid
-infrequent/archive classes and their retrieval/minimum-duration costs initially.
-Use SSE-S3 (AES256), HTTPS and private, version-enabled buckets. KMS, Object Lock,
-replication and external byte archives require separate cost/policy approval.
+If document-provider adoption review later elects managed object storage, **AWS S3
+Standard** is the current implementation candidate for native recoverable versions and
+straightforward IAM boundaries; reassess this comparison and current costs before
+adoption. Its published design targets are 11 nines of durability and 99.99%
+availability, not evidence of achieved application recovery. Avoid infrequent/archive
+classes and their retrieval/minimum-duration costs initially. Use SSE-S3 (AES256), HTTPS
+and private, version-enabled buckets. KMS, Object Lock, replication and external byte
+archives require separate cost/policy approval.
 
 For planning, at illustrative US Standard unit rates of $0.023/GB-month,
 $0.005/1,000 writes/lists and $0.0004/1,000 reads:
@@ -80,12 +78,12 @@ paths. A locator pins the provider version independently of the canonical ID.
 Object metadata duplicates only the provenance required for orphan discovery;
 SQL owns canonical metadata and links. No SQL blobs or alternate live ledger.
 
-The browser receives canonical IDs and authenticated same-origin bytes, with
-fresh #313/#318 membership/capability checks on every provider operation. It gets
-no S3 credentials or signed bearer URLs. An S3 connection can coexist with the
-retained Drive grant; explicitly installed S3 wins and never falls back to Drive
-on failure/disconnect. The Google connection browser controls continue to manage
-Google only; managed setup/rotation/recovery are operator actions in this scope.
+The browser receives canonical IDs and authenticated same-origin bytes, with fresh
+server authorization and external connections membership/capability checks on every
+provider operation. It gets no S3 credentials or signed bearer URLs. An S3 connection
+can coexist with the retained Drive grant; explicitly installed S3 wins and never falls
+back to Drive on failure/disconnect. The Google connection browser controls continue to
+manage Google only; managed setup/rotation/recovery are operator actions in this scope.
 
 Uploads are bounded by the existing receipt service, streamed to/from the SDK
 with bounded reads, SHA-256 checked, and conditionally created. SDK retries are
@@ -96,6 +94,6 @@ a marker and never deletes a version. Migration/restore verification deliberatel
 reads exact bytes before atomically promoting locations, retaining originals.
 
 The object-key, S3 version-pin and IAM discussion above applies to the optional
-adapter. See [Drive storage and recovery](../DOCUMENT_STORAGE_RECOVERY.md) for
+adapter. See [Drive storage and recovery](../storage/RECEIPT_RECOVERY.md) for
 the active provider's backup/restore, operator approvals and unresolved evidence,
-and [optional object storage](../OPTIONAL_OBJECT_STORAGE.md) for deferred S3 setup.
+and [optional object storage](../storage/OBJECT_STORAGE.md) for deferred S3 setup.

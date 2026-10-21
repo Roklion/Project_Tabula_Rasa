@@ -8,31 +8,29 @@ see. Setup is in [Setup](SETUP.md), Drive administration is in
 The Streamlit edition uses Sheets. A profile configured by the operator for
 bookkeeping maintenance or PostgreSQL stops before Sheets initialization; it
 does not silently open another backend. Backend changes have no UI picker and
-follow the [controlled cutover procedure](BOOKKEEPING_CUTOVER.md).
+follow the [controlled cutover procedure](accounting/CUTOVER.md).
 Lasting owner-operated PostgreSQL use follows its
-[owner-operated production procedure](BOOKKEEPING_CUTOVER.md#owner-operated-production-procedure-299)
+[owner-operated production procedure](accounting/CUTOVER.md#owner-operated-production-procedure)
 on the shared web/API application, with normal authorization and explicitly
 accepted recovery limitations. This does not add a backend picker to Streamlit
 or claim that unfinished web workflows or NAS protection are delivered.
 
-The separate commercial technical-alpha browser now supports editing existing
-accounts, categories, payees/tags, simple transactions, journals and mileage.
-Accounts deactivate rather than delete; referenced records retain their deletion
-guards. If another client changes a loaded record, your save/delete is refused
-and your draft stays visible. Choose **Review latest record**, then **Keep draft**
-or **Discard draft and reload**; review the latest values before saving again.
-Payee/tag merges also protect every loaded target/source. See
-[Commercial concurrency](COMMERCIAL_CONCURRENCY.md) for scope and local validation.
-The core commercial workflows also provide business selection, reference setup,
-transaction/journal creation, the combined ledger and essential reports. Choose
+The separate commercial technical-alpha browser now supports editing existing accounts,
+categories, payees/tags, simple transactions, journals and mileage. Accounts deactivate
+rather than delete; referenced records retain their deletion guards. If another client
+changes a loaded record, your save/delete is refused and your draft stays visible.
+Choose **Review latest record**, then **Keep draft** or **Discard draft and reload**;
+review the latest values before saving again. Payee/tag merges also protect every loaded
+target/source. See [Commercial concurrency](browser/CONCURRENCY.md) for scope and local
+validation. The core commercial workflows also provide business selection, reference
+setup, transaction/journal creation, the combined ledger and essential reports. Choose
 **Select business** to switch the configured demonstration business, then confirm
-whether to discard the current draft. Use **Add account/category/payee/tag** on
-the setup pages, or **Add transaction/journal** on Transactions. Reports and the
-Dashboard show server-calculated totals; their date controls govern the period
-and balance-sheet as-of date. See [Commercial core workflows](COMMERCIAL_WORKFLOWS.md)
-for the supported scope, creation/error behavior and remaining initiative work.
-These forms do not change the Streamlit workflows described below or establish
-commercial production readiness.
+whether to discard the current draft. Use **Add account/category/payee/tag** on the
+setup pages, or **Add transaction/journal** on Transactions. Reports and the Dashboard
+show server-calculated totals; their date controls govern the period and balance-sheet
+as-of date. See [Commercial core workflows](browser/BOOKKEEPING.md) for the supported
+scope, creation/error behavior and remaining work. These forms do not change the
+Streamlit workflows described below or establish commercial production readiness.
 
 The commercial browser also provides the existing transaction CSV/QuickBooks
 and QuickBooks mileage imports in **Data & backup**, ordinary transaction copy
@@ -40,40 +38,38 @@ and confirmed selected Category/Payee/Tag updates/deletion in **Transactions**,
 independent mixed-use source copy and **Make recurring** for an ordinary Expense.
 Import preparation is read-only, copies start without receipts, and protected
 bulk/conversion commands submit their loaded baselines. See
-[Commercial import, copy and bulk workflows](COMMERCIAL_WORKFLOW_PORTS.md) for
+[Commercial import, copy and bulk workflows](browser/IMPORTS_EXPORTS_AND_INTEGRATIONS.md) for
 supported formats, batch behavior, failure guidance and remaining owner readiness.
 
-The browser also provides the complete manual mileage list/create/detail/edit/
-delete journey, date/tag filters, totals, CSV download and round-trip capture.
-When the deployment has restricted Maps keys configured, use the separate Google
-lookup controls to choose endpoints, then **Calculate mileage** and explicitly
-confirm the suggested distances. Recorded location text and editable mileage
-remain available for review; **Save mileage trip** persists your confirmed draft.
-Provider failures preserve manual entry. Return distance is independent.
-On Transactions, select complete entries and choose **Export selected**; journals
-include every posting. Data & backup offers **Download transactions CSV** and
-**Download journal postings CSV**. These financial CSVs are scoped to the selected
-business and keep formula-leading text literal for spreadsheet applications.
-Saved ordinary transactions offer receipt attachment, inspection/download,
-unreferenced-file recovery and confirmed unlink without deleting the file when
-the business's DocumentStore is configured. Upload/link errors keep confirmed
-work and offer retry for unresolved files.
-Mixed-use source details also offer **Receipts**, with the same upload/download/
-recovery controls. If another client changes that source, linking or removing a
-receipt is refused until you explicitly review and reload it. Removing the
-reference preserves the file. See [workflow ports](COMMERCIAL_WORKFLOW_PORTS.md)
-for these additions and their deployment/readiness boundaries, and
-[Commercial mileage and receipts](COMMERCIAL_MILEAGE_RECEIPTS.md) for these browser
-workflows, their recovery behavior and remaining release boundaries.
-The [technical-alpha release guide](TECHNICAL_ALPHA.md) lists the exact staged
-workflow coverage, repeatable receipt/rollback/manual procedures and
-internal-edition routing during transition. Current live-owner and hosted-identity
-work is tracked in [#303](https://github.com/Roklion/Project_Tabula_Rasa/issues/303)
-and [#321](https://github.com/Roklion/Project_Tabula_Rasa/issues/321).
-Hosted synthetic receipts require the operator's separate
-[Drive binding setup](ALPHA_DOCUMENT_STORAGE.md); ordinary browser users cannot
-select grants or folders. Configuring that dependency does not establish completed
-staging acceptance or alter the reference-only unlink behavior.
+The browser also provides the complete manual mileage list/create/detail/edit/ delete
+journey, date/tag filters, totals, CSV download and round-trip capture. When the
+deployment has restricted Maps keys configured, use the separate Google lookup controls
+to choose endpoints, then **Calculate mileage** and explicitly confirm the suggested
+distances. Recorded location text and editable mileage remain available for review;
+**Save mileage trip** persists your confirmed draft. Provider failures preserve manual
+entry. Return distance is independent. On Transactions, select complete entries and
+choose **Export selected**; journals include every posting. Data & backup offers
+**Download transactions CSV** and **Download journal postings CSV**. These financial
+CSVs are scoped to the selected business and keep formula-leading text literal for
+spreadsheet applications. Saved ordinary transactions offer receipt attachment,
+inspection/download, unreferenced-file recovery and confirmed unlink without deleting
+the file when the business's DocumentStore is configured. Upload/link errors keep
+confirmed work and offer retry for unresolved files. Mixed-use source details also offer
+**Receipts**, with the same upload/download/ recovery controls. If another client
+changes that source, linking or removing a receipt is refused until you explicitly
+review and reload it. Removing the reference preserves the file. See [workflow
+ports](browser/IMPORTS_EXPORTS_AND_INTEGRATIONS.md) for these additions and their
+deployment/readiness boundaries, and [Commercial mileage and
+receipts](browser/MILEAGE_AND_RECEIPTS.md) for these browser workflows, their recovery
+behavior and remaining release boundaries. The [technical-alpha release
+guide](browser/RELEASE_VALIDATION.md) lists the exact staged workflow coverage,
+repeatable receipt/rollback/manual procedures and internal-edition routing during
+transition. Current live-owner and hosted-identity work is tracked in [live owner
+cutover](accounting/CUTOVER.md) and [hosted identity
+rollout](identity/HOSTED_ROLLOUT.md). Hosted synthetic receipts require the operator's
+separate [Drive binding setup](storage/STAGING_RECEIPTS.md); ordinary browser users
+cannot select grants or folders. Configuring that dependency does not establish
+completed staging acceptance or alter the reference-only unlink behavior.
 
 ## Sign in and select a business
 
@@ -543,15 +539,14 @@ saving.
 Startup reconciliation generates due
 occurrences using deterministic schedule/date IDs and is safe to repeat.
 
-Schedules can be paused, resumed, or ended. Editing or deleting an occurrence
-does not change its schedule; changing a schedule affects only future
-occurrences. A schedule with a failed or invalid occurrence reports attention
-for that schedule while other schedules remain available. If a recurring edit
-cannot confirm its initial occurrence link, the schedule remains out of
-reconciliation and reports attention; if the link is still pending, end that
-schedule and retry the expense edit. Mixed-use schedules retain the
-source-authoritative source/projection pair and keep receipts specific to
-individual occurrences.
+Schedules can be paused, resumed, or ended. Editing or deleting an occurrence does not
+change its schedule; changing a schedule affects only future occurrences. A schedule
+with a failed or invalid occurrence reports attention for that schedule while other
+schedules remain available. If a recurring edit cannot confirm its initial occurrence
+link, the schedule remains out of reconciliation and reports attention; if the link is
+still pending, end that schedule and retry the expense edit. Mixed-use schedules retain
+the Source-authoritative source/projection pair and keep receipts specific to individual
+occurrences.
 
 ### Edit and delete
 

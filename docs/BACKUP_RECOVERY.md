@@ -5,12 +5,12 @@ Tabula Rasa backups. Backups are recovery artifacts, not alternate live
 ledgers. Every restore targets a new blank Google workbook and refuses the
 configured live workbook.
 
-For an activated PostgreSQL entity, the
-[bookkeeping cutover guide](BOOKKEEPING_CUTOVER.md) defines the bounded rollback
-to its preserved format-13 Sheets source. After committed PostgreSQL writes,
-recover PostgreSQL through #259/#223 backup/PITR procedures and coordinate
-document-byte recovery. The preserved Sheet and these ZIP backups cannot
-become a live fallback to a diverged PostgreSQL ledger.
+For an activated PostgreSQL entity, the [bookkeeping cutover
+guide](accounting/CUTOVER.md) defines the bounded rollback to its preserved format-13
+Sheets source. After committed PostgreSQL writes, recover PostgreSQL through managed
+database recovery and platform operations backup/PITR procedures and coordinate
+Document-byte recovery. The preserved Sheet and these ZIP backups cannot become a live
+fallback to a diverged PostgreSQL ledger.
 
 ## Recovery topology
 
@@ -62,12 +62,12 @@ python scripts\migrate_receipt_associations.py --secrets .streamlit\secrets.toml
 The command considers only blank legacy cells; an explicit empty list remains
 intentionally unlinked. It is safe to rerun after an interrupted migration.
 
-The application validator and restore path accept **only format 13**. Every
-other archive format is rejected before target initialization or writes.
-Historical converters are retired. Preserve an unsupported archive privately;
-select a validated format-13 generation for supported recovery. The application
-does not delete old archives, receipts, ledgers, or accounting history as part
-of retirement. Backup-file retention is an operational policy owned by #223.
+The application validator and restore path accept **only format 13**. Every other
+archive format is rejected before target initialization or writes. Historical converters
+are retired. Preserve an unsupported archive privately; select a validated format-13
+generation for supported recovery. The application does not delete old archives,
+receipts, ledgers, or accounting history as part of retirement. Backup-file retention is
+an operational policy owned by platform operations.
 
 Mixed-use source/projection, recurring occurrence, depreciation, journal, and
 receipt relationships are validated under the shared source contract. Restore
@@ -107,8 +107,8 @@ commands use a configured path exactly. The command validates before success,
 uses a new timestamped filename, never overwrites an archive, and retains the
 newest requested generations.
 
-Create a Google Drive backup after the profile has a valid Drive grant and
-Ledger Backups folder:
+Create a Google Drive backup after the profile has a valid Drive grant and ledger
+Backups folder:
 
 ```powershell
 python scripts\backup_google_sheets.py --profile PROFILE_KEY --keep 30
@@ -271,21 +271,22 @@ Drive upload or target-ledger change.
 
 ## PostgreSQL transition and operational recovery
 
-#254 extracts only the frozen format-13 live Sheets source; #257 verifies
-whole-profile reconciliation and source-format rejection. #258 requires #261's
-retirement evidence, #257 acceptance, and #260's verified complete per-entity
-export before migrated-entity activation. Preserve the pre-cutover Sheets
-source unchanged; rollback to it is available only before divergent PostgreSQL
-writes make it stale.
+Sheets migration framework extracts only the frozen format-13 live Sheets source;
+whole-profile acceptance verifies whole-profile reconciliation and source-format
+rejection. authority cutover requires frozen Sheets source contract's retirement
+evidence, whole-profile acceptance, and complete entity export's verified complete
+per-entity export before migrated-entity activation. Preserve the pre-cutover Sheets
+source unchanged; rollback to it is available only before divergent PostgreSQL writes
+make it stale.
 
-After divergence, PostgreSQL managed backup/PITR and recovery-point schema
-validation use [#259's managed recovery runbook](POSTGRESQL_RECOVERY.md), with
-#223 owning ongoing operations and document-store recovery. Commercial
-production activation requires successful real restore
-and requested-point PITR evidence. #260's canonical export has its own version
-and accounting model; it is neither a format-13 Sheets archive nor a replacement
-for disaster recovery. These downstream capabilities remain initiative work;
-retiring historical Sheets formats does not implement them.
+After divergence, PostgreSQL managed backup/PITR and recovery-point schema validation
+use [managed database recovery's managed recovery
+runbook](operations/DATABASE_RECOVERY.md), with platform operations owning ongoing
+operations and document-store recovery. Commercial production activation requires
+successful real restore and requested-point PITR evidence. complete entity export's
+canonical export has its own version and accounting model; it is neither a format-13
+Sheets archive nor a replacement for disaster recovery. These downstream capabilities
+remain work; retiring historical Sheets formats does not implement them.
 
 ## Optional Synology recovery copy
 

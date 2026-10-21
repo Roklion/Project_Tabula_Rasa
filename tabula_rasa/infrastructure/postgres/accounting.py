@@ -200,8 +200,8 @@ class PostgresTransactionRepository(_AccountingRepository):
         return self.project(connection, self.entry(connection, identity))
 
     def write_receipts(self, connection, identity, references, *, target_column='entry_id'):
-        # #251 owns document metadata acceptance and the external store. This
-        # slice links existing metadata without fabricating its storage scope.
+        # The document repository validates metadata and external-store scope.
+        # This writer links existing metadata without fabricating that scope.
         if target_column not in {'entry_id', 'mixed_use_source_id'}:
             raise ValueError('Unknown receipt target')
         documents = []

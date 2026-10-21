@@ -1,4 +1,4 @@
-"""#321 promotion boundaries; all provider configuration is synthetic."""
+"""Named-user promotion boundaries; all provider configuration is synthetic."""
 
 from pathlib import Path
 from types import SimpleNamespace

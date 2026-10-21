@@ -2,25 +2,22 @@
 
 ## Decision and ownership
 
-Issue [#261](https://github.com/Roklion/Project_Tabula_Rasa/issues/261), under
-[PostgreSQL EPIC #220](https://github.com/Roklion/Project_Tabula_Rasa/issues/220)
-and [initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124),
-freezes the **final supported Google Sheets workbook and backup archive at
+The **final supported Google Sheets workbook and backup archive is frozen at
 format 13**. This guide is the canonical source boundary for continued Sheets
 operation, Sheets recovery, and migration to PostgreSQL. A later change to
 these fields, archive version, or relationships must explicitly revise this
 decision and the dependent migration contracts; do not silently extend format 13.
 
-All earlier ledger/workbook and backup formats are unsupported. Historical
-ledger converters, schema catalogs, aliases, and conversion-only tests have
-been retired. This supersedes the ongoing historical-conversion commitments
-in closed #162/#163 without changing their completion history.
+All earlier ledger/workbook and backup formats are unsupported. Historical ledger
+converters, schema catalogs, aliases, and conversion-only tests have been retired. This
+supersedes the ongoing historical-conversion commitments in closed historical workbook
+conversion and historical backup conversion without changing their completion history.
 
-Retirement does not delete or rewrite existing accounting records, ledgers,
-receipt files, backups, audit history, or the preserved pre-cutover Sheets
-source. Keep unsupported files intact and private; supported recovery requires
-a validated format-13 archive and a new blank workbook. Backup-file retention
-is an operational policy owned by #223, separate from format support.
+Retirement does not delete or rewrite existing accounting records, ledgers, receipt
+files, backups, audit history, or the preserved pre-cutover Sheets source. Keep
+unsupported files intact and private; supported recovery requires a validated format-13
+archive and a new blank workbook. Backup-file retention is an operational policy owned
+by platform operations, separate from format support.
 
 ## Workbook identity and exact headers
 
@@ -145,36 +142,29 @@ source. Preserve account classification/current earnings and the
 
 ## Consumers and sequencing
 
-- **#243:** map this final source into the independent canonical accounting
-  model. Schema design proceeds alongside retirement; no production PostgreSQL
-  schema migration belongs in #261.
-- **#254:** extract the live workbook through a supported read-only boundary,
-  consume the shared header validators, and preflight references/provenance
-  before target writes. Keep source Sheets unchanged. Define deterministic
-  IDs, dry-run behavior, dependency-complete units, and load ordering with
-  #243/#255/#256. This contract does not add backup-archive import to #254.
-  The [migration framework guide](SHEETS_POSTGRES_MIGRATION.md) documents the
-  implemented extraction/reconciliation path. Selected private/live acceptance is
-  tracked in [#303](https://github.com/Roklion/Project_Tabula_Rasa/issues/303).
-- **#257:** verify supported final-format success and unsupported/retired-format
-  rejection without writes, plus whole-profile accounting/reference/receipt
-  reconciliation across both backends. Core totals alone do not authorize cutover.
-- **#258:** require completed #261 retirement, #257 whole-profile acceptance,
-  and verified #260 entity export before migrated-entity activation. Preserve
-  the pre-cutover source for rollback only before divergent PostgreSQL writes.
-  Commercial production writes additionally require #253 integrity/concurrency
-  and #259 real backup/PITR recovery evidence.
-- **#223/#259:** own retention and operational recovery. PostgreSQL schema
-  migrations, managed backup/PITR, recovery-point schema validation, and
-  document-byte recovery remain supported independently of Sheets retirement.
-- **#260:** defines a separately versioned complete canonical PostgreSQL entity
-  export. It does not inherit this worksheet layout/version and is not a
-  PostgreSQL-to-Sheets reverse migration or disaster-recovery replacement.
+- The [canonical accounting schema](adr/0001-canonical-accounting-schema.md)
+  maps this source into independent PostgreSQL entities, entries and postings.
+  This source contract does not perform PostgreSQL schema migration.
+- The [migration framework](accounting/SHEETS_MIGRATION.md) extracts a live
+  format-13 workbook through shared header/domain validators. It checks reference
+  and provenance integrity before writes, preserves the source, and uses stable
+  identities, dry runs, dependency-complete units and restart checkpoints.
+  It accepts no backup archives and invokes no historical converters.
+- [Whole-profile acceptance and cutover](accounting/CUTOVER.md) require supported
+  source-format validation, accounting/reference/receipt reconciliation and a
+  verified complete entity export. Core totals alone do not authorize activation.
+  Retain the source; Sheets rollback ends after divergent PostgreSQL writes.
+- [Database concurrency](database/CONCURRENCY.md) and
+  [managed recovery](operations/DATABASE_RECOVERY.md) define integrity and real
+  backup/PITR requirements. Schema recovery and document-byte protection remain
+  independently supported after Sheets retirement.
+- [Complete entity export](accounting/EXPORT.md) has its own version and inventory.
+  It does not inherit the worksheet layout and is neither a reverse migration
+  nor a substitute for database disaster recovery.
 
-Profile/OAuth migration, current-format receipt association and byte recovery,
-and ordinary CSV/QuickBooks imports remain supported. These tools must still
-reject an unsupported ledger before making ledger or document writes. No
-permanent dual-write or historical-format runtime is introduced. The
-#245/#246/usable-#247 milestone for beginning #221 remains unchanged. Future
-consumer tickets own their implementations and acceptance evidence; this guide
-supplies the source contract they must use.
+Profile/OAuth migration, current-format receipt association and byte recovery, and
+ordinary CSV/QuickBooks imports remain supported. Each tool must reject an unsupported
+ledger before ledger or document writes. No permanent dual-write or historical-format
+runtime is introduced. Source acceptance and authority activation follow the reusable
+procedures above; keep execution results in the owning migration/cutover evidence
+record.

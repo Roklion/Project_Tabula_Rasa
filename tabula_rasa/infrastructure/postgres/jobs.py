@@ -69,7 +69,7 @@ class JobQueue:
     """Server-selected entity binding, never browser-session authority.
 
     Construct only in operator/worker composition after exact environment/entity
-    approval. Member-triggered controls must first use #313 authorization.
+    approval. Member-triggered controls must first enforce server action policy.
     """
     def __init__(self, database, entity_id, registry, *, service_id, telemetry=None):
         if not all(isinstance(v, str) and v.strip() and len(v) <= 200 for v in (entity_id, service_id)):
@@ -129,8 +129,8 @@ class JobQueue:
     def schedule_due(self, *, limit=100):
         """One catchup job per due definition; no unbounded missed-slot fanout.
 
-        A slot represents a service reconciliation up to its run time. #334 owns
-        actual recurring occurrence catchup. This infrastructure invents none.
+        A slot represents service reconciliation up to its run time. The recurring
+        service owns occurrence catchup; the scheduler generates no occurrences.
         """
         if not 1 <= limit <= 1000:
             raise ValueError('Invalid scheduler budget.')

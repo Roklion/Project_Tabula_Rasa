@@ -1,21 +1,17 @@
 # ADR 0002: Commercial web stack and runtime topology
 
-Status: Selected implementation contract for #276; subject to maintainer review.
-Date: 2026-10-07.
-
-Issue: [#276](https://github.com/Roklion/Project_Tabula_Rasa/issues/276), under
-[web/API EPIC #221](https://github.com/Roklion/Project_Tabula_Rasa/issues/221)
-and [commercialization initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124).
+Status: Selected web runtime contract; subject to maintainer review. Date: 2026-10-07.
 
 ## Context and scope
 
-#219 completed the persistence-neutral application boundary. #220 supplies
-canonical PostgreSQL repositories, including the core #245/#246/#247 paths.
-This decision unblocks #277 API, #278 browser shell, and #279 deployment without
-waiting for long-tail migration or production activation. It selects their
-implementation contract; those tickets build the runtime. No HTTP endpoints,
-browser workflows, identity system, infrastructure resources, or cutover are
-implemented by this ADR.
+application service boundaries completed the persistence-neutral application boundary.
+PostgreSQL persistence supplies canonical PostgreSQL repositories, including the core
+reference repositories, transaction and journal repositories and reporting repository
+paths. This decision unblocks HTTP foundation API, browser foundation browser shell, and
+deployment without waiting for long-tail migration or production activation. It selects
+their implementation contract; those tickets build the runtime. No HTTP endpoints,
+browser workflows, identity system, infrastructure resources, or cutover are implemented
+by this ADR.
 
 The existing Streamlit/Sheets application remains the operational internal
 edition and a behavioral reference. Commercial HTTP contracts represent domain
@@ -25,8 +21,8 @@ over canonical postings. Accounting rules remain in Python application/domain
 owners.
 
 Read with [Architecture](../ARCHITECTURE.md), [ADR 0001](0001-canonical-accounting-schema.md),
-[PostgreSQL concurrency](../POSTGRESQL_CONCURRENCY.md), and the
-[commercial development/deployment contract](../COMMERCIAL_WEB.md).
+[PostgreSQL concurrency](../database/CONCURRENCY.md), and the
+[commercial development/deployment contract](../browser/RUNTIME.md).
 
 ### Existing owners and reuse
 
@@ -34,8 +30,8 @@ Read with [Architecture](../ARCHITECTURE.md), [ADR 0001](0001-canonical-accounti
 | --- | --- |
 | `application/services.py` and domain services/contracts | `ApplicationServices`, bookkeeping validation, orchestration, and query behavior. |
 | `infrastructure/postgres/composition.py`, `config.py`, `runtime.py` | Explicit entity-scoped service composition, safe database settings, one pool per process, adapter-owned operation/commit boundaries. |
-| `composition.py`, PostgreSQL cutover controller, `infrastructure/entity_documents.py` | Trusted migrated-profile authority/environment checks and entity-to-existing-document-store binding; preserve #258 activation controls. |
-| `application/baselines.py`, PostgreSQL operation guards | Portable loaded-record token and stale/missing-baseline enforcement; #280 transports these through real forms. |
+| `composition.py`, PostgreSQL cutover controller, `infrastructure/entity_documents.py` | Trusted migrated-profile authority/environment checks and entity-to-existing-document-store binding; preserve authority cutover activation controls. |
+| `application/baselines.py`, PostgreSQL operation guards | Portable loaded-record token and stale/missing-baseline enforcement; protected browser mutations transports these through real forms. |
 | `application/documents.py` and PostgreSQL receipt metadata adapter | `DocumentStore`, portable document identity, recoverable upload/link outcomes; metadata in SQL, bytes outside SQL. |
 | `design.md`, current pages and canonical architecture/developer guides | Product character, accounting behavior, responsive/accessibility baseline, reference workflows, validation and migration policies. |
 
@@ -61,10 +57,10 @@ manager, retry/recovery state machine, or commercial profile-permission model.
 | Hosting | Render Docker web services; suitable free tiers are permitted for technical development/staging under the stage-specific amendment below. Paid capacity and recovery guarantees remain a separate commercial activation gate. Neon managed PostgreSQL; separate environments. |
 | Release | One container per environment containing the compiled SPA and Python API. Node is build-only. |
 
-#277/#278 pin compatible stable library releases and container patch/digest
-versions when scaffolding; no `latest` production dependency or floating install.
-They retain these framework/runtime families. Ordinary patch/security upgrades
-do not reopen this ADR; a framework/provider/topology replacement requires an
+HTTP foundation and browser foundation pin compatible stable library releases and
+container patch/digest versions when scaffolding; no `latest` production dependency or
+floating install. They retain these framework/runtime families. Ordinary patch/security
+upgrades do not reopen this ADR; a framework/provider/topology replacement requires an
 amendment with evidence of a material blocker.
 
 React documents the tradeoffs of a Vite-built app without an SSR framework.
@@ -103,7 +99,7 @@ retries; bounded read retries may be used for transient read failures.
 flowchart TD
     Browser["React SPA: typed HTTP, forms, query cache"]
     Transport["FastAPI: DTOs, errors, request context"]
-    Auth["#222: session + authorized membership/entity context"]
+    Auth["Identity: session + authorized membership/entity context"]
     Composition["HTTP composition: create_postgres_services"]
     Services["Existing application/query services + domain rules"]
     Repos["Existing entity-scoped PostgreSQL repositories"]
@@ -126,22 +122,22 @@ entity or credential binding is never a process-global default. The shared pool
 is deployment configuration; repository/service contexts remain entity-scoped.
 
 For migrated profiles, enter through the existing `create_application` trusted
-composition (which calls the PostgreSQL factory) so #258's recorded authority,
-environment/database and document-folder binding checks remain enforced. Do not
-bypass them by calling the low-level factory directly. Fresh synthetic entity
-fixtures use explicit test/development composition without claiming a migrated
-profile's acceptance or activation. New customer onboarding/authorization is
-#222; legacy profile configuration is never part of the browser contract.
-See [Bookkeeping acceptance and cutover](../BOOKKEEPING_CUTOVER.md).
+composition (which calls the PostgreSQL factory) so authority cutover's recorded
+authority, environment/database and document-folder binding checks remain enforced. Do
+not bypass them by calling the low-level factory directly. Fresh synthetic entity
+fixtures use explicit test/development composition without claiming a migrated profile's
+acceptance or activation. New customer onboarding/authorization is identity and tenancy;
+legacy profile configuration is never part of the browser contract. See [Bookkeeping
+acceptance and cutover](../accounting/CUTOVER.md).
 
-The #299 owner-operated procedure uses this same production application and
-authorization seam with non-commercial recovery acceptance. The existing stored
-`rehearsal` cutover value supports persistent authority independently of HTTP
-environment names; it does not relax request authorization or select a different
-runtime. `open_migrated_runtime` extends the existing pool/composition owner for
-that integration. #294 supplies the separately verified NAS recovery route;
-#298 retains commercial evidence/sign-off. Neither the factory nor the named
-procedure supplies missing identity, deployment or browser workflows.
+The owner-operated procedure uses this same production application and authorization
+seam with non-commercial recovery acceptance. The existing stored `rehearsal` cutover
+value supports persistent authority independently of HTTP environment names; it does not
+relax request authorization or select a different runtime. `open_migrated_runtime`
+extends the existing pool/composition owner for that integration. NAS backup and restore
+supplies the separately verified NAS recovery route; commercial recovery agreement
+retains commercial evidence/sign-off. Neither the factory nor the named procedure
+supplies missing identity, deployment or browser workflows.
 
 Handlers validate/translate DTOs, obtain authorized context, call the existing
 service, and map committed results/errors. They do not issue SQL, compute
@@ -174,32 +170,31 @@ money/other exact decimal quantities as decimal strings. JavaScript floating
 point must not become the accounting calculation owner. SQL versions, provider
 locators, credentials, and worksheet representations are not transport fields.
 
-For protected interactive edit/delete/merge commands, require the original
-loaded `baseline` separately from changes and pass it as the service's existing
-`expected` input. Multi-record commands carry the complete applicable baseline
-set. Never read a fresh token on submission to manufacture compliance. #280
-implements/validates this bridge, including two independently loaded clients;
-it closes #253's caller dependency independently of the full web epic.
+For protected interactive edit/delete/merge commands, require the original loaded
+`baseline` separately from changes and pass it as the service's existing `expected`
+input. Multi-record commands carry the complete applicable baseline set. Never read a
+fresh token on submission to manufacture compliance. protected browser mutations
+implements/validates this bridge, including two independently loaded clients; it closes
+the shared mutation contract's caller dependency independently of the full web epic.
 
-#277 establishes one error envelope: `error.code`, safe `error.message`, optional
-field errors, and `request_id`. Map malformed/transport or domain validation to
-422, not found to 404, missing identity to 401, denied membership to 403, stale
-conflict to 409, unavailable storage to 503 and unexpected failure to a generic
-500. Preserve `baseline_required`, `baseline_invalid` and `stale` as stable
-codes (422, 422, 409 respectively). Do not leak raw exception strings, submitted
-values, SQL, document contents, or credentials in errors/logs. #277 owns the
-complete domain-code mapping rather than treating every storage error alike.
+HTTP foundation establishes one error envelope: `error.code`, safe `error.message`,
+optional field errors, and `request_id`. Map malformed/transport or domain validation to
+422, not found to 404, missing identity to 401, denied membership to 403, stale conflict
+to 409, unavailable storage to 503 and unexpected failure to a generic 500. Preserve
+`baseline_required`, `baseline_invalid` and `stale` as stable codes (422, 422, 409
+respectively). Do not leak raw exception strings, submitted values, SQL, document
+contents, or credentials in errors/logs. HTTP foundation owns the complete domain-code
+mapping rather than treating every storage error alike.
 
 Export deterministic OpenAPI without database/credential access to
-`contracts/http/openapi.json`; generate `web/src/api/schema.d.ts` from it.
-Commit both generated artifacts. #277 owns export and #278 owns generation;
-CI regenerates/checks the pair for drift and type-checks the web client.
-Use a schema-only composition with no production settings, network calls or
-lifespan startup. Generated types describe transport only; runtime validation
-remains server-side. Development schema/docs are available; hosted interactive
-docs/schema are restricted by the deployment/session gate.
-[openapi-typescript](https://openapi-ts.dev/introduction) and
-[openapi-fetch](https://openapi-ts.dev/openapi-fetch/).
+`contracts/http/openapi.json`; generate `web/src/api/schema.d.ts` from it. Commit both
+generated artifacts. HTTP foundation owns export and browser foundation owns generation;
+CI regenerates/checks the pair for drift and type-checks the web client. Use a
+schema-only composition with no production settings, network calls or lifespan startup.
+Generated types describe transport only; runtime validation remains server-side.
+Development schema/docs are available; hosted interactive docs/schema are restricted by
+the deployment/session gate. [openapi-typescript](https://openapi-ts.dev/introduction)
+and [openapi-fetch](https://openapi-ts.dev/openapi-fetch/).
 
 ## Deployment decision
 
@@ -218,196 +213,198 @@ API routes/methods and missing assets return their actual errors. Directory
 index serving alone is not a history-route fallback.
 [Starlette StaticFiles](https://www.starlette.io/staticfiles/).
 
-The browser always calls relative `/api/v1` URLs. CORS is disabled by default;
-local Vite proxies API calls to loopback rather than using a second browser
-origin. A future distinct API origin is an ADR change, not a per-feature choice.
-Validate the configured public origin/Host and trust forwarded headers only
-from the hosting proxy, with its ingress boundary documented/tested by #279.
-Start with one Uvicorn worker per container, horizontally scalable once #223
-proves the required operational behavior. Budget database pools across all
-workers/instances; sessions and durable jobs cannot live only in process memory.
+The browser always calls relative `/api/v1` URLs. CORS is disabled by default; local
+Vite proxies API calls to loopback rather than using a second browser origin. A future
+distinct API origin is an ADR change, not a per-feature choice. Validate the configured
+public origin/Host and trust forwarded headers only from the hosting proxy, with its
+ingress boundary documented/tested by deployment. Start with one Uvicorn worker per
+container, horizontally scalable once platform operations proves the required
+operational behavior. Budget database pools across all workers/instances; sessions and
+durable jobs cannot live only in process memory.
 
-The 2026-10-07 stage amendment in #124/#221/#279 permits suitable free-tier
-Render/Neon capacity for technical development/staging, with persistent
-PostgreSQL and plan limitations recorded at the operator checkpoint. Use
-continuously available capacity when the intended usage requires it. Commercial
-production capacity/recovery acceptance remains separately owned by #224/#298.
-The earlier 2026-10-07 operator amendment permits Neon Free for
-the current pre-activation stage: production and retained UAT use distinct
-branches/endpoints in one Neon project, with separately scoped connection
-configuration and access controls. The production root is the #259 recovery
-source; isolated recovery targets must not overwrite production or retained UAT.
-Keep synthetic non-production data only and no automatic production cloning.
-Shared-project administration, capacity and recovery-history limits create a
-common operational boundary; branches are not an independent project-access
-boundary. Before commercial activation under #220/#258/#223, review and approve
-environment isolation, roles/secrets and operational blast radius; separate
-projects remain the proposed stronger isolation direction, rather than a
-prerequisite for the current Free-plan drills. The later stage amendment extends
-plan flexibility to technical Render hosting without changing provider/topology.
-See [the recovery contract](../POSTGRESQL_RECOVERY.md) for current Free-plan
-limits and the future protection/objective gates.
-Start with direct/unpooled TLS connections and the existing small application
-pool. Pooler adoption requires verifying the implemented transaction/migration
-contract. Select Neon PostgreSQL 18 and geographically close Render/Neon US
-regions during #279 provisioning; confirm availability and connection limits at
-the manual checkpoint. Provider selection is settled; account IDs, resource
-names, domain ownership, capacity and recovery-plan procurement are operator
-configuration. No resources or paid plans are purchased by this decision.
+The 2026-10-07 stage amendment in application transition, browser and API workflows and
+deployment permits suitable free-tier Render/Neon capacity for technical
+development/staging, with persistent PostgreSQL and plan limitations recorded at the
+operator checkpoint. Use continuously available capacity when the intended usage
+requires it. Commercial production capacity/recovery acceptance remains separately owned
+by external release and customer lifecycle and commercial recovery agreement. The
+earlier 2026-10-07 operator amendment permits Neon Free for the current pre-activation
+stage: production and retained UAT use distinct branches/endpoints in one Neon project,
+with separately scoped connection configuration and access controls. The production root
+is the managed database recovery source; isolated recovery targets must not overwrite
+production or retained UAT. Keep synthetic non-production data only and no automatic
+production cloning. Shared-project administration, capacity and recovery-history limits
+create a common operational boundary; branches are not an independent project-access
+boundary. Before commercial activation under PostgreSQL persistence, authority cutover
+and platform operations, review and approve environment isolation, roles/secrets and
+operational blast radius; separate projects remain the proposed stronger isolation
+direction, rather than a prerequisite for the current Free-plan drills. The later stage
+amendment extends plan flexibility to technical Render hosting without changing
+provider/topology. See [the recovery contract](../operations/DATABASE_RECOVERY.md) for
+current Free-plan limits and the future protection/objective gates. Start with
+direct/unpooled TLS connections and the existing small application pool. Pooler adoption
+requires verifying the implemented transaction/migration contract. Select Neon
+PostgreSQL 18 and geographically close Render/Neon US regions during deployment
+provisioning; confirm availability and connection limits at the manual checkpoint.
+Provider selection is settled; account IDs, resource names, domain ownership, capacity
+and recovery-plan procurement are operator configuration. No resources or paid plans are
+purchased by this decision.
 
-This fits the existing Neon UAT configuration direction in
-[PostgreSQL development](../POSTGRESQL.md#local-setup). The operator-selected Neon
-UAT environment completed #254's synthetic two-profile framework drill on
-2026-10-06, as recorded in the migration guide. That evidence does not establish
-a deployed commercial browser/API or realistic migrated-profile acceptance.
-#279 verifies an explicitly authorized compatible staging target or provisions
-a separate one, preserving the retained UAT database and deployed migration
-chain. Remaining source reconciliation/acceptance and recovery gates stay with
-their owners; do not repeat or relabel the completed framework checkpoint.
-[Render Docker hosting](https://render.com/docs/docker),
-[Render deployment lifecycle](https://render.com/docs/deploys),
-[Render prebuilt images](https://render.com/docs/deploying-an-image),
-[Neon environment branching](https://neon.com/branching).
+This fits the existing Neon UAT configuration direction in [PostgreSQL
+development](../database/POSTGRESQL.md#local-setup). The operator-selected Neon UAT
+environment completed Sheets migration framework's synthetic two-profile framework drill
+on 2026-10-06, as recorded in the migration guide. That evidence does not establish a
+deployed commercial browser/API or realistic migrated-profile acceptance. Deployment
+verifies an explicitly authorized compatible staging target or provisions a separate
+one, preserving the retained UAT database and deployed migration chain. Remaining source
+reconciliation/acceptance and recovery gates stay with their owners; do not repeat or
+relabel the completed framework checkpoint. [Render Docker
+hosting](https://render.com/docs/docker), [Render deployment
+lifecycle](https://render.com/docs/deploys), [Render prebuilt
+images](https://render.com/docs/deploying-an-image), [Neon environment
+branching](https://neon.com/branching).
 
 ### Release and environment separation
 
-GitHub Actions builds a `linux/amd64` image into GitHub Container Registry
-(GHCR). Render consumes it as an image-backed service (`runtime: image`), pinned
-by digest; it does not rebuild source independently per environment. CI triggers
-hosted dev after validated `main`; staging promotes an explicit tested digest;
-production later promotes that same staging-tested digest. Builds receive no
-database or identity secrets. #279 implements image delivery and explicit
-promotion, with deploys serialized per environment. Retain registry digests
-needed for rollback. A release records Git SHA/image digest and expected
-Alembic head. Retain the authoritative current-revision CI full-suite gate and
-native PostgreSQL checks described in [Development](../DEVELOPMENT.md#authoritative-ci-and-required-check);
-browser/API quality checks grow with #277/#278/#287. Affected local validation
-supports development while CI and advisory review proceed concurrently.
+GitHub Actions builds a `linux/amd64` image into GitHub Container Registry (GHCR).
+Render consumes it as an image-backed service (`runtime: image`), pinned by digest; it
+does not rebuild source independently per environment. CI triggers hosted dev after
+validated `main`; staging promotes an explicit tested digest; production later promotes
+that same staging-tested digest. Builds receive no database or identity secrets.
+deployment implements image delivery and explicit promotion, with deploys serialized per
+environment. Retain registry digests needed for rollback. A release records Git
+SHA/image digest and expected Alembic head. Retain the authoritative current-revision CI
+full-suite gate and native PostgreSQL checks described in
+[Development](../DEVELOPMENT.md#authoritative-ci-and-required-check); browser/API
+quality checks grow with HTTP foundation, browser foundation and browser testing.
+Affected local validation supports development while CI and advisory review proceed
+concurrently.
 
-Migrate explicitly in the deployment lifecycle; never at startup.
-The deployment workflow runs the existing PostgreSQL `current`,
-`upgrade`, and `health` commands with a separate migration-role secret. A failed
-migration/readiness check stops promotion; a failed post-deploy smoke stops
-further promotion and redeploys the prior schema-compatible image. Render's
-pre-deploy command is a lifecycle seam, not permission to give
-schema privileges to the running application: #279 runs the migration in a
-separate controlled job, then triggers the application deployment. Do not make
-the migration secret available to the application container.
+Migrate explicitly in the deployment lifecycle; never at startup. The deployment
+workflow runs the existing PostgreSQL `current`, `upgrade`, and `health` commands with a
+separate migration-role secret. A failed migration/readiness check stops promotion; a
+failed post-deploy smoke stops further promotion and redeploys the prior
+schema-compatible image. Render's pre-deploy command is a lifecycle seam, not permission
+to give schema privileges to the running application: deployment runs the migration in a
+separate controlled job, then triggers the application deployment. Do not make the
+migration secret available to the application container.
 
-Schema changes use expand/contract while old/new code may overlap. Readiness
-accepts only schema revisions explicitly declared and tested compatible by the
-image, initially just the current Alembic head. For a schema-changing release,
-deploy a compatibility bridge supporting the old and target revisions before
-migrating; then deploy the target image. An old image's strict head-only check
-must not unexpectedly remove it from service during that overlap. If compatible
-overlap cannot be demonstrated, use an explicit maintenance/drain procedure
-instead of attempting a rolling deploy. Application
-rollback redeploys a prior compatible image; it never automatically downgrades
-or restores a database. Real recovery/PITR and document recovery are #259/#223;
-production activation follows [#258's cutover contract](../BOOKKEEPING_CUTOVER.md),
-with #253/#257/#259/#260/#261 evidence.
-Selecting Neon does not establish a recovery guarantee or pass a restore drill.
+Schema changes use expand/contract while old/new code may overlap. Readiness accepts
+only schema revisions explicitly declared and tested compatible by the image, initially
+just the current Alembic head. For a schema-changing release, deploy a compatibility
+bridge supporting the old and target revisions before migrating; then deploy the target
+image. An old image's strict head-only check must not unexpectedly remove it from
+service during that overlap. If compatible overlap cannot be demonstrated, use an
+explicit maintenance/drain procedure instead of attempting a rolling deploy. Application
+rollback redeploys a prior compatible image; it never automatically downgrades or
+restores a database. Real recovery/PITR and document recovery are managed database
+recovery and platform operations; production activation follows [Cutover
+contract](../accounting/CUTOVER.md), with mutation baseline contract, whole-profile
+acceptance, managed database recovery, complete entity export and frozen Sheets source
+contract evidence. Selecting Neon does not establish a recovery guarantee or pass a
+restore drill.
 
-## Identity/session integration seam (#222)
+## Identity/session integration seam
 
-#277 defines a replaceable server-side context resolver returning an immutable
-actor/organization/entity/capability context. It checks the requested entity
-against authenticated active membership **before** composing services or
-binding document/OAuth credentials. Missing/denied context fails closed. List
-and command routes share it; no anonymous/default entity fallback is permitted.
-Membership changes/revocation must be reflected server-side, not only by hiding
-browser navigation. Persisted identity, membership, roles, invitations and the
-identity provider are #222's decisions/implementation.
+HTTP foundation defines a replaceable server-side context resolver returning an
+immutable actor/organization/entity/capability context. It checks the requested entity
+against authenticated active membership **before** composing services or binding
+document/OAuth credentials. Missing/denied context fails closed. List and command routes
+share it; no anonymous/default entity fallback is permitted. Membership
+changes/revocation must be reflected server-side, not only by hiding browser navigation.
+Persisted identity, membership, roles, invitations and the identity provider are
+identity and tenancy's decisions/implementation.
 
 Reserve `/api/v1/session` and `/api/v1/auth/*` for that integration. Use a
-server-managed opaque session in a host-only HttpOnly, Secure, SameSite=Lax
-cookie (`__Host-tabula_session`, `Path=/`, no `Domain`) on hosted HTTPS. No bearer
-or refresh tokens in localStorage or ledger query state. Store/revoke sessions
-durably under #222; the browser receives only safe identity/context and a
-session-bound CSRF token. Unsafe browser requests require the CSRF header and
-validated Origin; OAuth callbacks use the provider flow's state/nonce checks.
-[ADR 0003](0003-commercial-identity-and-tenancy.md) now selects #310's provider,
-expiration, callback, recovery and role contract. [Commercial identity](../COMMERCIAL_IDENTITY.md)
-owns operator setup and #311–#321 handoff; runtime implementation remains there.
-Plain loopback development uses an explicitly separate non-Secure development cookie;
-never relax hosted cookie policy because local HTTP needs it.
+Server-managed opaque session in a host-only HttpOnly, Secure, SameSite=Lax cookie
+(`__Host-tabula_session`, `Path=/`, no `Domain`) on hosted HTTPS. No bearer or refresh
+tokens in localStorage or ledger query state. Store/revoke sessions durably under
+identity and tenancy; the browser receives only safe identity/context and a
+session-bound CSRF token. Unsafe browser requests require the CSRF header and validated
+Origin; OAuth callbacks use the provider flow's state/nonce checks. [ADR
+0003](0003-commercial-identity-and-tenancy.md) now selects identity provider decision's
+provider, expiration, callback, recovery and role contract. [Commercial
+identity](../identity/PROVIDER_SETUP.md) owns operator setup and identity control plane
+and hosted identity rollout handoff; runtime implementation remains there. Plain
+loopback development uses an explicitly separate non-Secure development cookie; never
+relax hosted cookie policy because local HTTP needs it.
 
-Before #222, #277 tests/local development may inject a fixed trusted synthetic
-entity context. Enable it only in explicit development/test mode on loopback.
-Hosted dev/staging alpha may use the same fixed synthetic scope only behind a
-temporary **deployment-wide HTTP Basic gate over TLS**, implemented by #279,
-covering browser, API, schema and document paths (health probes excepted).
-Credentials are environment-specific server secrets, not the Streamlit password.
-Origin/CSRF protections still apply to unsafe requests. No request can choose a
-different trusted scope. The gate provides operator access, not commercial
-users/memberships; production rejects trusted-context mode entirely. #222
-replaces it before external beta or customer data. Do not expose ungated
-bookkeeping routes while waiting for commercial identity.
+Before identity and tenancy, HTTP foundation tests/local development may inject a fixed
+trusted synthetic entity context. Enable it only in explicit development/test mode on
+loopback. Hosted dev/staging alpha may use the same fixed synthetic scope only behind a
+temporary **deployment-wide HTTP Basic gate over TLS**, implemented by deployment,
+covering browser, API, schema and document paths (health probes excepted). Credentials
+are environment-specific server secrets, not the Streamlit password. Origin/CSRF
+protections still apply to unsafe requests. No request can choose a different trusted
+scope. The gate provides operator access, not commercial users/memberships; production
+rejects trusted-context mode entirely. identity and tenancy replaces it before external
+beta or customer data. Do not expose ungated bookkeeping routes while waiting for
+commercial identity.
 
-## Operations integration seams (#223)
+## Operations integration seams
 
-#277 supplies a bounded server-generated request ID, returned as `X-Request-ID`
-and in errors. An external supplied correlation value is untrusted: normalize
-and bound it separately rather than using it as actor/entity identity or raw
-log text. Structured JSON logs contain request ID, method, route **template**,
-status, duration, release and safe failure code; no raw URLs/query strings,
-request/response bodies, cookies, Authorization headers, database URLs or
-receipt/ledger contents. Actor/entity identifiers are added only from trusted
-context under #223's data-minimization policy. Disable/sanitize default access
-and exception logging that would bypass this allowlist. Browser errors retain
-safe request IDs without sending draft values to telemetry.
+HTTP foundation supplies a bounded server-generated request ID, returned as
+`X-Request-ID` and in errors. An external supplied correlation value is untrusted:
+normalize and bound it separately rather than using it as actor/entity identity or raw
+log text. Structured JSON logs contain request ID, method, route **template**, status,
+duration, release and safe failure code; no raw URLs/query strings, request/response
+bodies, cookies, Authorization headers, database URLs or receipt/ledger contents.
+Actor/entity identifiers are added only from trusted context under platform operations's
+data-minimization policy. Disable/sanitize default access and exception logging that
+would bypass this allowlist. Browser errors retain safe request IDs without sending
+draft values to telemetry.
 
 Reserve `GET /health/live` for process liveness, `GET /health/ready` for bounded
-database connectivity plus declared compatible-schema checks, and
-`GET /version` for public safe release identity. Readiness returns 503 for unavailable/incompatible
-database and never runs migrations; use it as Render's health check. Probes
-expose only minimal safe status and perform no bookkeeping reads/writes.
-Document-store/identity dependency diagnostics and metrics belong to #223, not
-a remote-service scan on every health request.
-[Render health checks](https://render.com/docs/health-checks).
+database connectivity plus declared compatible-schema checks, and `GET /version` for
+public safe release identity. Readiness returns 503 for unavailable/incompatible
+database and never runs migrations; use it as Render's health check. Probes expose only
+minimal safe status and perform no bookkeeping reads/writes. Document-store/identity
+dependency diagnostics and metrics belong to platform operations, not a remote-service
+scan on every health request. [Render health
+checks](https://render.com/docs/health-checks).
 
 Background work is a separately deployed worker/scheduler using the same Python
-application services and authorized entity scope. Never start recurring
-reconciliation on API/browser startup, page loads, or per-replica timers, and
-never treat FastAPI in-process background tasks as durable jobs. #223 selects
-queue/scheduler technology and owns durable IDs, retry policy, run history,
-audit and alerts; this ADR reserves `tabula_rasa/jobs/` and a separate worker
-release/process boundary without installing a queue in alpha. Carry trusted
-actor/entity and correlation context into jobs, not a browser session or SQL
-connection. SQL metadata and external document bytes retain separate ownership.
+application services and authorized entity scope. Never start recurring reconciliation
+on API/browser startup, page loads, or per-replica timers, and never treat FastAPI
+in-process background tasks as durable jobs. platform operations selects queue/scheduler
+technology and owns durable IDs, retry policy, run history, audit and alerts; this ADR
+reserves `tabula_rasa/jobs/` and a separate worker release/process boundary without
+installing a queue in alpha. Carry trusted actor/entity and correlation context into
+jobs, not a browser session or SQL connection. SQL metadata and external document bytes
+retain separate ownership.
 
 ## Browser and responsive baseline
 
-Technical alpha supports the latest two stable desktop Chrome, Edge, Firefox
-and Safari versions, plus current/previous major iOS Safari and Android Chrome
-on current/previous supported Android major releases. Re-evaluate actual tested
-versions at each release; no IE, embedded webview, offline/PWA guarantee or
-native mobile app is promised. Use Vite's standard modern browser target only
-when it covers this matrix; #287 checks features/polyfills against it.
+Technical alpha supports the latest two stable desktop Chrome, Edge, Firefox and Safari
+versions, plus current/previous major iOS Safari and Android Chrome on current/previous
+supported Android major releases. Re-evaluate actual tested versions at each release; no
+IE, embedded webview, offline/PWA guarantee or native mobile app is promised. Use Vite's
+standard modern browser target only when it covers this matrix; browser testing checks
+features/polyfills against it.
 
-Preserve `design.md`'s desktop-first tables and approximately 760px stacking
-boundary. Validate 1440x1000, 1200x900, 900x900 and 390x844, plus 320 CSS px
-reflow/zoom. Forms stack, navigation collapses accessibly, table containers may
-scroll, and essential accounting columns/actions remain reachable without
-page-level horizontal overflow. Keyboard access, visible focus, semantic labels,
-error association, non-color status, touch-accessible controls and WCAG 2.2 AA
-are the new shell's target. #278 supplies reusable primitives; #287 verifies
-bounded Chromium/Firefox/WebKit E2E and actual mobile Safari/Chrome smoke
-coverage. Emulation alone does not certify real-device support. Streamlit-only
-widget/CSS instructions do not constrain React components.
+Preserve `design.md`'s desktop-first tables and approximately 760px stacking boundary.
+Validate 1440x1000, 1200x900, 900x900 and 390x844, plus 320 CSS px reflow/zoom. Forms
+stack, navigation collapses accessibly, table containers may scroll, and essential
+accounting columns/actions remain reachable without page-level horizontal overflow.
+Keyboard access, visible focus, semantic labels, error association, non-color status,
+touch-accessible controls and WCAG 2.2 AA are the new shell's target. browser foundation
+supplies reusable primitives; browser testing verifies bounded Chromium/Firefox/WebKit
+E2E and actual mobile Safari/Chrome smoke coverage. Emulation alone does not certify
+real-device support. Streamlit-only widget/CSS instructions do not constrain React
+components.
 
 ## Alternatives and consequences
 
 | Alternative | Why not selected for v1 |
 | --- | --- |
-| Extend Streamlit into commercial identity/front end | Initiative #124 requires beta on the future browser stack; rerun/session semantics would constrain new contracts. |
+| Extend Streamlit into commercial identity/front end | Initiative application transition requires beta on the future browser stack; rerun/session semantics would constrain new contracts. |
 | Next.js/SSR or a Node BFF | Adds a server/auth/data boundary without a bookkeeping SEO need; Python already owns services and API. Revisit if server rendering becomes a demonstrated requirement. |
 | Django/DRF | Useful integrated admin/auth ecosystem, but its ORM/project conventions overlap an established service/Core/Alembic architecture. FastAPI is a smaller transport addition. |
 | Flask plus handwritten schemas/client | Viable, but requires separately assembling the selected typed validation/OpenAPI/client seam. |
 | Vue/Svelte or HTMX server templates | Viable UI choices; React's routing/query/form ecosystem fits dense interactive tables/forms and browser tests. Choosing one now avoids feature-by-feature framework drift. |
 | Separate static host and API origins | Adds CORS/cookie/origin configuration and release skew; same-origin compiled assets are sufficient for alpha. |
 | Render-managed PostgreSQL / full AWS stack | Neon aligns with the repository's UAT direction; AWS adds IAM/network/operations setup before alpha. Neither supplies a material benefit that warrants changing the selected baseline now. |
-| Kubernetes, microservices, Redis/queue from day one | Adds operating burden without current scale evidence; #223 owns durable jobs when implemented. |
+| Kubernetes, microservices, Redis/queue from day one | Adds operating burden without current scale evidence; platform operations owns durable jobs when implemented. |
 
 Costs/tradeoffs: two language toolchains, explicit SPA routing/cache/form
 conventions, Python serving static assets initially, and combined web/API release
@@ -417,22 +414,20 @@ composition boundary keep a later provider move possible without copying domain
 logic. These tradeoffs are accepted for independently merged/deployed vertical
 slices, not a long-lived rewrite branch.
 
-## Follow-on ownership and decision gate
+## Component responsibilities
 
-| Ticket | Implement against this contract |
+| Component | Contract |
 | --- | --- |
-| #277 | `http/` app/composition, DTO/error/context seams, OpenAPI export, health and request IDs; representative PostgreSQL delegation tests. |
-| #278 | `web/` Vite shell, Router/Query/client/form primitives, generated types, design tokens and responsive smoke tests. |
-| #279 | Render/Neon environment provisioning, image/migration/promotion workflow, temporary alpha gate, secret injection and real persistent staging smoke. |
-| #280 | Loaded baseline response/form/mutation bridge and missing/stale failures; explicit #253 closure dependency. |
-| #281/#282/#283 | Entity/reference, core ledger/reports, essential documents; default technical-alpha workflow set. |
-| #284/#285/#286 | Recurring/mixed-use, assets and mileage slices; do not gate initial alpha unless scope explicitly expands. |
-| #287/#288 | Browser quality and staging alpha integration; explicit Streamlit feature/retirement boundary. |
-| #222/#223/#224 | Commercial membership/session/onboarding; jobs/audit/operations/recovery; external beta/paid customer lifecycle respectively. |
+| HTTP foundation | `http/` composition, transport DTOs, safe errors, immutable request context, OpenAPI export, health and request IDs. |
+| Browser foundation | `web/` Vite package, routing, query/client/form primitives, generated types, tokens and responsive controls. |
+| Deployment | Immutable images, explicit schema steps, scoped environment/secret bindings, promotion, smoke and compatible rollback. |
+| Protected mutations | Original loaded baselines cross API responses, form state and mutation requests; stale/missing baselines fail before writes. |
+| Domain workflows | Services own reference data, entries, reports, receipts, recurring/mixed-use records, assets and mileage. Release validation selects required scope explicitly. |
+| Identity | Named sessions, current memberships, capabilities and permitted onboarding/context changes. |
+| Operations | Durable jobs, audit history, diagnostics, backup and verified recovery. |
+| Release policy | External admission, customer lifecycle, legal decisions and commercial recovery agreement. |
 
-#276 is satisfied by this decision and its linked runnable-now/planned-command
-guide. Scaffold/start/deploy evidence belongs to #277/#278/#279. Accounts,
-credentials, DNS and retained database setup are an explicit #279 operator
-checkpoint, not grounds to silently select another provider or an in-memory
-staging substitute. The first alpha does not certify external-beta readiness,
-production authority or retirement of remaining Streamlit-only workflows.
+Actual environment accounts, credentials, DNS and retained database bindings require an
+operator checkpoint. Record observed deployment/acceptance results in the owning release
+discussion; they do not redefine these component contracts or authorize fallback to a
+different provider or in-memory staging store.
