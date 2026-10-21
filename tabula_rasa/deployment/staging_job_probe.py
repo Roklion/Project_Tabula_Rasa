@@ -72,6 +72,9 @@ def deployed_release(environ):
 def inspect_queue(database, entity, key):
     """Only queue metadata; no ledger rows, selectors or credentials in output."""
     with database.transaction(read_only=True) as connection:
+        if not connection.scalar(text('SELECT EXISTS (SELECT 1 FROM business_entities WHERE id=:scope)'),
+                                 {'scope': entity}):
+            raise ValueError('Approved staging probe entity does not exist.')
         definitions = connection.scalar(text('SELECT count(*) FROM job_definitions WHERE entity_id=:scope'),
                                         {'scope': entity})
         others = connection.scalar(text("""SELECT count(*) FROM jobs WHERE entity_id=:scope

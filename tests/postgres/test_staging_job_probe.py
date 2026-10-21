@@ -47,6 +47,17 @@ def test_completed_other_tenant_does_not_block_selected_fixture(database):
     assert inspect_queue(database, 'alpha', 'probe-1') is None
 
 
+def test_nonexistent_probe_entity_is_not_reported_as_inspected(database):
+    seed_core(database)
+    with pytest.raises(ValueError, match='entity does not exist'):
+        inspect_queue(database, 'c' * 32, 'probe-1')
+    with database.transaction(read_only=True) as connection:
+        assert connection.scalar(text('SELECT count(*) FROM jobs')) == 0
+        assert connection.scalar(text('SELECT count(*) FROM job_attempts')) == 0
+    assert inspect_queue(database, 'alpha', 'probe-1') is None
+    assert inspect_queue(database, 'beta', 'probe-1') is None
+
+
 def test_probe_is_immediately_claimable_when_runner_clock_is_ahead(database, monkeypatch):
     from datetime import datetime, timedelta, timezone
     from tabula_rasa.infrastructure.postgres import jobs
