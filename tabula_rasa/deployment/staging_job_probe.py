@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 import re
+from datetime import datetime, timezone
 
 import requests
 from sqlalchemy import text
@@ -16,6 +17,10 @@ from tabula_rasa.infrastructure.postgres.job_cli import operator_registry
 from tabula_rasa.infrastructure.postgres.jobs import JobQueue
 from tabula_rasa.infrastructure.postgres.migrations import head_revision
 from tabula_rasa.telemetry import Telemetry, TelemetrySettings, configure_console
+
+
+# This one-off probe is immediately eligible regardless of runner/database clock skew.
+PROBE_DUE_AT = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
 def validate(environ, *, runtime=True):
@@ -108,7 +113,7 @@ def execute(environ):
                               failure_codes={'job_poison', 'job_transient', 'job_lease_expired'})
         queue = JobQueue(database, entity, operator_registry(), service_id='staging-observability-probe',
                          telemetry=telemetry)
-        job = queue.enqueue('ledger.probe', key, max_attempts=1)
+        job = queue.enqueue('ledger.probe', key, max_attempts=1, due_at=PROBE_DUE_AT)
         inspect_queue(database, entity, key)
         claim = queue.claim()
         if not claim or str(claim[0]) != job or not queue.execute(*claim):

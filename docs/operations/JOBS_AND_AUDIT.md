@@ -154,6 +154,9 @@ retains only its queue/attempt records, with no bookkeeping mutation.
 
 Before use, approve the exact synthetic staging business and record its ID in
 the protected staging environment variable `STAGING_JOB_PROBE_ENTITY_ID`.
+Keep `TABULA_RASA_DEPLOY_DATABASE_SHA256` set to the approved staging database
+identity hash in that same environment; both inspect and probe require this
+existing exact database binding.
 The operator must separately approve allowing the Actions runner to use these
 protected **staging-only** environment secrets: `TABULA_RASA_RUNTIME_DATABASE_URL`
 (existing `tabula_staging_runtime` role), `TABULA_RASA_TELEMETRY_ENDPOINT`,

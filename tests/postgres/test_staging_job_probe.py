@@ -1,7 +1,7 @@
 import pytest
 from sqlalchemy import text
 
-from tabula_rasa.deployment.staging_job_probe import inspect_queue
+from tabula_rasa.deployment.staging_job_probe import PROBE_DUE_AT, inspect_queue
 from tabula_rasa.infrastructure.postgres.job_cli import operator_registry
 from tabula_rasa.infrastructure.postgres.jobs import JobQueue
 from tests.postgres.core_support import seed_core
@@ -45,3 +45,22 @@ def test_completed_other_tenant_does_not_block_selected_fixture(database):
     other = JobQueue(database, 'beta', operator_registry(), service_id='synthetic-probe')
     other.enqueue('ledger.probe', 'other')
     assert inspect_queue(database, 'alpha', 'probe-1') is None
+
+
+def test_probe_is_immediately_claimable_when_runner_clock_is_ahead(database, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from tabula_rasa.infrastructure.postgres import jobs
+
+    class AheadClock:
+        @staticmethod
+        def now(tz):
+            return datetime.now(timezone.utc) + timedelta(hours=1)
+
+    seed_core(database)
+    monkeypatch.setattr(jobs, 'datetime', AheadClock)
+    queue = JobQueue(database, 'alpha', operator_registry(), service_id='synthetic-probe')
+    job = queue.enqueue('ledger.probe', 'probe-1', max_attempts=1, due_at=PROBE_DUE_AT)
+    claim = queue.claim()
+    assert str(claim[0]) == job
+    assert queue.execute(*claim) is True
+    assert inspect_queue(database, 'alpha', 'probe-1')['state'] == 'succeeded'

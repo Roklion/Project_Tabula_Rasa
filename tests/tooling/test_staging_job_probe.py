@@ -117,7 +117,8 @@ def test_one_probe_has_no_scheduler_or_retry_and_always_closes(succeeds, monkeyp
     else:
         with pytest.raises(ValueError):
             probe.execute(environment())
-    worker.enqueue.assert_called_once_with('ledger.probe', 'observability-probe-123', max_attempts=1)
+    worker.enqueue.assert_called_once_with('ledger.probe', 'observability-probe-123', max_attempts=1,
+                                           due_at=probe.PROBE_DUE_AT)
     worker.execute.assert_called_once_with('probe-job', 'lease')
     worker.tick.assert_not_called()
     worker.schedule_due.assert_not_called()
@@ -149,3 +150,5 @@ def test_workflow_has_no_timer_owner_credential_or_freeform_entity():
     serialized = str(job)
     assert 'TABULA_RASA_MIGRATION_DATABASE_URL' not in serialized
     assert 'TABULA_RASA_RUNTIME_DATABASE_URL' in serialized
+    installs = [step['run'] for step in job['steps'] if 'pip install' in step.get('run', '')]
+    assert installs == ['python -m pip install -r requirements-postgres.txt requests==2.34.2']
