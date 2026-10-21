@@ -102,6 +102,64 @@ only after complete enumeration of those dependencies and owner review. This is
 an attestation, not automatic cloud discovery or authorization. Missing resources
 cannot be detected by an offline tool; retain `unverified` if access is incomplete.
 
+## Inventory JSON schema
+
+The top-level object has exactly five required keys: `version` (integer `1`),
+`stage` (one of the four stages above), `observed_at` (ISO-8601 UTC timestamp),
+`coverage` (`unverified` or `operator_verified`) and `resources` (a nonempty array).
+Every resource requires all fields listed above; extra fields are rejected.
+
+| Field | Accepted values |
+| --- | --- |
+| `kind` | `postgres_branch`, `postgres_database`, `postgres_endpoint`, `postgres_role`, `managed_snapshot`, `nas_generation`, `sheets_workbook`, `drive_artifact`, `local_artifact`, `deployment_binding`, `fixture`, `schema_history` |
+| `environment` | `unknown`, `development`, `test`, `uat`, `staging`, `production`, `archive` |
+| `disposition` | `retained_source`, `active_recoverable`, `required_evidence`, `disposable_synthetic`, `unresolved` |
+| `authority` | `unknown`, `active`, `inactive`, `not_applicable` |
+| `protections` | Array containing any of `source`, `live`, `recovery`, `drill_evidence`, `legacy_snapshot`, `nas_indefinite`, `document_bytes`, `schema_history`, `customer_retention` |
+
+Handles use 1–160 ASCII letters, digits, underscores, periods or hyphens and start
+with a letter or digit. `id`, `scope` and `owner` require handles; `provider_id`,
+`last_backup`, `handoff`, `rollback` and `evidence` accept handles or JSON `null`.
+`references`, `depends_on` and `effects` are arrays of unique handles, as is
+`protections`. Resource IDs and scoped provider identities must be unique;
+`depends_on` and `effects` must reference resources in the same file, and a resource
+cannot depend on itself. Null or unknown identities/evidence may describe a gap,
+but cannot qualify a target for retirement.
+
+This complete synthetic example illustrates the structure, not a provider inventory
+or approval. It deliberately remains blocked because coverage is unverified.
+Replace the timestamp and facts only after the required private inspection; never
+promote these placeholders into observed evidence.
+
+```json
+{
+  "version": 1,
+  "stage": "owner_operated",
+  "observed_at": "2026-01-01T00:00:00Z",
+  "coverage": "unverified",
+  "resources": [
+    {
+      "id": "synthetic-fixture",
+      "kind": "fixture",
+      "scope": "synthetic-test-scope",
+      "provider_id": "synthetic-fixture-id",
+      "environment": "test",
+      "owner": "test-operator",
+      "disposition": "disposable_synthetic",
+      "authority": "inactive",
+      "protections": [],
+      "references": [],
+      "depends_on": [],
+      "last_backup": "private-recreation-record",
+      "handoff": "private-owner-review",
+      "rollback": "private-recreation-procedure",
+      "evidence": "private-inspection-record",
+      "effects": ["synthetic-fixture"]
+    }
+  ]
+}
+```
+
 ## Preview and manual approval
 
 Prepare a fresh private `inventory.json` using the schema above; keep it outside
