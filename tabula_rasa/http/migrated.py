@@ -38,7 +38,9 @@ class MigratedProfileServices:
             if self.connections is None:
                 self._services(entity_id)
             else:
-                self._named_binding(entity_id)
+                organization_id, profile, scope = self._named_binding(entity_id)
+                self.connections.validate_migrated_binding(organization_id=organization_id,
+                    entity_id=entity_id, profile_key=profile, scope_key=scope)
 
     def _named_binding(self, entity_id, organization_id=None):
         from sqlalchemy import text
@@ -60,6 +62,7 @@ class MigratedProfileServices:
         folder = drive.get('receipt_folder') if isinstance(drive, Mapping) else None
         scope = str(folder.get('id', '')) if isinstance(folder, Mapping) else ''
         PostgresCutoverController(self.database).require_postgres(binding, mode=configured['mode'], document_scope=scope)
+        return row['organization_id'], profile, scope
 
     def _named_services(self, context):
         from tabula_rasa.infrastructure.postgres.composition import create_postgres_services

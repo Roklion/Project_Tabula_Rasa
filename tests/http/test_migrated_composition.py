@@ -214,3 +214,20 @@ def test_named_binding_preserves_empty_document_scope_for_optional_legacy_config
     binding.validate()
     controller.require_postgres.assert_called_once_with(Binding('alpha', 'workbook-alpha', 'entity-alpha'),
                                                         mode='rehearsal', document_scope='')
+    binding.connections.validate_migrated_binding.assert_called_once_with(
+        organization_id='org', entity_id='entity-alpha', profile_key='alpha', scope_key='')
+
+
+def test_named_startup_checks_each_profile_grant_and_stops_on_failure(monkeypatch):
+    from tabula_rasa.application.identity import IdentityError
+    manager = Mock()
+    binding = MigratedProfileServices(Mock(), entity_profiles={'alpha': 'alpha', 'beta': 'beta'},
+                                      secrets={}, connections=manager)
+    monkeypatch.setattr(binding, '_named_binding', lambda entity: ('org-' + entity, entity, 'folder-' + entity))
+    binding.validate()
+    assert manager.validate_migrated_binding.call_count == 2
+    assert manager.validate_migrated_binding.call_args.kwargs == dict(
+        organization_id='org-beta', entity_id='beta', profile_key='beta', scope_key='folder-beta')
+    manager.validate_migrated_binding.side_effect = IdentityError('unavailable')
+    with pytest.raises(IdentityError, match='unavailable'):
+        binding.validate()

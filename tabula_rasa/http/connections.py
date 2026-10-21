@@ -30,6 +30,11 @@ class TenantConnections:
         row = self.repository.document_grant(context)
         return None if row is None else AuthorizedDocumentStore(self, context, row['store_scope_key'], row['provider'])
 
+    def validate_migrated_binding(self, **binding):
+        """Require connected scoped metadata and readable grant without provider I/O."""
+        row = self.repository.validate_migrated_binding(**binding)
+        self._store(row)
+
     def change(self, context, session, *, revision, connect):
         return self.repository.change(context, authenticated_at=session.authenticated_at,
             expected_revision=revision, connect=connect, validate=lambda row: self._store(row, validate=True))
