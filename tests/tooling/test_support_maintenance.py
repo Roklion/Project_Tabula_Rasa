@@ -177,3 +177,36 @@ def test_workflow_defaults_to_inspect_and_keeps_provider_credentials_out_of_data
     assert set(execute['env']) == {'TABULA_RASA_DATABASE_URL'}
     assert '-e RENDER_API_KEY' not in execute['run'] and '-e GH_TOKEN' not in execute['run']
     assert '--read-only' in execute['run']
+
+
+@pytest.mark.parametrize('checkpoint', ['', None, '0' * 64, '1' * 63, 'A' * 64, '1' * 64 + '\n'])
+def test_invalid_recovery_record_stops_before_provider_or_database(checkpoint, monkeypatch):
+    bound, read, metadata = Mock(), Mock(), Mock()
+    monkeypatch.setattr(maintenance, 'open_alpha_database', bound)
+    env = {**environment(), 'MAINTENANCE_RECOVERY_SHA256': checkpoint}
+    with pytest.raises(ValueError):
+        maintenance.preflight(env, read=read, metadata=metadata)
+    with pytest.raises(ValueError):
+        maintenance.execute(env)
+    assert not any(mock.mock_calls for mock in (bound, read, metadata))
+
+
+@pytest.mark.parametrize('pending', ['created', 'queued', 'build_in_progress',
+                                     'update_in_progress', 'pre_deploy_in_progress'])
+def test_every_in_progress_deployment_stops_upgrade(pending):
+    env = environment()
+    read = Mock(side_effect=[{'id': env['RENDER_SERVICE_ID'], 'suspended': 'suspended'},
+                            [{'deploy': {'status': pending}}]])
+    with pytest.raises(ValueError):
+        maintenance.preflight(env, read=read, verify=Mock(),
+                              metadata=lambda *_: {'release': env['GITHUB_SHA'], 'schema': maintenance.TARGET})
+    assert all(not call.kwargs for call in read.call_args_list)
+
+
+def test_foreign_suspended_service_stops_before_listing_deployments():
+    read = Mock(return_value={'id': 'srv-other', 'suspended': 'suspended'})
+    env = environment()
+    with pytest.raises(ValueError):
+        maintenance.preflight(env, read=read, verify=Mock(),
+                              metadata=lambda *_: {'release': env['GITHUB_SHA'], 'schema': maintenance.TARGET})
+    assert read.call_count == 1

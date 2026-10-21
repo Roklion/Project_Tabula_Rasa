@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from threading import Event
+from unittest.mock import Mock
 
 import pytest
 from sqlalchemy import event, text
@@ -16,7 +17,7 @@ from tests.postgres.core_support import seed_core, expense
 from tests.postgres.test_audit import reader
 
 
-def queue(database, scope='alpha', *, handler=None, service='test-worker', independent=False):
+def queue(database, scope='alpha', *, handler=None, service='test-worker', independent=False, telemetry=None):
     registry = JobRegistry()
 
     def create(database, execution):
@@ -24,7 +25,7 @@ def queue(database, scope='alpha', *, handler=None, service='test-worker', indep
         services.transactions.create(transaction_id='job-' + execution.job_id, **expense())
 
     registry.register('test.post', handler or create, independent_idempotent=independent)
-    return JobQueue(database, scope, registry, service_id=service)
+    return JobQueue(database, scope, registry, service_id=service, telemetry=telemetry)
 
 
 def expire(database, job_id):
@@ -179,7 +180,8 @@ def test_expired_final_attempt_enters_dead_state_without_effect(database):
 
 def test_commit_response_loss_is_confirmed_once_and_not_reexecuted(database, monkeypatch):
     seed_core(database)
-    worker = queue(database)
+    telemetry = Mock()
+    worker = queue(database, telemetry=telemetry)
     identity = worker.enqueue('test.post', 'lost-response')
     claim = worker.claim()
     transaction = database.transaction
@@ -201,6 +203,8 @@ def test_commit_response_loss_is_confirmed_once_and_not_reexecuted(database, mon
     assert worker.diagnostics()[0]['state'] == 'succeeded'
     assert len(worker.attempts(identity)) == 1
     assert len(reader(database).query(target_type='entries', action='create')) == 1
+    telemetry.record.assert_called_once()
+    assert telemetry.record.call_args.kwargs['failure_code'] is None
 
 
 def test_schedule_catchup_pause_resume_and_concurrent_ticks(database):

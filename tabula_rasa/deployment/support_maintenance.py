@@ -6,7 +6,6 @@ import re
 
 from tabula_rasa.deployment import release
 from tabula_rasa.deployment.smoke import access_mode
-from tabula_rasa.deployment.staging_maintenance import recovery_checkpoint, suspended_service
 from tabula_rasa.infrastructure.postgres.hosted import open_alpha_database
 from tabula_rasa.infrastructure.postgres.migrations import head_revision, upgrade
 
@@ -16,6 +15,26 @@ SERVICES = {
     'development': ('srv-db45ejjtqb8s73e536a0', 'https://tabula-rasa-development.onrender.com'),
     'staging': ('srv-db45q43bc2fs73aniv1g', 'https://tabula-rasa-staging.onrender.com'),
 }
+
+
+def recovery_checkpoint(environ):
+    checkpoint = environ.get('MAINTENANCE_RECOVERY_SHA256', '')
+    if not isinstance(checkpoint, str) or not re.fullmatch('[0-9a-f]{64}', checkpoint) or checkpoint == '0' * 64:
+        raise ValueError('An operator-verified private recovery checkpoint record is required.')
+    return checkpoint
+
+
+def suspended_service(environ, *, read=None):
+    read = read or release.api
+    service = environ['RENDER_SERVICE_ID']
+    token = environ['RENDER_API_KEY']
+    state = read('/services/' + service, token)
+    if state.get('id') != service or state.get('suspended') != 'suspended':
+        raise ValueError('The exact service must remain suspended during maintenance.')
+    deployments = read('/services/' + service + '/deploys?limit=100', token)
+    pending = {'created', 'queued', 'build_in_progress', 'update_in_progress', 'pre_deploy_in_progress'}
+    if any(item['deploy']['status'] in pending for item in deployments):
+        raise ValueError('A deployment is in progress; inspect before maintenance.')
 
 
 def validate_scope(environ):

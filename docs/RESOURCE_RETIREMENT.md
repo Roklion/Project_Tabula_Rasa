@@ -14,7 +14,12 @@ The offline inventory validator, exact-target preview and manual execution
 procedure are implemented. One exact synthetic development checkpoint set was
 separately approved and manually deleted by the operator; [execution and
 bounded postchecks](operations/RETIREMENT_EXECUTION_2026-10-20.md) record its scope.
-No other deletion or retention-policy change is approved or executed.
+[#339's owner-directed closure](https://github.com/Roklion/Project_Tabula_Rasa/issues/339#issuecomment-6300537453)
+records subsequent owner-reported housekeeping separately from that verified
+execution. Those reports do not establish target-by-target postchecks or complete
+inventory coverage. Reopen #339 for further exact-resource inventory/disposition;
+unreviewed resources remain retained/deferred. No blanket deletion or retention
+policy change follows from issue closure.
 The [inventory and disposition table](operations/RESOURCE_INVENTORY.md)
 and [machine inventory](operations/resource-inventory.json) cover the relevant
 resource families and known safe identifiers as of October 19, 2026 Eastern.

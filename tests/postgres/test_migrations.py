@@ -166,3 +166,20 @@ def test_operator_cli_readiness_and_successful_explicit_downgrade(empty_database
     monkeypatch.setattr("sys.argv", ["postgres", "downgrade", "--revision", "base", "--allow-destructive"])
     assert main() == 1
     assert "forward" in capsys.readouterr().out.lower()
+
+
+def test_operations_forward_upgrade_preserves_two_business_ledgers(empty_database):
+    from alembic import command
+    from tabula_rasa.infrastructure.postgres.migrations import migration_config
+    from tests.postgres.core_support import seed_core, expense
+
+    with empty_database.engine.begin() as connection:
+        command.upgrade(migration_config(connection), '0012_operations')
+    alpha, beta = seed_core(empty_database)
+    records = [alpha.transactions.create(transaction_id='existing-a', **expense()),
+               beta.transactions.create(transaction_id='existing-b', **expense(amount='22.22'))]
+    upgrade(empty_database)
+    assert empty_database.health()['revision'] == head_revision()
+    assert alpha.transactions.list() == [records[0]]
+    assert beta.transactions.list() == [records[1]]
+    assert alpha.periods.list() == beta.periods.list() == {'enabled': False, 'items': []}
