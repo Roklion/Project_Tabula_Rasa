@@ -374,8 +374,11 @@ This setting requires named-user mode and rejects synthetic fixture access. It
 does not load a source, create ownership, stage a grant or activate authority.
 Startup checks all configured claims, authority/source/database/document bindings
 and the schema head before serving. Each configured profile must have a connected
-Google Drive record matching its organization, entity, profile and folder, with
-readable encrypted grant material that can compose the scoped document adapter.
+document connection matching its organization, entity and profile, with readable
+encrypted grant material that can compose the scoped document adapter. Drive
+connections must match the accepted folder. An explicitly adopted S3 connection
+takes precedence under the existing managed-storage rules; startup validates that
+effective connection and never falls back to Drive when it is unavailable.
 This local startup check makes no provider requests; live provider access still
 requires the separate deployment verification. Requests reuse the existing migrated service
 owner, which rechecks the selected entity and organization. Workspace bootstrap

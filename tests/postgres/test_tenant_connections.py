@@ -70,6 +70,34 @@ def test_migrated_startup_validates_scoped_connected_grants_without_provider_io(
         validate(beta)
 
 
+@pytest.mark.parametrize('failure', [None, 'disconnected', 'missing_grant'])
+def test_migrated_startup_uses_effective_s3_connection_without_drive_fallback(database, tmp_path, failure):
+    from tabula_rasa.infrastructure.postgres.managed_documents import install_managed_connection
+    repo, manager, secrets, calls, alpha, beta, refs, session = fixture(database, tmp_path)
+    reference = secrets.put(dict(environment='test', organization_id=alpha.organization_id, entity_id='alpha',
+        provider='s3', profile_key='alpha', scope_key='managed-alpha', synthetic_token='fake-managed-alpha'))
+    with database.transaction() as connection:
+        install_managed_connection(connection, 'alpha', 'managed-alpha', organization_id=alpha.organization_id,
+                                   profile_key='alpha', secret_ref=reference, expected_revision=0)
+        if failure == 'disconnected':
+            connection.execute(text("UPDATE external_connections SET status='disconnected' WHERE provider='s3'"))
+    if failure == 'missing_grant':
+        (tmp_path / (reference + '.grant')).unlink()
+    def validate(ctx):
+        manager.validate_migrated_binding(organization_id=ctx.organization_id, entity_id=ctx.entity_id,
+            profile_key=ctx.entity_id, scope_key='folder-' + ctx.entity_id)
+    if failure:
+        with pytest.raises(IdentityError, match='unavailable'):
+            validate(alpha)
+        assert calls == []
+    else:
+        validate(alpha)
+        assert calls == [('alpha', 'fake-managed-alpha')]
+    assert manager.document_store(alpha).store_kind == 's3'
+    validate(beta)
+    assert calls[-1] == ('beta', 'fake-refresh-beta')
+
+
 def test_two_org_grants_restart_disconnect_reconnect_and_no_exported_tokens(database, tmp_path):
     repo, manager, secrets, calls, alpha, beta, refs, session = fixture(database, tmp_path)
     cached = manager.document_store(alpha)

@@ -36,14 +36,20 @@ class PostgresConnections:
             row = self._row(connection, context)
             return ConnectionStatus(status=row['status'], revision=row['revision']) if row else ConnectionStatus()
 
+    @classmethod
+    def _document_row(cls, connection, context):
+        row = cls._row(connection, context, provider='s3')
+        return cls._row(connection, context) if row is None else row
+
     def validate_migrated_binding(self, *, organization_id, entity_id, profile_key, scope_key):
         """Operator startup check; request access still requires fresh membership."""
         from types import SimpleNamespace
         context = SimpleNamespace(organization_id=organization_id, entity_id=entity_id)
         with identity_operation(self.database, read_only=True) as connection:
-            row = self._row(connection, context)
+            row = self._document_row(connection, context)
             if (row is None or row['status'] != 'connected'
-                    or row['profile_key'] != profile_key or row['store_scope_key'] != scope_key):
+                    or row['profile_key'] != profile_key
+                    or row['provider'] == 'google_drive' and row['store_scope_key'] != scope_key):
                 raise IdentityError('unavailable')
             return dict(row)
 
@@ -61,9 +67,7 @@ class PostgresConnections:
         """Explicit managed binding wins; disconnected managed storage never falls back."""
         with identity_operation(self.database, read_only=True) as connection:
             authorized_entity(connection, context, 'read')
-            row = self._row(connection, context, provider='s3')
-            if row is None:
-                row = self._row(connection, context)
+            row = self._document_row(connection, context)
             return dict(row) if row else None
 
     def change(self, context, *, authenticated_at, expected_revision, connect, validate):
