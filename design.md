@@ -37,7 +37,7 @@ intent rather than duplicate those guides.
 **Current behavior:** The Streamlit composition refuses a profile configured
 for bookkeeping maintenance or PostgreSQL before initializing its Sheet.
 Backend activation is an operator procedure documented in
-[Bookkeeping acceptance and cutover](docs/BOOKKEEPING_CUTOVER.md); no backend
+[Bookkeeping acceptance and cutover](docs/accounting/CUTOVER.md); no backend
 picker or commercial authorization flow is added to the Streamlit interface.
 
 ## Product character
@@ -277,7 +277,7 @@ expose a raw traceback for this configuration failure.
 
 ## Commercial shell
 
-**Current behavior — tenant Google connections (#318/#319):** Named Owners see
+**Current behavior — tenant Google connections :** Named Owners see
 a Google Drive connection section within Data & backup for the selected
 business. It shows safe status and explicit confirmed Connect/Reconnect/
 Disconnect actions, requires fresh login, and explains operator provisioning
@@ -289,7 +289,7 @@ Existing local Account settings remains under its loopback flag/password gate,
 with unlock tied to the current application-password configuration; commercial
 membership and claimed profile IDs do not unlock that interface.
 
-**Current behavior** for the #311/#312 opt-in named-user foundation:
+**Current behavior** for the opt-in named-user foundation:
 
 - Pending identity displays a loading state before any private feature is
   mounted. Missing/expired/revoked identity offers Sign in through the hosted
@@ -315,7 +315,7 @@ membership and claimed profile IDs do not unlock that interface.
   a reload during storage outage can obtain logout-only CSRF through a same-origin
   read. Network failure remains visible and does not claim cookie clearing.
   Read-only and setup users can inspect identity and sign out without ledger
-  write permission. [Named-user authentication](docs/NAMED_USER_AUTH.md) owns the
+  write permission. [Named-user authentication](docs/identity/AUTHENTICATION.md) owns the
   operator settings, session policy and remaining release gates.
 - Named users can switch among server-authorized workspace / business choices.
   Workspace and role labels use server claims. Confirmed switching discards
@@ -327,11 +327,11 @@ membership and claimed profile IDs do not unlock that interface.
   protection. Ownership grants require a separate confirmation and recent login.
   Recipient-bound invitation credentials appear once for private distribution;
   authenticated acceptance/decline is also available without a selected business.
-  [Workspace lifecycle](docs/WORKSPACE_LIFECYCLE.md) owns the exact security and
-  retry contract. #317 retains full first-use browser onboarding; #316 supplies
+  [Workspace lifecycle](docs/identity/WORKSPACES.md) owns the exact security and
+  retry contract. First-use browser onboarding retains its own contract; the bootstrap service supplies
   its transactional backend without adding a separate profile configuration UI.
 
-**Current behavior** for the #277/#278/#279/#280/#281/#282/#283/#286 technical-alpha application:
+**Current behavior** for the technical-alpha application:
 
 - The React shell uses the visual tokens, typography and approximately 760px
   stacking boundary above. Navigation covers Dashboard, Transactions, Assets,
@@ -341,12 +341,12 @@ membership and claimed profile IDs do not unlock that interface.
   context is identified as technical-alpha development. This shell does not
   expose internal profile keys, workbook metadata, Google credentials or local
   administration controls as commercial authorization.
-- #279's hosted development/staging mode protects the shell, assets and API
+- Hosted development/staging mode protects the shell, assets and API
   with an environment-specific browser HTTP Basic prompt over HTTPS. It retains
   one fixed synthetic business; the gate grants operator access, not commercial
   membership. Minimal health/version probes are public. Production rejects this
-  synthetic mode; #222 owns real login and session behavior. Hosted setup and
-  acceptance remain subject to the [operator checkpoint](docs/COMMERCIAL_DEPLOYMENT.md).
+  synthetic mode; named authentication owns real login and session behavior. Hosted setup and
+  acceptance remain subject to the [operator checkpoint](docs/operations/DEPLOYMENT.md).
 - Dashboard and Reports show service-calculated profit/loss, balance-sheet
   sections, current earnings, the accounting-equation check and clearly labeled
   all-date account balances. Their From/To inputs govern the period/as-of date.
@@ -369,7 +369,7 @@ membership and claimed profile IDs do not unlock that interface.
   Amounts, dates and receipt contents are outside text search. Journal posting
   rows show Debit/Credit with no independent mutation action. Derived transactions
   retain their source owner. Other scoped routes retain availability states;
-  Mileage retains the #280 existing-record editor. No internal-edition workflow
+  Mileage retains the existing-record editor. No internal-edition workflow
   is removed or replaced.
 - Shared loading, empty, validation, conflict, unexpected-error and success
   states use text plus semantic status/alert roles. Conflicts preserve drafts
@@ -387,7 +387,7 @@ membership and claimed profile IDs do not unlock that interface.
 - Context changes remount private queries and drafts; no prior business/session
   cache is reused. Forms stack; tables may scroll within their own region.
   Keyboard focus, labels and business scope remain reachable at 320 CSS pixels.
-- #287 uses one native modal confirmation component for discard, navigation,
+- Browser workflows use one native modal confirmation component for discard, navigation,
   business switching, record reload and destructive confirmations. The keep
   action receives initial focus, Tab/Shift+Tab wrap within the prompt, Escape
   keeps the draft, and dismissal restores the initiating control when it remains
@@ -397,7 +397,7 @@ membership and claimed profile IDs do not unlock that interface.
   blocked navigation keeps its initiating link available. Declared top-level
   validation errors are associated with their labeled fields and generic messages.
 
-**Current behavior — shared commercial visual foundation (#325):** The React
+**Current behavior — shared commercial visual foundation :** The React
 stylesheet owns the shared type roles and spacing grid above, with the approved
 commercial palette below. Primary surfaces use 16px padding. Native single-line
 controls have a 40px minimum on desktop with a fine pointer and 44px on touch or
@@ -414,10 +414,10 @@ row headers, use ordinary weight; column headings retain emphasis. Financial
 values use tabular numerals, and Accounts aligns the opening-balance heading
 with its values. Shared metrics use 28px values and ordinary labels. These are
 foundations for later page slices, not completion of the full design epic.
-The compact [requirement/implementation audit](docs/COMMERCIAL_UI_FOUNDATIONS.md)
+The compact [requirement/implementation audit](docs/browser/UI_COMPONENTS.md)
 records commercial/Streamlit conflicts, reuse owners, hooks and visual evidence.
 
-**Current behavior — light Soft workspace (#331, owner-selected direction):**
+**Current behavior — light Soft workspace (owner-selected direction):**
 The commercial app stays light even when the operating system prefers dark.
 This explicitly replaces the earlier commercial neutral palette; the internal
 Streamlit palette above retains its own owner.
@@ -451,16 +451,16 @@ The ledger displays transaction type and source as separate pills (for example,
 Expense and Mixed-use), with the existing combined accessible row name. Mileage
 keeps 16px between Download filtered mileage CSV and the log table. Semantic
 success/error/warning colors and all bookkeeping/state owners remain unchanged.
-The [integrated acceptance record](docs/COMMERCIAL_UI_ACCEPTANCE.md) tracks the
+The [integrated acceptance record](docs/browser/VISUAL_REVIEW.md) tracks the
 selected direction, exact-candidate evidence and separate manual/release gates.
 
-**Current behavior — commercial core presentation (#326–#328, EPIC #323 / initiative #124):**
-Issue #401 extends the existing shared shell and presentation owners. Independent
+**Current behavior — commercial core presentation :**
+Independent
 page sections use the 32px spacing token, including sections following explanatory
 text or an action row. Sidebar context controls stay within the available width;
 the selected business's full name remains visible above the selector. The top bar
 identifies Workspace & members rather than displaying a generic Page placeholder.
-The business-first replacement names and selector retain #386–#388 ownership.
+The business-first replacement names and selector require their own selected-release verification.
 
 Transactions and Mileage share an accessible Show filters / Hide filters button.
 The header keeps a short active-scope summary visible while collapsed. Collapsing
@@ -476,8 +476,8 @@ Membership/ownership commands report confirmed success, retain safe rejection
 feedback, and stop resubmission after an uncertain outcome with reload guidance.
 There are no automatic mutation retries. Existing authorization, reauthentication,
 loaded-version and last-owner checks retain their owners. Final business-specific
-membership/onboarding acceptance still requires #386–#388; see the
-[follow-up record](docs/COMMERCIAL_UI_FOLLOWUP_401.md).
+membership/onboarding acceptance still requires selected-release verification; see the
+[follow-up record](https://github.com/Roklion/Project_Tabula_Rasa/issues/401).
 
 The shell marks the current main destination with weight and a leading rule as
 well as color. Transactions remains the current main workflow for Journals,
@@ -521,11 +521,11 @@ memos wrap; ordinary rows stay normal weight. Each journal has one parent/group
 with subordinate Debit/Credit postings and no posting mutation actions.
 Ordinary Edit/Receipts controls use short visible labels and complete record
 labels for assistive technology; source-owned rows retain their owner links.
-[UI foundations](docs/COMMERCIAL_UI_FOUNDATIONS.md) records the reuse map and
-synthetic before/after evidence. #331 integrated acceptance, #222 identity/onboarding
-and #288 hosted/device gates remain separate.
+[UI foundations](docs/browser/UI_COMPONENTS.md) records the reuse map and
+synthetic before/after evidence. Integrated visual review, identity/onboarding
+and hosted/device verification remain separate.
 
-**Current behavior — commercial forms and secondary presentation (#329/#330):**
+**Current behavior — commercial forms and secondary presentation :**
 Create and protected-edit routes share labeled field groups, two related desktop
 columns that stack at 760px, multiline memo/notes controls, decimal keyboard
 hints and native listboxes with selection guidance and full selected labels.
@@ -558,15 +558,14 @@ users. Browser backup remains outside this slice; absent workflows are not shown
 as disabled controls or promised as a release.
 The integrated named-user signed-out, session-unavailable and setup-required
 surfaces also share headers, surfaces and Sign in/Sign out actions, while their
-identity, private-view unmount and receipt-abort behavior retains the #312 owner.
-The [route inventory and evidence](docs/COMMERCIAL_UI_FOUNDATIONS.md#wave-2-forms-and-secondary-routes-329330)
-records all current commercial routes and accepted exclusions. #314/#317 own
-future identity/onboarding integration, #331 integrated visual acceptance and
-#288 hosted/provider/device acceptance.
+identity, private-view unmount and receipt-abort behavior retains the authentication boundary.
+The [route inventory and evidence](docs/browser/UI_COMPONENTS.md#forms-confirmation-and-feedback)
+records all current commercial routes and accepted exclusions. Identity/onboarding, integrated visual review and hosted/provider/device
+verification retain separate component contracts.
 
-[Foundation conventions](docs/COMMERCIAL_FOUNDATION.md) owns technical contracts.
-[Commercial concurrency](docs/COMMERCIAL_CONCURRENCY.md) owns the #280 contract.
-**Current behavior** added by #283/#286: Mileage has a complete manual log,
+[Foundation conventions](docs/browser/FOUNDATION.md) owns technical contracts.
+[Commercial concurrency](docs/browser/CONCURRENCY.md) owns the loaded-baseline contract.
+**Current behavior** for mileage and receipts: Mileage has a complete manual log,
 inclusive date/any-tag filtering, scoped totals/CSV, one-way/round-trip creation
 and fresh detail routes reusing the protected editor. Ordinary saved transactions
 link to receipt management with portable metadata inspection, same-origin
@@ -577,7 +576,7 @@ unreferenced receipts before selecting unconfirmed files again.
 Confirmed unlink removes only the reference; unreferenced files can be relinked.
 Read-only users can inspect/download;
 unconfigured document storage shows availability text without upload controls.
-Source-owned receipt workflows stay with their owners. The #359/#361/#363 ports
+Source-owned receipt workflows stay with their owners. The financial CSV, source-receipt and Maps workflows
 add complete-entry **Export selected**, transactions/journal-postings CSVs on
 Data & backup, mixed-use source receipts and optional Maps lookup/routing.
 Mixed-use receipt changes carry the separately loaded source baseline and share
@@ -587,18 +586,18 @@ distance confirmation updates the editable draft, and only Save persists it.
 Round-trip directions are calculated independently; failures preserve manual
 entry. Optional lookup fields share the light two-column field grid; route
 guidance, calculation and failure messages span its full width before editable
-mileage and stack with the fields on narrow screens. [Workflow ports](docs/COMMERCIAL_WORKFLOW_PORTS.md) owns these contracts.
-Transaction and QuickBooks mileage imports, copy, bulk and Expense-to-recurring conversion are also available under #357/#358/#362/#364. [Commercial mileage and receipts](docs/COMMERCIAL_MILEAGE_RECEIPTS.md)
+mileage and stack with the fields on narrow screens. [Workflow ports](docs/browser/IMPORTS_EXPORTS_AND_INTEGRATIONS.md) owns these contracts.
+Transaction and QuickBooks mileage imports, copy, bulk and Expense-to-recurring conversion are also available through their existing domain services. [Commercial mileage and receipts](docs/browser/MILEAGE_AND_RECEIPTS.md)
 owns this slice's transport, recovery and validation contract.
-[Commercial core workflows](docs/COMMERCIAL_WORKFLOWS.md) owns #281/#282 scope.
-#222 adds authenticated identity/membership context selection,
-[Secondary workflows](docs/COMMERCIAL_SECONDARY_WORKFLOWS.md) delivers #284/#285.
-[Browser quality](docs/COMMERCIAL_BROWSER_QUALITY.md)
-documents #287's completed automated baseline. [Technical alpha](docs/TECHNICAL_ALPHA.md)
+[Commercial core workflows](docs/browser/BOOKKEEPING.md) owns core workflow contract.
+Named identity supplies authenticated identity/membership context selection,
+[Secondary workflows](docs/browser/RECURRING_AND_ASSETS.md) delivers recurring, mixed-use and asset workflows.
+[Browser quality](docs/browser/TESTING.md)
+documents the automated browser baseline. [Technical alpha](docs/browser/RELEASE_VALIDATION.md)
 defines the release/routing matrix and outstanding hosted receipt configuration,
 staging, rollback and manual-device gates; no internal workflow is retired.
 The default hosted synthetic runtime can bind the existing receipt UI through
-the explicit server-only [Drive file configuration](docs/ALPHA_DOCUMENT_STORAGE.md).
+the explicit server-only [Drive file configuration](docs/storage/STAGING_RECEIPTS.md).
 Absent configuration retains the availability screen; invalid supplied bindings
 stop startup. No credential controls or Google authorization routes are added to
 the commercial browser.
@@ -607,7 +606,7 @@ edition.
 
 ## Commercial first-use setup
 
-**Current behavior** for #317 on the #222 named-user runtime:
+**Current behavior** for first-use onboarding on the named-user runtime:
 
 - Sign-in explains provider account creation and invited-account login. Users
   without an active business choose start fresh, join an invitation, or existing
@@ -628,18 +627,18 @@ edition.
   private credential is pasted after login and never included in a link.
   Confirmed acceptance also signals peer tabs to clear stale setup or ledger scope.
 - Invitations are optional and available through the supported private delivery
-  flow; external connections are optional through Data & backup (#318). Existing live
-  migration requires the explicit operator #258/#303 process. First-use setup
+  flow; external connections are optional through Data & backup . Existing live
+  migration requires the explicit operator cutover process. First-use setup
   does not import or claim existing Sheets books.
 - Shared tokens, controls, labels and touch targets support narrow screens and
   keyboard operation. This local implementation does not grant external-beta or
-  hosted acceptance under #320/#321/#224.
+  security, hosted-provider and external-release acceptance.
 
-[Workspace lifecycle](docs/WORKSPACE_LIFECYCLE.md) owns setup recovery and deployment.
+[Workspace lifecycle](docs/identity/WORKSPACES.md) owns setup recovery and deployment.
 
 ## Page headers, workflow groups, and messages
 
-**Current behavior — existing workflow ports (#357/#358/#362/#364):** Data &
+**Current behavior — existing workflow ports :** Data &
 backup contains separate Tabula Rasa CSV, QuickBooks transaction and QuickBooks
 mileage uploaders, scoped to the selected business. Uploaders require read, write
 and import access (Owner, Admin or Accountant); Editor access alone is insufficient.
@@ -659,7 +658,7 @@ IDs/baselines, ordinary Copy transaction and confirmed Category/Payee/Tag change
 or eligible permanent deletion. Copy starts with a new identity, active Tags,
 exactly one source memo suffix and no receipts or recurring ownership. Journal
 selections and mixed-use/depreciation projections disable generic mutations;
-selected CSV export remains #359. Filter/search/sort changes clear selection.
+selected CSV export uses the financial CSV export contract. Filter/search/sort changes clear selection.
 Bulk mutation validates the entire selection before an atomic PostgreSQL write;
 untouched fields remain unchanged. Entering Bulk mode loads baselines and refreshes
 the displayed ledger before enabling selection; a failed refresh prevents entry.
@@ -672,10 +671,10 @@ Expense offers Make recurring, loading a fresh baseline and the existing schedul
 fields; confirmation creates a schedule around the existing initial Expense rather
 than duplicating it. Prefilled copies require confirmed cancellation even without
 edits. Confirmed copy/conversion completion closes that mutation surface.
-[Commercial import, copy and bulk workflows](docs/COMMERCIAL_WORKFLOW_PORTS.md)
-owns formats, failure behavior, transport, validation and #288/#303 boundaries.
+[Commercial import, copy and bulk workflows](docs/browser/IMPORTS_EXPORTS_AND_INTEGRATIONS.md)
+owns formats, failure behavior, transport, validation and alpha and live-owner boundaries.
 
-**Current behavior — commercial secondary workflows (#284/#285):** Transactions
+**Current behavior — commercial secondary workflows (recurring, mixed-use and asset workflows):** Transactions
 links to Mixed-use expenses and Recurring expenses. Mixed-use source creation,
 editing and confirmed deletion preserve the stable source/projection pair; a
 service-calculated Ledger result previews allocation. Incomplete relationships
@@ -687,18 +686,18 @@ Generate due occurrences is an explicit confirmed command. Commercial page
 loads never reconcile recurring schedules; the internal edition's on-load
 behavior below remains specific to Streamlit.
 
-With the entity's durable-worker authority explicitly enabled under #334,
+With the entity's durable-worker authority explicitly enabled under the recurring-job policy,
 Generate due occurrences queues the same bounded schedule jobs as the timer.
 The result states the queued schedule count and directs the user to refresh
 later for occurrences/attention. Otherwise it retains synchronous generated and
 attention counts. The worker uses the approved business time zone and cannot
-generate future business dates. [Jobs operations](docs/OPERATIONS_JOBS_AUDIT.md)
+generate future business dates. [Jobs operations](docs/operations/JOBS_AND_AUDIT.md)
 owns activation/catchup/rollback; page visits remain read-only.
 
-Opt-in PostgreSQL monthly locks (#336) reject prohibited accounting mutations
+Opt-in PostgreSQL monthly locks  reject prohibited accounting mutations
 with a safe conflict and guidance to reverse in an open month or request Owner
 unlock. Draft/baseline behavior remains unchanged. The narrow authorized
-close/unlock/reversal API is documented in [accounting periods](docs/ACCOUNTING_PERIODS.md);
+close/unlock/reversal API is documented in [accounting periods](docs/accounting/PERIODS_AND_CORRECTIONS.md);
 no broad administrative screen is included. Source-owned accounting retains its
 existing workflows and stricter history rules. Streamlit/Sheets remains unchanged.
 
@@ -712,7 +711,7 @@ Completed explicit commands require returning to the list for a fresh editor.
 Detail visits wait for a fresh read before opening an editor; later background
 read failures preserve its loaded draft and baseline. Read-only views expose
 saved terms without mutation controls.
-[Commercial secondary workflows](docs/COMMERCIAL_SECONDARY_WORKFLOWS.md) owns
+[Commercial secondary workflows](docs/browser/RECURRING_AND_ASSETS.md) owns
 scope, recovery and release boundaries.
 
 Page headers state the page purpose and place its primary workflow actions
@@ -1425,7 +1424,7 @@ zero-amount quarters when rounding or an override produces zero. The category
 is the expense debit and the account is the accumulated depreciation credit.
 P&L includes the expense, the balance sheet reduces asset value and current
 earnings equally, and cash/bank balances do not change. This workflow is fully
-available in Simple Ledger and has no dependency on #169 or a multi-line journal.
+available in Simple Ledger and has no dependency on a separate multi-line-journal workflow.
 Calculating a schedule or rerunning the application never posts depreciation.
 
 Each generated row stores `source_type=depreciation`, `source_id=<asset ID>`,
@@ -1563,7 +1562,7 @@ dependency is implied for cloud-native backup.
 and typed API, separately authorized by expiring organization/environment grants.
 It exposes bounded metadata and read-only audit inspection, plus preview/confirm
 access containment. It adds no customer navigation or remote Account settings
-clone. See [Support operations](docs/SUPPORT_OPERATIONS.md). Tenant membership,
+clone. See [Support operations](docs/operations/SUPPORT.md). Tenant membership,
 selected business and legacy local administration do not grant support authority.
 
 ### Account settings
@@ -1749,7 +1748,7 @@ not a PR or agent-review procedure; repository review rules belong in
 AGENTS.md and .gemini/styleguide.md.
 
 
-**Current behavior — commercial file selection (#331):** Receipt and import
+**Current behavior — commercial file selection :** Receipt and import
 inputs share a labeled drop zone with a styled native Choose file(s) control.
 Keyboard users retain the native file chooser. A single-file importer refuses
 a multi-file drop; disabled workflows ignore drops. File-type/size validation,

@@ -84,7 +84,7 @@ class PostgresReceiptRepository(EntityRepository):
         self.expected_source = expected_source
 
     def for_mixed_use(self, source_id, *, expected_source):
-        """Bind source-aware receipt mutations for #248 without editing its pair."""
+        """Bind receipt mutations to a mixed-use source without editing its projection."""
         return type(self)(self.database, self.entity_id, store_kind=self.store_kind,
                           store_scope_key=self.store_scope_key,
                           source_id=clean_text(source_id, 'Mixed-use source', required=True),

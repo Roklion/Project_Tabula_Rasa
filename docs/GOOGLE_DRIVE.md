@@ -8,7 +8,7 @@ same profile OAuth grant authorizes both APIs. See
 
 The HTTP technical-alpha runtime uses the same Drive client with a separately
 authorized synthetic profile and storage root. Follow
-[Hosted synthetic receipt storage](ALPHA_DOCUMENT_STORAGE.md) for its explicit
+[Hosted synthetic receipt storage](storage/STAGING_RECEIPTS.md) for its explicit
 server secret-file loader and read-only preflight. Streamlit Secrets export does
 not configure the Render API runtime.
 

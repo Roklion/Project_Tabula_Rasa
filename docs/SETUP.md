@@ -129,10 +129,10 @@ duplicate-submission protection are scoped to the selected profile.
 
 ## Optional Google Drive, Maps, and recovery settings
 
-For receipts and cloud-native backups, connect the selected profile to a human
-Google account and provision its Drive storage root, Receipts child, and
-Ledger Backups child. Sheets and Drive use the same profile OAuth grant. Follow [Google Drive](GOOGLE_DRIVE.md) for the complete OAuth and
-Picker procedure.
+For receipts and cloud-native backups, connect the selected profile to a human Google
+account and provision its Drive storage root, Receipts child, and ledger Backups child.
+Sheets and Drive use the same profile OAuth grant. Follow [Google
+Drive](GOOGLE_DRIVE.md) for the complete OAuth and Picker procedure.
 
 Google address suggestions and automatic route mileage require paid,
 app-wide Maps Platform configuration, two separately restricted API keys,

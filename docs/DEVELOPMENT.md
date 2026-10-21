@@ -22,80 +22,50 @@ that interpreter is unavailable.
 
 The optional PostgreSQL development runtime, migration policy, environment
 variables, and real-database test setup are documented in
-[PostgreSQL development and operations](POSTGRESQL.md). Development dependencies
+[PostgreSQL development and operations](database/POSTGRESQL.md). Development dependencies
 include the database tools; the Sheets runtime does not require them or a DB URL.
 
-## Commercial web/API development
+## Browser/API development
 
-[Document storage and recovery](DOCUMENT_STORAGE_RECOVERY.md) covers #337/#338's
-Drive-first runtime, private byte backup/offline verification and isolated
-Drive/PostgreSQL recovery under #223/#124. No AWS setup or S3 SDK is required.
-Optional object adoption/customer Drive self-service belongs to #382; selected
-Drive hosted evidence and release acceptance remain separate from synthetic tests.
+[ADR 0002](adr/0002-commercial-web-runtime.md) defines the React/FastAPI stack. [Runtime
+development](browser/RUNTIME.md) covers Python 3.12/Node 24, package ownership,
+Vite/API/PostgreSQL topology and generated API contracts. [Foundation
+conventions](browser/FOUNDATION.md) describes request context, safe errors, query/cache
+ownership and shared forms. Application services own business rules; transport code must
+not duplicate them.
 
-[ADR 0002](adr/0002-commercial-web-runtime.md) selects the commercial browser,
-HTTP and deployment stack under #276/#221/#124. Follow
-[Commercial web development and deployment](COMMERCIAL_WEB.md) for the
-`tabula_rasa/http/` and `web/` package contract, Python 3.12/Node 24 tooling,
-local Vite -> API -> PostgreSQL topology, OpenAPI/client generation, environment
-separation and #279's provider/secret/persistent-staging checkpoint. #277/#278
-now supply runnable local foundations; [Foundation conventions](COMMERCIAL_FOUNDATION.md)
-covers transport/context contracts, cache/form ownership and focused validation.
-The #279 image/workflows/gate are implemented; [Technical deployment](COMMERCIAL_DEPLOYMENT.md)
-owns the exact provider/secret checkpoint, ordered migration, smoke and rollback
-procedure. #279 records hosted acceptance; [Technical alpha](TECHNICAL_ALPHA.md)
-owns #288's staged core workflow matrix, browser release gate, rollback rehearsal,
-remaining hosted/manual prerequisites and Streamlit retirement boundary.
-[Authenticated rollout](AUTHENTICATED_ROLLOUT.md) covers #321's explicit hosted
-access mode, named promotion smoke, operator provider/rehearsal checkpoint and
-handoff. [#321](https://github.com/Roklion/Project_Tabula_Rasa/issues/321) owns
-current hosted results and remaining acceptance, separate from repository tests.
+[Deployment](operations/DEPLOYMENT.md) covers explicit environment and secret
+configuration, schema migration, image promotion, smoke checks and rollback. [Hosted
+identity rollout](identity/HOSTED_ROLLOUT.md) verifies real provider configuration and
+named sessions. [Release validation](browser/RELEASE_VALIDATION.md) defines the selected
+workflow matrix and Streamlit retirement boundary. Synthetic tests do not replace hosted
+acceptance or operator approval.
 
-[#340 incident response](INCIDENT_RESPONSE.md), [secret custody/rotation](SECRETS_OPERATIONS.md)
-and the [controlled staging drill](INCIDENT_DRILL.md) coordinate existing tools
-under #223. Retain sanitized observed evidence and explicit gaps; #298's human
-commercial recovery acceptance and #224's release decisions remain separate.
+[Identity](identity/AUTHENTICATION.md) and [authorization](identity/AUTHORIZATION.md)
+own session and membership boundaries. [Protected forms](browser/CONCURRENCY.md) carry
+loaded baselines into mutations. [Imports and
+integrations](browser/IMPORTS_EXPORTS_AND_INTEGRATIONS.md) and
+[recurring/assets](browser/RECURRING_AND_ASSETS.md) reuse those owners. Generation and
+depreciation posting are explicit commands; page loads remain read-only. Durable
+execution belongs to [jobs](operations/JOBS_AND_AUDIT.md).
 
-[#339 resource retirement](RESOURCE_RETIREMENT.md) provides a sanitized desk
-inventory, fail-closed offline preview and exact-target manual approval/post-check
-procedure under #223/#124. Its [bounded execution record](operations/RETIREMENT_EXECUTION_2026-10-20.md)
-covers only the approved target set; #339 records broader retained/deferred
-inventory and owner-reported outcomes. Every later set needs its own current
-preview and exact approval. The tooling preserves #261 source artifacts, #294 indefinite NAS retention and
-#377 D4/D7 recovery ownership. It adds no alpha or owner-cutover activation gate.
+[Receipt storage and recovery](storage/RECEIPT_RECOVERY.md) uses Drive and PostgreSQL;
+normal operation requires no AWS setup or S3 SDK. Optional managed storage requires a
+separate provider-adoption decision. Verify real grant/folder and Maps key restrictions
+before live use.
 
-[Identity ADR 0003](adr/0003-commercial-identity-and-tenancy.md) and
-[Commercial identity](COMMERCIAL_IDENTITY.md) freeze #310's provider, session,
-role and tenant-context contract for #311–#321. They are implementation/setup
-contracts; named identity and hosted tenant acceptance are not delivered by
-that documentation change.
+[Incident response](operations/INCIDENT_RESPONSE.md), [secret
+operations](operations/SECRETS.md), [support operations](operations/SUPPORT.md) and
+[controlled drills](operations/INCIDENT_DRILLS.md) define reusable operator procedures.
+Keep actual outcomes and gaps in approved evidence custody. [Resource
+retirement](operations/RESOURCE_RETIREMENT.md) requires a fresh private inventory and
+exact-target approval; preserve frozen sources, indefinite NAS retention and recovery
+obligations.
 
-The HTTP runtime reuses application services and PostgreSQL adapters. Preserve
-the server-side #222 membership/context seam, #280 loaded-baseline form contract,
-and #223 health/request/job seams. Keep ordinary development and tests synthetic;
-the current Streamlit/Sheets setup and validation gates continue to apply.
-The [retirement inventory in issue #377](https://github.com/Roklion/Project_Tabula_Rasa/issues/377) records
-capability/caller ownership, eligible cleanup and concrete deferred conditions.
-Retain independent adapter/transport tests while both modes are supported;
-[CI suite ownership](CI_TEST_SUITES.md) remains #376's execution contract.
-
-[Existing workflow ports](COMMERCIAL_WORKFLOW_PORTS.md) documents
-#357/#358/#362/#364's transaction/mileage imports, ordinary copy/bulk and
-mixed-use copy/Expense conversion, their service reuse and scoped validation.
-
-[Secondary workflows](COMMERCIAL_SECONDARY_WORKFLOWS.md) covers #284 recurring/
-mixed-use and #285 assets/depreciation. Their native browser/API coverage extends
-the existing compiled-app/disposable-PostgreSQL fixture. Generation and posting
-are explicit commands; page loads remain read-only and #223 retains durable jobs.
-
-The existing-functionality ports #359/#361/#363 are documented in
-[Commercial workflow ports](COMMERCIAL_WORKFLOW_PORTS.md): financial CSVs,
-source-owned mixed-use receipts and optional Maps mileage. Native regression
-tests exercise the compiled application with disposable PostgreSQL and synthetic
-providers; hosted dependency checks remain separate #133/#303 operator evidence.
-
-[Support operations](SUPPORT_OPERATIONS.md) documents #341's scoped operator API/CLI,
-manual provisioning, immutable administrative history and incident handoff.
+Preserve independent adapter and transport coverage while both runtimes remain
+supported. [CI ownership](development/CI.md) defines required execution; the [capability
+retirement record](https://github.com/Roklion/Project_Tabula_Rasa/issues/377) retains
+historical caller/evidence decisions.
 
 ## Local main-branch push guard
 
@@ -141,7 +111,7 @@ and commercial-foundation workflows. Its stable merge-gate check name is
   `TABULA_RASA_TEST_DATABASE_URL`. Missing/inaccessible PostgreSQL must not be
   used to make this gate green. There are no marker filters or deselections.
   It also builds the client-only NAS backup image and runs its isolated synthetic
-  TLS/encryption/restore drill; see [NAS backup operations](NAS_POSTGRESQL_BACKUP.md#developer-validation).
+  TLS/encryption/restore drill; see [NAS backup operations](operations/NAS_BACKUP.md#developer-validation).
 - **Windows environment setup** runs the Windows-only
   `tests/tooling/test_codex_environment_setup.py` on Windows with PowerShell and
   Python 3.12. Those tests' existing platform skips on Linux are covered here,
@@ -167,7 +137,7 @@ and commercial-foundation workflows. Its stable merge-gate check name is
 
 The explicitly invoked Streamlit viewport scripts below remain optional developer
 checks; supported legacy unit/integration coverage remains required in Python CI.
-See [CI execution evidence and suite selection](CI_TEST_SUITES.md) for the cost
+See [CI execution evidence and suite selection](development/CI.md) for the cost
 baseline, coverage rationale, bounded budgets, focused commands and comparison
 procedure. No path-based or scheduled-only selection is introduced.
 
@@ -190,11 +160,11 @@ PR head and candidate; a previous head's green result cannot establish readiness
 
 The maintainer has chosen to retain the current GitHub plan. A plan upgrade,
 GitHub-enforced branch protection/rulesets and their associated protections,
-configuration readback, and a probe proving that GitHub blocks a failing merge
-are optional future improvements. They do not block closing issue #295.
+configuration readback, and a probe proving that GitHub blocks a failing merge are
+optional future improvements. They are not prerequisites for the authoritative CI gate.
 Current-revision CI success and satisfied review conditions remain required by
-repository/agent policy; enforcement is procedural while GitHub's hard block
-is unavailable. Do not describe optional enforcement as configured or verified.
+repository/agent policy; enforcement is procedural while GitHub's hard block is
+unavailable. Do not describe optional enforcement as configured or verified.
 
 Repository files cannot enable GitHub's required-check enforcement. If the
 maintainer elects to enable it later, an administrator can use this optional setup:
@@ -229,7 +199,7 @@ maintainer elects to enable it later, an administrator can use this optional set
    result is insufficient while the new run is pending, and completion becomes
    eligible only after that run passes and review conditions are satisfied.
    Do not merge the probe or use production data. The server-enforcement probe
-   is optional, requires separate authorization and does not block issue #295
+   is optional, requires separate authorization and does not block authoritative CI gate
    closure. Normal hosted CI/review behavior verification remains required.
 
 ### CI failures and review completion
@@ -382,13 +352,13 @@ private ledger data, receipts, backups, or validation output.
 
 ## Commercial browser quality
 
-The [bounded technical-alpha browser gate](COMMERCIAL_BROWSER_QUALITY.md) adds
+The [bounded technical-alpha browser gate](browser/TESTING.md) adds
 axe scans, desktop/mobile journeys and keyboard/failure checks to the existing
 Playwright baseline. Repository CI runs it in the required native-browser job after
 compiling the SPA; the guide owns local setup and outstanding release evidence.
 
 ## Operational telemetry
 
-[Operational observability](OBSERVABILITY.md) owns #332's sanitized contract,
-optional collection setup, tier/retention/access checkpoint, alert thresholds,
-staging smoke and #223 integration responsibilities.
+[Operational observability](operations/OBSERVABILITY.md) owns the sanitized telemetry
+contract, optional collection setup, tier/retention/access checkpoint, alert thresholds,
+staging smoke and platform operations integration responsibilities.

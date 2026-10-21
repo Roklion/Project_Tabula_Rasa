@@ -2,7 +2,7 @@
 
 Capabilities are necessary authority, never approval to execute recovery.
 Platform/operator and one-execution approval are intentionally absent from
-tenant roles; #341/#298 own those independent execution gates.
+tenant roles; privileged support and recovery require separate operator approval.
 """
 
 from types import MappingProxyType

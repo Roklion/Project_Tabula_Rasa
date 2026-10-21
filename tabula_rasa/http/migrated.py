@@ -8,8 +8,8 @@ from .errors import TransportError
 class MigratedProfileServices:
     """Inject into PostgresRuntime for operator-configured migrated entities.
 
-    #258 owns authority checks. Named operation additionally requires approved
-    #319 ownership and #318 document grants; internal legacy composition keeps
+    Cutover controls enforce authority. Named operation also requires approved
+    entity ownership and scoped document grants; internal legacy composition keeps
     its profile-owned adapter. All profile bindings are server-only inputs.
     """
 

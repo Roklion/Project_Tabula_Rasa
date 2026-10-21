@@ -1,12 +1,7 @@
 # ADR 0003: Commercial identity, sessions and tenant authorization
 
-Status: Selected implementation contract for #310; subject to maintainer review.
-Runtime implementation and hosted acceptance remain in #311–#321.
-
-Issue: [#310](https://github.com/Roklion/Project_Tabula_Rasa/issues/310),
-under [identity EPIC #222](https://github.com/Roklion/Project_Tabula_Rasa/issues/222)
-and [initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124).
-Decision date: 2026-10-10.
+Status: Selected identity contract; subject to maintainer review. Runtime implementation
+and hosted acceptance remain in identity control plane and hosted identity rollout.
 
 ## Scope and decision
 
@@ -23,12 +18,13 @@ cookie and central context seam. This decision supplies the missing identity
 contract; it does not implement login, provision accounts, authorize a live
 cutover, retire Streamlit, or approve external beta.
 
-The [operator and implementation handoff](../COMMERCIAL_IDENTITY.md) owns setup,
-stage gates, test cases and #311–#321 responsibilities. No current runtime
-behavior changes in #310. #288 restricted synthetic alpha can proceed
-independently; #303 actual owner use needs normal named authorization and its
-own approved bindings. #223 owns operations/document recovery and #224/#298
-retain legal, recovery and release approval.
+[Provider setup](../identity/PROVIDER_SETUP.md) describes configuration, threat cases
+and component responsibilities; [authentication](../identity/AUTHENTICATION.md) and
+[authorization](../identity/AUTHORIZATION.md) define the executable contracts.
+Restricted synthetic alpha, live owner use and external admission have distinct
+requirements. Live owner use requires named authorization, approved entity and document
+bindings, explicit cutover and accepted recovery limits. Provider setup and a synthetic
+test pass do not supply those approvals.
 
 ## Options and consequences
 
@@ -39,7 +35,7 @@ hosted proof or a permanent pricing commitment.
 | --- | --- | --- | --- |
 | ZITADEL Cloud hosted OIDC | Published Free plan includes 100 daily active users and security features; one instance and one administrator are listed. Appropriate for small synthetic staging subject to actual quotas. Environment separation, production mail, support and capacity require operator verification. | Standard OIDC fits Python; hosted login includes verification/recovery and MFA/passkeys. Managed service removes identity-server operations. Provider account lifecycle remains vendor-specific; a later OIDC provider needs explicit subject rebinding. | Selected: low initial operating burden with security features available for a bounded rollout. |
 | Auth0 hosted OIDC | Published Free plan has 25,000 monthly active users. Plan-dependent environment, organization, MFA and support features need verification for the actual application. App-owned organizations avoid provider organization quotas as a tenant limit. | Mature hosted login and standard OIDC; recovery/mail and administration still require setup. Managed operations, but paid feature boundaries and provider-specific lifecycle are a tradeoff. | Credible alternative if the selected service cannot meet the operator checkpoint. Changing provider requires an ADR revision, not an automatic runtime fallback. |
-| Self-hosted Keycloak | No managed identity subscription is selected, but hosting, database, TLS, patching, monitoring and recovery cost remain. Can support staging/beta if operated reliably. | Standard OIDC and own infrastructure reduce hosted-provider dependency. Identity-server availability, secure email and upgrade/backup drills add another critical service to #223. | Defer: unnecessary operator burden for the first vertical slices. |
+| Self-hosted Keycloak | No managed identity subscription is selected, but hosting, database, TLS, patching, monitoring and recovery cost remain. Can support staging/beta if operated reliably. | Standard OIDC and own infrastructure reduce hosted-provider dependency. Identity-server availability, secure email and upgrade/backup drills add another critical service to platform operations. | Defer: unnecessary operator burden for the first vertical slices. |
 
 Sources: [ZITADEL plans](https://zitadel.com/pricing),
 [plan detail](https://zitadel.com/pricing/detail),
@@ -47,19 +43,19 @@ Sources: [ZITADEL plans](https://zitadel.com/pricing),
 [Auth0 web applications](https://auth0.com/docs/get-started/auth0-overview/create-applications/regular-web-apps),
 and [Keycloak production configuration](https://www.keycloak.org/server/configuration-production).
 
-A free plan is a cost option, not a waiver of #222 or #224 protections. Provider
-organization membership is deliberately not a parallel authorization model.
-One provider project can authenticate users who belong to multiple application
-organizations. No provider role scopes or management-API grant is required by
-the normal bookkeeping API.
+A free plan is a cost option, not a waiver of identity and tenancy or external release
+and customer lifecycle protections. Provider organization membership is deliberately not
+a parallel authorization model. One provider project can authenticate users who belong
+to multiple application organizations. No provider role scopes or management-API grant
+is required by the normal bookkeeping API.
 
 Use a maintained Python OIDC library rather than handwritten JWT/OAuth crypto.
-#312 should use Authlib's OIDC/HTTP client integration behind a narrow
-infrastructure adapter and pin a supported version after compatibility/license
-checks. Its framework examples are not the application session design:
-persist login transactions and sessions server-side, rather than copying a
-signed browser-session example containing tokens.
-[Authlib Starlette OIDC integration](https://docs.authlib.org/en/latest/oauth2/client/web/starlette.html).
+Named-user authentication should use Authlib's OIDC/HTTP client integration behind a
+narrow infrastructure adapter and pin a supported version after compatibility/license
+checks. Its framework examples are not the application session design: persist login
+transactions and sessions server-side, rather than copying a signed browser-session
+example containing tokens. [Authlib Starlette OIDC
+integration](https://docs.authlib.org/en/latest/oauth2/client/web/starlette.html).
 
 Costs accepted: an external login dependency, a small session/control-plane
 repository and session-expiration UX. There is no Redis, second authentication
@@ -68,7 +64,7 @@ accepted as continuing authorization. Provider portability preserves internal
 IDs, but password/MFA credentials and provider subjects cannot be assumed
 portable.
 
-## Identity and control-plane model (#311)
+## Identity and control-plane model
 
 | Record | Required contract |
 | --- | --- |
@@ -79,10 +75,10 @@ portable.
 | Entity ownership | Each existing canonical `business_entities.id` has at most one owning organization. An unclaimed migrated entity has no commercial access. Membership grants the role across all active entities of that organization. |
 | Session | Hashed random credential, user, identity binding/environment, creation/authentication times, idle/absolute deadlines, revocation state/epoch, CSRF secret, selected organization/entity (nullable) and independent public cache identifier. No password or provider role claims. |
 
-Use forward-only migrations, foreign keys, uniqueness and lifecycle constraints
-where appropriate. Retain bookkeeping IDs, provenance, authority and document
-metadata. Do not create another ledger entity or reset deployed data.
-#319 explicitly binds preexisting entities; neither a login nor the profile's
+Use forward-only migrations, foreign keys, uniqueness and lifecycle constraints where
+appropriate. Retain bookkeeping IDs, provenance, authority and document metadata. Do not
+create another ledger entity or reset deployed data. Existing entity claims and local
+administration explicitly binds preexisting entities; neither a login nor the profile's
 name/email implicitly claims them.
 
 There are **no entity-specific membership overrides in v1**. Members can access
@@ -93,16 +89,16 @@ Adding entity ACLs later requires revising this contract, not undocumented
 client-side filtering.
 
 Maintain at least one active Owner for every active organization. Serialize
-owner-affecting changes in a transaction against the organization, including
-concurrent removal/demotion and owner user-disable operations. Disabling the
-last owner must transfer ownership first or explicitly suspend the organization
-under a documented operator procedure; no silent ownerless active workspace.
-Provider administrators gain no application membership by holding that position.
-Session/login-transaction/invitation credentials and private user attributes
-are excluded from bookkeeping exports. Audit records may carry safe internal
-actor IDs under #223; exporting books must never export authentication state.
+owner-affecting changes in a transaction against the organization, including concurrent
+removal/demotion and owner user-disable operations. Disabling the last owner must
+transfer ownership first or explicitly suspend the organization under a documented
+operator procedure; no silent ownerless active workspace. Provider administrators gain
+no application membership by holding that position. Session/login-transaction/invitation
+credentials and private user attributes are excluded from bookkeeping exports. Audit
+records may carry safe internal actor IDs under platform operations; exporting books
+must never export authentication state.
 
-## Role and capability policy (#313/#315)
+## Role and capability policy
 
 Keep all five requested roles with useful distinctions. `editor` is displayed
 as Bookkeeper/Editor; Accountant adds controlled bulk handoff/import. Read-only
@@ -128,7 +124,7 @@ The Business Owner role is distinct from an ordinary user permitted to view or
 update entries. Owner-only administration and recovery authority cannot be
 inferred from Admin/Editor/Accountant status or a selected business. Existing
 bookkeeping import/export permissions remain distinct from backup and restore.
-The [implemented action registry and route inventory](../API_AUTHORIZATION.md)
+The [implemented action registry and route inventory](../identity/AUTHORIZATION.md)
 also distinguish archive recovery, restore, migration/cutover, ledger reset,
 privileged audit inspection and legacy local administration. Operator execution
 and one-execution recovery approval requirements are absent from tenant roles.
@@ -137,32 +133,30 @@ endpoints or permission to execute a migration. Preserve fresh authentication,
 profile/entity isolation, current backup validation, restoration to a new blank
 workbook and refusal to restore over the configured live workbook.
 
-Business Owners authorize recovery affecting their business. Platform operators
-execute approved infrastructure recovery without automatically becoming tenant
-Owners or gaining bookkeeping access. Tenant roles do not grant deployment
-credentials, local profile secrets or service-wide restore authority. #223 owns
-the separate service-wide incident/recovery procedure and its operator approval
-and audit requirements; a tenant Owner's approval cannot authorize changes to
-other businesses. There is no shared-password or synthetic break-glass login
-to books. Business recovery approval must identify the affected business,
-requested operation and authorized operator before destructive execution.
-At execution, verify that the approving Owner remains active and authorized for
-the affected business; otherwise stop and obtain a new authorized approval.
-Approval covers one execution of that operation, not standing recovery access;
-reconfirm current Owner authorization if execution is deferred or its scope or
-operator changes. #223 records approval and execution together in the recovery
-audit; no reusable bearer approval credential is implied.
+Business Owners authorize recovery affecting their business. Platform operators execute
+approved infrastructure recovery without automatically becoming tenant Owners or gaining
+bookkeeping access. Tenant roles do not grant deployment credentials, local profile
+secrets or service-wide restore authority. platform operations owns the separate
+service-wide incident/recovery procedure and its operator approval and audit
+requirements; a tenant Owner's approval cannot authorize changes to other businesses.
+There is no shared-password or synthetic break-glass login to books. Business recovery
+approval must identify the affected business, requested operation and authorized
+operator before destructive execution. At execution, verify that the approving Owner
+remains active and authorized for the affected business; otherwise stop and obtain a new
+authorized approval. Approval covers one execution of that operation, not standing
+recovery access; reconfirm current Owner authorization if execution is deferred or its
+scope or operator changes. platform operations records approval and execution together
+in the recovery audit; no reusable bearer approval credential is implied.
 
-During transition, loopback-only Streamlit Business Profiles administration is
-a separate restricted internal operator interface. Commercial login, tenant
-roles and the business selector never unlock local credential/profile
-administration. Preserve its existing password, administrator reauthentication
-and loopback restrictions. Keep this listener out of public reverse-proxy and
-ingress routes: a loopback bind does not make a publicly relayed request local,
-and forwarded headers cannot grant administrator access.
-#319 coordinates retirement after in-app login,
-business creation and management fully replace its supported functions and
-the replacement is verified; do not retain it as a commercial bypass.
+During transition, loopback-only Streamlit Business Profiles administration is a
+separate restricted internal operator interface. Commercial login, tenant roles and the
+business selector never unlock local credential/profile administration. Preserve its
+existing password, administrator reauthentication and loopback restrictions. Keep this
+listener out of public reverse-proxy and ingress routes: a loopback bind does not make a
+publicly relayed request local, and forwarded headers cannot grant administrator access.
+Existing entity claims and local administration coordinates retirement after in-app
+login, business creation and management fully replace its supported functions and the
+replacement is verified; do not retain it as a commercial bypass.
 
 Import requires `bookkeeping:write` AND `bookkeeping:import`; complete export
 requires `bookkeeping:read` AND `bookkeeping:export`. All other rows with a
@@ -181,16 +175,16 @@ authentication within five minutes in addition to the capability. The provider
 login policy enforces MFA for all named hosted users; do not infer assurance
 from an unchecked client claim.
 
-Creating a new workspace uses authenticated-user bootstrap authority (#316);
-it does not require membership in a workspace that does not exist. The new
-owner is always the acting internal user. Logout, session inspection and
-authorized switching are identity operations available to Read-only members;
-they **must not require `bookkeeping:write`**. Unlisted actions deny by default.
-Workspace deletion, support impersonation, billing and retention/destructive
-customer lifecycle are outside v1 roles; #224 must define them before exposing
-such operations.
+Creating a new workspace uses authenticated-user bootstrap authority (ledger bootstrap);
+it does not require membership in a workspace that does not exist. The new owner is
+always the acting internal user. Logout, session inspection and authorized switching are
+identity operations available to Read-only members; they **must not require
+`bookkeeping:write`**. Unlisted actions deny by default. Workspace deletion, support
+impersonation, billing and retention/destructive customer lifecycle are outside v1
+roles; external release and customer lifecycle must define them before exposing such
+operations.
 
-## Login and callback contract (#312)
+## Login and callback contract
 
 Use the provider-hosted page with native verified email/password plus enforced
 TOTP or WebAuthn/passkey policy. Do not enable social/enterprise federation
@@ -238,42 +232,41 @@ bookkeeping DTOs or application logs.
 6. Discard provider access/ID tokens after verified mapping. Do not persist
    refresh tokens, put them in cookies, or make them bookkeeping bearer tokens.
 
-PKCE remains enabled alongside confidential-client authentication. In the
-ZITADEL Web application choose **Basic Auth** (`client_secret_basic`), not the
-public-client **PKCE** (`none`) authentication option. Send the S256 challenge
-on authorization and the matching verifier with HTTP Basic client credentials
-on the token request. These are separate checks: ZITADEL's
-[client verification](https://github.com/zitadel/zitadel/blob/ad835efbc3f6115ab4f84230616b018d4d5b4c54/internal/api/oidc/client.go#L216)
-checks the Basic client secret, while its
-[code-exchange implementation](https://github.com/zitadel/zitadel/blob/ad835efbc3f6115ab4f84230616b018d4d5b4c54/internal/api/oidc/token_code.go#L126)
-checks a supplied challenge even for authenticated clients. The provider's
-[Web application overview](https://zitadel.com/docs/guides/manage/console/applications-overview#web)
-also recommends PKCE with a client secret. #312/#321 must verify this combined
-exchange on their configured hosted client, including rejection of an incorrect
-verifier and missing/incorrect client secret; source evidence is not hosted
-acceptance evidence.
-[ZITADEL code flow](https://zitadel.com/docs/guides/integrate/login/oidc/login-users),
-[client authentication](https://zitadel.com/docs/apis/openidoauth/authn-methods),
-[OIDC validation](https://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation)
-and [OAuth security BCP](https://www.rfc-editor.org/rfc/rfc9700.html)
-provide the protocol basis; the timing/storage policy above is our application
-decision.
+PKCE remains enabled alongside confidential-client authentication. In the ZITADEL Web
+application choose **Basic Auth** (`client_secret_basic`), not the public-client
+**PKCE** (`none`) authentication option. Send the S256 challenge on authorization and
+the matching verifier with HTTP Basic client credentials on the token request. These are
+separate checks: ZITADEL's [client
+verification](https://github.com/zitadel/zitadel/blob/ad835efbc3f6115ab4f84230616b018d4d5b4c54/internal/api/oidc/client.go#L216)
+checks the Basic client secret, while its [code-exchange
+implementation](https://github.com/zitadel/zitadel/blob/ad835efbc3f6115ab4f84230616b018d4d5b4c54/internal/api/oidc/token_code.go#L126)
+checks a supplied challenge even for authenticated clients. The provider's [Web
+application
+overview](https://zitadel.com/docs/guides/manage/console/applications-overview#web) also
+recommends PKCE with a client secret. named-user authentication and hosted identity
+rollout must verify this combined exchange on their configured hosted client, including
+rejection of an incorrect verifier and missing/incorrect client secret; source evidence
+is not hosted acceptance evidence. [ZITADEL code
+flow](https://zitadel.com/docs/guides/integrate/login/oidc/login-users), [client
+authentication](https://zitadel.com/docs/apis/openidoauth/authn-methods), [OIDC
+validation](https://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation) and
+[OAuth security BCP](https://www.rfc-editor.org/rfc/rfc9700.html) provide the protocol
+basis; the timing/storage policy above is our application decision.
 
-ZITADEL's default code flow supplies email verification through UserInfo rather
-than guaranteeing those claims in the ID token. The UserInfo request above is
-mandatory; do not depend on the optional provider setting that copies UserInfo
-claims into ID tokens. #312/#321 must verify the default client configuration
-and subject/verified-email rejection cases.
-[ZITADEL claims matrix](https://zitadel.com/docs/apis/openidoauth/claims).
+ZITADEL's default code flow supplies email verification through UserInfo rather than
+guaranteeing those claims in the ID token. The UserInfo request above is mandatory; do
+not depend on the optional provider setting that copies UserInfo claims into ID tokens.
+named-user authentication and hosted identity rollout must verify the default client
+configuration and subject/verified-email rejection cases. [ZITADEL claims
+matrix](https://zitadel.com/docs/apis/openidoauth/claims).
 
 Only configured HTTPS discovery/JWKS/token/UserInfo endpoints are contacted. Bound
-timeouts and response sizes; reject redirect-to-untrusted-host fetches.
-Canonical callback is `PUBLIC_ORIGIN + /api/v1/auth/callback`; canonical
-post-logout destination is `PUBLIC_ORIGIN + /signed-out`. No wildcards, preview
-hosts, arbitrary `next` URLs, protocol-relative paths or forwarded-Host
-construction. v1 return destinations are `/` and `/onboarding`; #315 may add a
-server-held pending invitation reference, never embed its credential in a
-provider redirect.
+timeouts and response sizes; reject redirect-to-untrusted-host fetches. Canonical
+callback is `PUBLIC_ORIGIN + /api/v1/auth/callback`; canonical post-logout destination
+is `PUBLIC_ORIGIN + /signed-out`. No wildcards, preview hosts, arbitrary `next` URLs,
+protocol-relative paths or forwarded-Host construction. v1 return destinations are `/`
+and `/onboarding`; membership administration may add a Server-held pending invitation
+reference, never embed its credential in a provider redirect.
 
 The short-lived HttpOnly transaction cookie uses the same hosted flags as the
 session and a separate name (`__Host-tabula_login`). Lax permits the provider's
@@ -284,7 +277,7 @@ Authorization codes/state necessarily transit protocol URLs: exclude query
 strings from ingress/app/provider diagnostics and sanitize browser history
 immediately. No identity/session token is transported in a URL.
 
-## Session lifecycle and recovery (#312/#315/#321)
+## Session lifecycle and recovery
 
 Hosted cookie: `__Host-tabula_session`, `Path=/`, HttpOnly, Secure, SameSite=Lax,
 no Domain. Credential is at least 256 random bits; store its SHA-256 hash,
@@ -337,15 +330,15 @@ have no signing key; do not introduce one solely for rotation. Membership
 removal/demotion changes the affected organization's authority on the next
 request; global user disable blocks every organization and revokes all sessions.
 
-#312/#315/#321 must provide a verified provider event or coordinated operator
-revocation path for credential changes, including resets performed through
-hosted recovery. Never accept unsigned/unverified events or treat a JWKS cache
-refresh as proof that application sessions were revoked. Revoke application
-sessions as part of controlled rotation; if an external change cannot be
-reconciled safely, suspend affected access until revocation is confirmed.
-Suspected compromise recovery disables/revokes first, then recovers provider
-credentials and verifies fresh login before re-enabling. The ordinary 12-hour
-deadline is not a substitute for this invalidation requirement. #321 must
+Named-user authentication, membership administration and hosted identity rollout must
+provide a verified provider event or coordinated operator revocation path for credential
+changes, including resets performed through hosted recovery. Never accept
+unsigned/unverified events or treat a JWKS cache refresh as proof that application
+sessions were revoked. Revoke application sessions as part of controlled rotation; if an
+external change cannot be reconciled safely, suspend affected access until revocation is
+confirmed. Suspected compromise recovery disables/revokes first, then recovers provider
+credentials and verifies fresh login before re-enabling. The ordinary 12-hour deadline
+is not a substitute for this invalidation requirement. hosted identity rollout must
 rehearse both per-user and environment-wide changes before named hosted use.
 
 During an identity-provider outage new login/reauthentication fails closed.
@@ -358,16 +351,17 @@ resolver or shared-password fallback. An operator can suspend a user even when
 the provider is down. Lost MFA recovery requires provider/operator identity
 verification, not an email-only ownership reassignment or hidden app backdoor.
 
-## Immutable context and authorization boundary (#313/#314)
+## Immutable context and authorization boundary
 
-Implementation note (#311/#312): the maintainer's #310 recovery decision requires
-user credential changes/forced resets to revoke the affected user's sessions in
-all organizations, and provider/client/session configuration or key changes to
-revoke this environment's sessions. Owner-only recovery authority and the
-separate loopback operator surface remain intact. Concrete configuration,
-coordinated rotation and the additional logout-only HttpOnly CSRF cookie are
-documented in [Named-user authentication](../NAMED_USER_AUTH.md). These
-implementation notes do not replace #313's exhaustive action authorization.
+Implementation note (identity control plane and named-user authentication): the
+maintainer's identity provider decision recovery decision requires user credential
+changes/forced resets to revoke the affected user's sessions in all organizations, and
+provider/client/session configuration or key changes to revoke this environment's
+sessions. Owner-only recovery authority and the separate loopback operator surface
+remain intact. Concrete configuration, coordinated rotation and the additional
+logout-only HttpOnly CSRF cookie are documented in [Named-user
+authentication](../identity/AUTHENTICATION.md). These implementation notes do not
+replace server authorization's exhaustive action authorization.
 
 Reuse `http/context.py`, application-scoped `PostgresRuntime` and
 `create_app(runtime_factory=...)`. Resolve an authenticated session first.
@@ -392,28 +386,28 @@ previous selection fails safely rather than applying its payload to the new
 business. Switching does not rotate the login credential or create a new
 identity; its changed cache scope remounts the existing `ScopeBoundary`.
 
-New users and removed members may have **no selected authorized entity**.
-#312 evolves `SessionInfo` to a discriminated authenticated state: `needs_setup`
-with nullable organization/entity and no bookkeeping capabilities, or `ready`
-with the existing fields. Both have actor, session cache identifier and CSRF.
+New users and removed members may have **no selected authorized entity**. Named-user
+authentication evolves `SessionInfo` to a discriminated authenticated state:
+`needs_setup` with nullable organization/entity and no bookkeeping capabilities, or
+`ready` with the existing fields. Both have actor, session cache identifier and CSRF.
 `RequestContext` remains entity-bound; do not invent a dummy entity or call
-`runtime.services` to produce an unscoped session. Identity/bootstrap routes
-use the same session validator without demanding an entity. #316 can create
-a workspace; only then can #313 produce its entity context. Anonymous requests
-get 401, not an empty authenticated user.
+`runtime.services` to produce an unscoped session. Identity/bootstrap routes use the
+same session validator without demanding an entity. ledger bootstrap can create a
+workspace; only then can server authorization produce its entity context. Anonymous
+requests get 401, not an empty authenticated user.
 
-The current resolver's unsafe-method-to-`bookkeeping:write` rule is insufficient
-for identity/admin commands and imports/exports. #313 must use an explicit
-action-to-capability registry with one shared identity/membership resolver;
-retain Origin/CSRF checks separately for **all unsafe browser operations**.
-Do not build a second authentication path per feature. A valid loaded-record
-baseline is an independent concurrency precondition after authorization.
+The current resolver's unsafe-method-to-`bookkeeping:write` rule is insufficient for
+identity/admin commands and imports/exports. server authorization must use an explicit
+action-to-capability registry with one shared identity/membership resolver; retain
+Origin/CSRF checks separately for **all unsafe browser operations**. Do not build a
+second authentication path per feature. A valid loaded-record baseline is an independent
+concurrency precondition after authorization.
 
-Enforce before service/repository, document-store, export/import or secret
-binding. Qualify document IDs/links/store keys and every read/write by the
-resolved entity; knowable IDs do not grant bytes. Jobs carry trusted actor/
-organization/entity and an authorized action, rechecking current authority at
-execution under #223; never serialize a browser credential into a job.
+Enforce before service/repository, document-store, export/import or secret binding.
+Qualify document IDs/links/store keys and every read/write by the resolved entity;
+knowable IDs do not grant bytes. Jobs carry trusted actor/ organization/entity and an
+authorized action, rechecking current authority at execution under platform operations;
+never serialize a browser credential into a job.
 
 Missing/expired/revoked identity returns 401; absent/foreign/inactive membership,
 entity or denied role returns the same safe 403 without confirming foreign
@@ -421,18 +415,17 @@ record existence. An unknown record inside an already authorized entity may
 return 404. Infrastructure failure returns safe 503. No provider exceptions,
 SQL, credentials, emails or ledger values in errors or request logs.
 
-Exact configured Host/Origin and synchronizer CSRF header protect unsafe
-commands, including logout/switch/invite acceptance/bootstrap. Reject missing
-or `null` Origin; CORS stays disabled. Provider callbacks are the narrowly
-defined protocol exception. Serve private session/data/document/export responses
-with `no-store`. ScopeBoundary cancellation/remount clears queries, forms,
-selections, uploads and object URLs on identity/scope change. #314 also rechecks
-session on focus and at most every 60 seconds while a private view is visible,
-unmounting private state on denial/change. Cross-tab logout broadcasts cleanup
-without private payloads. Already downloaded bytes cannot be recalled, and an
-in-flight request authorized before revocation may finish; all later requests
-must deny. No claim of retroactive erasure or arbitrary concurrent-request
-transactions.
+Exact configured Host/Origin and synchronizer CSRF header protect unsafe commands,
+including logout/switch/invite acceptance/bootstrap. Reject missing or `null` Origin;
+CORS stays disabled. Provider callbacks are the narrowly defined protocol exception.
+Serve private session/data/document/export responses with `no-store`. ScopeBoundary
+cancellation/remount clears queries, forms, selections, uploads and object URLs on
+identity/scope change. authorized workspace switching also rechecks session on focus and
+at most every 60 seconds while a private view is visible, unmounting private state on
+denial/change. Cross-tab logout broadcasts cleanup without private payloads. Already
+downloaded bytes cannot be recalled, and an in-flight request authorized before
+revocation may finish; all later requests must deny. No claim of retroactive erasure or
+arbitrary concurrent-request transactions.
 
 ## Reuse map and follow-on boundary
 
@@ -442,19 +435,19 @@ transactions.
   selection DTOs; `web/src/app/{ContextBoundary,ScopeBoundary}.tsx` and
   `web/src/api/query.ts` own scoped queries and remounted form lifetimes;
   canonical PostgreSQL `business_entities`, `MigratedProfileServices` and
-  #252 setup services own ledger identity, accepted profile bindings and defaults.
+  ledger setup services own ledger identity, accepted profile bindings and defaults.
 - Reused/extended: replace the resolver, extend session states and action policy,
   retain scoped browser cache ownership, entity records, existing ledger
   bootstrap and profile-specific Google/DocumentStore adapters.
 - New logic required: provider adapter, durable user/membership/session/login
   transaction records, authorization policy and explicit ownership/invitation
   lifecycle. These belong to the control plane, not ledger rows.
-- New parallel logic: none in #310. Follow-on named sessions coexist with the
+- New parallel logic: none in identity provider decision. Follow-on named sessions coexist with the
   deliberately restricted synthetic test resolver and legacy Streamlit sign-in;
   their distinct deployment/stage semantics prevent a shared fallback or a
   second commercial profile ACL implementation.
 
 The testable threat model and full handoff matrix are canonical in
-[Commercial identity](../COMMERCIAL_IDENTITY.md). Architecture selection is
+[Commercial identity](../identity/PROVIDER_SETUP.md). Architecture selection is
 complete here; provider setup, code, maintainer acceptance of this contract and
 hosted/release evidence remain explicit downstream work.

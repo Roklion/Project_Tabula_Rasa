@@ -1,4 +1,4 @@
-"""Identity DTO capabilities follow the accepted #310 administration contract."""
+"""Identity DTO capabilities follow the server administration policy."""
 
 from tabula_rasa.application.identity import capabilities
 

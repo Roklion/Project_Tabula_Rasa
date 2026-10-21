@@ -35,7 +35,7 @@ def test_hosted_gate_native_fixture_isolation_and_repeat_seed_refusal(database, 
         assert len(rows) == 1 and rows[0]["name"] == "Deployment connectivity"
         assert rows[0]["opening_balance"] == "0.00"
         assert client.get("/api/v1/entities/other-synthetic/accounts").status_code == 403
-        # The hosted gate preserves #280's CSRF and loaded-baseline boundary.
+        # The hosted gate preserves CSRF and loaded-baseline validation.
         session = client.get("/api/v1/session").json()
         headers = {"Origin": configured.public_origin, "X-CSRF-Token": session["csrf_token"]}
         path = "/api/v1/entities/alpha-synthetic/accounts/" + rows[0]["id"]

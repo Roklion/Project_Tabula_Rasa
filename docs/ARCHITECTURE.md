@@ -1,25 +1,24 @@
 # Architecture
 
-Project Tabula Rasa supports two compositions during the #124 transition:
+Project Tabula Rasa supports two compositions during the application transition:
 
 | Composition | Bookkeeping authority and scope | Canonical guide |
 | --- | --- | --- |
-| Internal Streamlit | Selected unmigrated profile's Google Sheets workbook and human Google grant; local administration remains separately restricted | This guide's internal system context, [Setup](SETUP.md) and [legacy administration](EXTERNAL_CONNECTIONS_AND_LEGACY_CLAIMS.md#retained-local-administration-inventory) |
-| React/FastAPI | PostgreSQL services with authorized entity scope; migrated owner authority requires the explicit cutover procedure | [Commercial runtime](COMMERCIAL_WEB.md), [identity](COMMERCIAL_IDENTITY.md) and [cutover](BOOKKEEPING_CUTOVER.md) |
+| Internal Streamlit | Selected unmigrated profile's Google Sheets workbook and human Google grant; local administration remains separately restricted | This guide's internal system context, [Setup](SETUP.md) and [legacy administration](identity/CONNECTIONS_AND_CLAIMS.md#retained-local-administration-inventory) |
+| React/FastAPI | PostgreSQL services with authorized entity scope; migrated owner authority requires the explicit cutover procedure | [Commercial runtime](browser/RUNTIME.md), [identity](identity/PROVIDER_SETUP.md) and [cutover](accounting/CUTOVER.md) |
 
-The [issue #377 retirement inventory](https://github.com/Roklion/Project_Tabula_Rasa/issues/377) records callers, shared
-owners, eligible removals and retained internal/operator obligations. Neither
-composition's implementation proves live migration or authorizes retiring the
-other. The system-context, credential and Sheets-ledger sections below describe
-the **internal edition**; later service/adapter sections describe shared seams.
+The [retirement inventory](https://github.com/Roklion/Project_Tabula_Rasa/issues/377)
+records callers, shared owners, eligible removals and retained internal/operator
+obligations. Neither composition's implementation proves live migration or authorizes
+retiring the other. The system-context, credential and Sheets-ledger sections below
+describe the **internal edition**; later service/adapter sections describe shared seams.
 
-The internal Streamlit application serves one or more isolated business profiles.
-A profile selects its own Google Sheets workbook,
-Google OAuth grant for Sheets and Drive, and recovery
-destinations. The application password and OAuth client are intentionally
-deployment-wide. The optional Google Maps browser and Routes credentials are
-also app-wide; the separate quota-monitoring identity is app-wide as well.
-They are never profile identities.
+The internal Streamlit application serves one or more isolated business profiles. A
+profile selects its own Google Sheets workbook, Google OAuth grant for Sheets and Drive,
+and recovery destinations. The application password and OAuth client are intentionally
+Deployment-wide. The optional Google Maps browser and Routes credentials are also
+app-wide; the separate quota-monitoring identity is app-wide as well. They are never
+profile identities.
 
 ## System context
 
@@ -120,19 +119,17 @@ Tag associations as validated lists of stable IDs, while display names resolve
 from the same profile's Tags worksheet so a later rename does not rewrite
 ledger rows.
 
-Cost-based mixed-use expenses use a dedicated `MixedUseExpenses` worksheet as
-the authoritative source collection. Each source contains the normal editable
-Expense inputs, the full total, business-use percentage, currency-rounded
-allocated amount, allocation rationale, and stable source and projection IDs.
-The corresponding Transactions row remains an ordinary Expense projection and
-stores generic `source_type` and `source_id` provenance. Source-aware CRUD
-updates the existing projection or removes both records while preserving the
-source-authoritative and read-only-projection invariants. These are
-non-transactional multi-row writes. Pre-write validation, stable identity,
-bounded uncertain-write readback, and actionable partial-state guidance are
-preferred to an application-level transaction protocol.
-This Phase A contract is storage/domain-only; it does not expose a user-facing
-mixed-use workflow.
+Cost-based mixed-use expenses use a dedicated `MixedUseExpenses` worksheet as the
+authoritative source collection. Each source contains the normal editable Expense
+inputs, the full total, business-use percentage, currency-rounded allocated amount,
+allocation rationale, and stable source and projection IDs. The corresponding
+Transactions row remains an ordinary Expense projection and stores generic `source_type`
+and `source_id` provenance. Source-aware CRUD updates the existing projection or removes
+both records while preserving the Source-authoritative and read-only-projection
+invariants. These are non-transactional multi-row writes. Pre-write validation, stable
+identity, bounded uncertain-write readback, and actionable partial-state guidance are
+preferred to an application-level transaction protocol. This Phase A contract is
+storage/domain-only; it does not expose a user-facing mixed-use workflow.
 
 ```mermaid
 sequenceDiagram
@@ -197,14 +194,14 @@ independent of this coordination.
 
 ### Recoverable cross-service partial failure
 
-Drive and Sheets operations are also not atomic. Receipt workflows prepare a
-stable receipt identity and content hash, upload at most once plus one safe
-identity-based retry after an uncertain Drive response, then link the known
-file in Sheets. If linking is uncertain, one fresh transaction/source read can
-confirm success; otherwise the workflow stops and tells the user what to
-inspect. A successfully uploaded but unlinked file remains in the profile's
-Drive storage and is surfaced as an **Unreferenced Receipt** for explicit
-recovery. The app does not delete that file as simulated rollback.
+Drive and Sheets operations are also not atomic. Receipt workflows prepare a stable
+receipt identity and content hash, upload at most once plus one safe Identity-based
+retry after an uncertain Drive response, then link the known file in Sheets. If linking
+is uncertain, one fresh transaction/source read can confirm success; otherwise the
+workflow stops and tells the user what to inspect. A successfully uploaded but unlinked
+file remains in the profile's Drive storage and is surfaced as an **Unreferenced
+Receipt** for explicit recovery. The app does not delete that file as simulated
+rollback.
 
 This same rule applies to future multi-service work: make partial state
 detectable and recoverable, keep recovery scoped to the selected profile and
@@ -213,21 +210,22 @@ automatic repair would require a distributed transaction simulation.
 
 ### Frozen Sheets source boundary
 
-[Final Sheets source contract](SHEETS_SOURCE_CONTRACT.md) owns the frozen
-format-13 worksheet/header, archive/manifest, domain-relationship, and retirement
-decision under #261, #220, and initiative #124. Runtime, backup validation,
-restore, and future #254 extraction consume this same boundary. Only genuinely
-blank workbooks or interrupted current-header bootstrap may be initialized.
-Populated unsupported workbooks and non-13 archives fail before writes;
-historical ledger-format converters and their aliases have been retired.
+[Final Sheets source contract](SHEETS_SOURCE_CONTRACT.md) owns the frozen format-13
+worksheet/header, archive/manifest, domain-relationship, and retirement decision under
+frozen Sheets source contract, PostgreSQL persistence, and application transition.
+Runtime, backup validation, restore, and future Sheets migration framework extraction
+consume this same boundary. Only genuinely blank workbooks or interrupted current-header
+bootstrap may be initialized. Populated unsupported workbooks and non-13 archives fail
+before writes; historical ledger-format converters and their aliases have been retired.
 
-Retirement preserves existing accounting history, ledgers, receipts, backup
-files, and the pre-cutover Sheets source. Backup retention belongs to #223.
-Profile/OAuth migration, current-format receipt recovery/association tooling,
-and ordinary CSV/QuickBooks imports remain supported. PostgreSQL schema
-migrations and managed backup/PITR (#259) remain independent; #260 owns its
-separately versioned canonical export. #243's canonical PostgreSQL model maps
-this source by domain meaning rather than duplicating worksheet layouts.
+Retirement preserves existing accounting history, ledgers, receipts, backup files, and
+the pre-cutover Sheets source. Backup retention belongs to platform operations.
+Profile/OAuth migration, current-format receipt recovery/association tooling, and
+ordinary CSV/QuickBooks imports remain supported. PostgreSQL schema migrations and
+managed backup/PITR (managed database recovery) remain independent; complete entity
+export owns its separately versioned canonical export. canonical accounting schema's
+canonical PostgreSQL model maps this source by domain meaning rather than duplicating
+worksheet layouts.
 
 ### Proportionality and review drift
 
@@ -291,13 +289,11 @@ separate class or file.
 
 ### Application services and persistence contracts
 
-[Issue #225](https://github.com/Roklion/Project_Tabula_Rasa/issues/225) establishes
-the composition foundation for the semantic extraction in
-[epic #219](https://github.com/Roklion/Project_Tabula_Rasa/issues/219), within
-[initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124).
-The existing responsibility-based decomposition remains useful: extraction
-proceeds through cohesive workflows, preserving their behavior and public
-facades while moving business ownership out of the persistence implementation.
+Storage facades bind selected-profile adapters to persistence-neutral application
+services. The existing responsibility-based
+decomposition remains useful: extraction proceeds through cohesive workflows, preserving
+their behavior and public facades while moving business ownership out of the persistence
+implementation.
 
 The first service is deliberately narrow. `LedgerSetupRepository` declares a
 `ledger_name` property and `ensure_defaults() -> dict[str, int]`.
@@ -389,11 +385,11 @@ not catch failures to retry or report success.
 
 #### Reference-data slice
 
-[Issue #226](https://github.com/Roklion/Project_Tabula_Rasa/issues/226) extends
-the foundation with separate account, payee, and tag repository contracts and
-application services. The composition root constructs their Sheets adapters
-around the same selected-profile facade used by setup and provider administration.
-There is no second workbook, cache, or credential selection.
+Reference services extend the foundation with separate account,
+payee, and tag repository contracts and application services. The composition root
+constructs their Sheets adapters around the same selected-profile facade used by setup
+and provider administration. There is no second workbook, cache, or credential
+selection.
 
 `AccountService` supports listing, creation, updates, rename, and deactivation;
 permanent account removal is outside the supported product contract.
@@ -431,21 +427,17 @@ The subsequent slices below supply accounting mutations, reporting, and
 documents through their application services. Backup format operations retain
 their explicit provider administration boundary.
 
-For each later extraction, inspect the existing rule, workflow, persistence,
-and renderer owners first. Define the smallest contract for that workflow,
-reuse its pure domain rules, adapt the existing Sheets behavior, and move the
-affected renderer calls to the service. Keep success, relevant failure,
-profile isolation, and recovery coverage while removing duplicate ownership.
-Reference data (#226), transactions (#227), and journals (#228) have their own
-service owners. Google Sheets remains the supported active ledger throughout
-this transition.
+For each later extraction, inspect the existing rule, workflow, persistence, and
+renderer owners first. Define the smallest contract for that workflow, reuse its pure
+domain rules, adapt the existing Sheets behavior, and move the affected renderer calls
+to the service. Keep success, relevant failure, profile isolation, and recovery coverage
+while removing duplicate ownership. Reference data (reference services), transactions
+(transaction services), and journals (journal services) have their own service owners.
+Google Sheets remains the supported active ledger throughout this transition.
 
 #### Reporting, documents, and mileage slices
 
-Issues [#229](https://github.com/Roklion/Project_Tabula_Rasa/issues/229),
-[#233](https://github.com/Roklion/Project_Tabula_Rasa/issues/233), and
-[#234](https://github.com/Roklion/Project_Tabula_Rasa/issues/234) extend the
-foundation with three independent capabilities:
+Reporting, documents and mileage have separate application owners and provider adapters:
 
 | Capability | Application owner | Current infrastructure adapter |
 | --- | --- | --- |
@@ -477,15 +469,15 @@ their existing source workflow while sharing the same byte store. The Drive adap
 stable-identity reconciliation, filename, and integrity implementation;
 the extraction introduces no additional retries, rollback, or schema changes.
 
-The services can be exercised with small repository/document-store fakes
-without importing Streamlit, pandas, Sheets, or Drive. A future HTTP caller
-supplies application inputs, and a future datastore/object store implements the
-ports; neither requires moving bookkeeping rules into endpoint handlers.
-PostgreSQL, commercial authorization, object-storage vendor selection, and
-new UI/report behavior are outside these slices. Remaining concrete page
-coupling closes incrementally under #219, with #235 as its final boundary gate.
+The services can be exercised with small repository/document-store fakes without
+importing Streamlit, pandas, Sheets, or Drive. A future HTTP caller supplies application
+inputs, and a future datastore/object store implements the ports; neither requires
+moving bookkeeping rules into endpoint handlers. PostgreSQL, commercial authorization,
+object-storage vendor selection, and new UI/report behavior are outside these slices.
+Remaining concrete page coupling closes incrementally under application service
+boundaries, with application boundary verification as its final boundary gate.
 
-### Transaction and journal services (#227 / #228)
+### Transaction and journal services
 
 The selected profile's composition root supplies `TransactionService` and
 `JournalService`. The New entry surface, single and bulk transaction editors,
@@ -509,15 +501,14 @@ and deletion. Balancing/input rules and fresh reference rules share the existing
 posting translation; `TransactionService.postings` exposes that translation
 without persisting a second ledger. No new reversal workflow is introduced.
 
-Sheets retains batch construction, worksheet mapping, locking, fresh mutation
-reads, posting-ID uniqueness, cache invalidation and bounded uncertain-write
-readback. Its compatibility facade invokes the same extracted domain rules for
-source-owned recurring, mixed-use and asset workflows.
-Document/receipt mutations and reporting queries retain their separate
-service owners. Contracts define behavior for a future relational
-adapter without specifying PostgreSQL tables or an HTTP API.
+Sheets retains batch construction, worksheet mapping, locking, fresh mutation reads,
+posting-ID uniqueness, cache invalidation and bounded uncertain-write readback. Its
+compatibility facade invokes the same extracted domain rules for Source-owned recurring,
+mixed-use and asset workflows. Document/receipt mutations and reporting queries retain
+their separate service owners. Contracts define behavior for a future relational adapter
+without specifying PostgreSQL tables or an HTTP API.
 
-### Recurring, assets, and mixed-use services (#230–#232)
+### Recurring, assets, and mixed-use services
 
 The production composition supplies `RecurringService`, `AssetService`, and
 `MixedUseService` alongside the same profile's transaction and journal services.
@@ -531,26 +522,26 @@ They expose no worksheet rows, ranges, provider clients, or workbook locks.
 | Fixed assets/depreciation | `AssetService` owns asset CRUD, overrides, retirement, schedule/history locks, and posting orchestration. `asset.py` and `depreciation_posting.py` reuse `depreciation.py`; `JournalService.prepare_depreciation` prepares the existing non-cash Simple Ledger posting records. | `GoogleSheetsAssetRepository` performs fresh asset/history/reference reads, expected-record checks, reference-integrity checks, record mapping, append batching, deletion, cache invalidation, and bounded recovery. |
 | Mixed-use allocations | `MixedUseService` reuses `mixed_use.py` and `mixed_use_records.py` for allocation and source/projection rules. Bookkeeping preparation goes through `TransactionService.prepare_source_projection` using fresh references supplied at the source mutation boundary. | `GoogleSheetsMixedUseRepository` retains source/projection persistence, fresh relationships and expected baselines, serialization, paired writes, and uncertain-response readback. Source-aware receipts share the selected graph's mixed-use service and document store. |
 
-The current Streamlit entry points use these services. Recurring reconciliation
-still runs once per selected profile/workbook/session, and also has a callable
-scheduler-neutral entry point; a durable scheduler remains #223's scope.
+The current Streamlit entry points use these services. Recurring reconciliation still
+runs once per selected profile/workbook/session, and also has a callable
+scheduler-neutral entry point; a durable scheduler remains platform operations's scope.
 Depreciation remains an explicit action with the same Expense records, stable
-asset-period IDs (including zero amounts), schedule semantics, and posted-record
-locks. Mixed-use selection, edit/delete/copy, receipt recovery, and source
-relationships retain their current behavior. No mixed-use asset depreciation,
-PostgreSQL, HTTP API, or commercial authorization is introduced.
+Asset-period IDs (including zero amounts), schedule semantics, and posted-record locks.
+Mixed-use selection, edit/delete/copy, receipt recovery, and source relationships retain
+their current behavior. No mixed-use asset depreciation, PostgreSQL, HTTP API, or
+commercial authorization is introduced.
 
-Compatibility facade methods reuse the same neutral rules and services rather
-than maintaining parallel bookkeeping implementations. Current dictionary
-record shapes remain supported while adapter serialization owns their Sheet
-representation. The service graph implementation version changes so cached
-pre-extraction graphs are rebuilt. Pure fake-repository workflows run with
-Sheets, Drive, Streamlit, pandas, and infrastructure imports blocked; existing
-adapter tests cover stable identities, stale writes, partial results, and recovery,
-with two-profile service/composition coverage. Issue #235 closes the remaining
-ordinary page/storage coupling and removes transitional contexts.
+Compatibility facade methods reuse the same neutral rules and services rather than
+maintaining parallel bookkeeping implementations. Current dictionary record shapes
+remain supported while adapter serialization owns their Sheet representation. The
+service graph implementation version changes so cached pre-extraction graphs are
+rebuilt. Pure fake-repository workflows run with Sheets, Drive, Streamlit, pandas, and
+infrastructure imports blocked; existing adapter tests cover stable identities, stale
+writes, partial results, and recovery, with two-profile service/composition coverage.
+application boundary verification closes the remaining ordinary page/storage coupling
+and removes transitional contexts.
 
-### Completed UI/application boundary (#235)
+### Completed UI/application boundary
 
 Core bookkeeping pages, reference-use summaries, transaction/mileage imports,
 and CSV exports consume `ApplicationServices`. `CategoryService` completes the
@@ -584,21 +575,21 @@ imports are sanctioned only in these ownership seams:
 | `scripts/` and provider/adapter tests | Explicit migration, validation, restore utilities, and infrastructure verification outside ordinary application/UI code. |
 
 `GoogleSheetsStorage` remains an infrastructure compatibility facade. Existing
-dictionary records and current import commit orchestration are deliberate
-migration boundaries, not an API shaped around worksheet rows or ranges.
-PostgreSQL work (#220) implements the capability contracts and owns relational
-transactions/constraints; HTTP work (#221) invokes services and supplies
-authenticated entity context without copying bookkeeping rules into handlers.
-Commercial authorization (#222), durable scheduling (#223), historical
-conversion, and current Sheets/Drive backup formats remain separate work.
-The internal profile key continues to select configuration; it does not confer
-commercial user authorization.
+dictionary records and current import commit orchestration are deliberate migration
+boundaries, not an API shaped around worksheet rows or ranges. PostgreSQL work
+(PostgreSQL persistence) implements the capability contracts and owns relational
+transactions/constraints; HTTP work (browser and API workflows) invokes services and
+supplies authenticated entity context without copying bookkeeping rules into handlers.
+Commercial authorization (identity and tenancy), durable scheduling (platform
+operations), historical conversion, and current Sheets/Drive backup formats remain
+separate work. The internal profile key continues to select configuration; it does not
+confer commercial user authorization.
 
-The closing EPIC audit traces the existing fresh/expected-record validation,
-stable identities, source-owned projections, bounded retries, cache invalidation,
-profile isolation, receipt partial outcomes, and accounting invariants through
-the service graph. This integration adds no runtime retry, snapshot, rollback,
-or other defensive mechanism.
+The closing audit traces the existing fresh/expected-record validation, stable
+identities, source-owned projections, bounded retries, cache invalidation, profile
+isolation, receipt partial outcomes, and accounting invariants through the service
+graph. This integration adds no runtime retry, snapshot, rollback, or other defensive
+mechanism.
 
 ## Receipt boundary
 
@@ -693,131 +684,105 @@ or rebuilt. The new profile's workbook is initialized and accessed only under
 its own key. Hosted projections do not grant local administration or reveal
 local-only recovery metadata.
 
-## Commercial PostgreSQL design (#243)
+## Commercial PostgreSQL design
 
-The current runtime still uses Google Sheets. The proposed commercial v1
-relational implementation contract is [ADR 0001: Canonical accounting schema
-and persistence conventions](adr/0001-canonical-accounting-schema.md), under
-[EPIC #220](https://github.com/Roklion/Project_Tabula_Rasa/issues/220) and the
-[commercialization initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124).
+[ADR 0001](adr/0001-canonical-accounting-schema.md) defines entity-scoped tables,
+constraints, disjoint Simple Ledger/journal projections, signed opening values,
+Source-owned recurring/mixed-use/depreciation relationships and loaded baselines.
+Application/domain services retain accounting behavior; the schema maps their repository
+contracts without creating another accounting engine.
 
-It specifies entity-scoped tables and constraints, shared entries/postings with
-disjoint Simple Ledger and advanced-journal projections, signed account opening
-values counted once, source-owned recurring/mixed-use/depreciation relationships,
-loaded-record baseline conventions, strict v13-only backup input, and
-dependency-complete Sheets migration units. Application/domain owners above retain their accounting behavior; the
-ADR maps every current repository port to the canonical model. It introduces no
-production adapter, migration, UI change, or authority switch.
+`infrastructure/postgres/` owns the SQLAlchemy Core/Psycopg/Alembic runtime. [Database
+operations](database/POSTGRESQL.md) covers connection/transaction boundaries, forward
+migrations, native test infrastructure and integrity rules. The Streamlit composition
+remains Sheets-backed without database dependencies.
 
-#244's optional database runtime and initial canonical migrations live in
-`infrastructure/postgres/`. [PostgreSQL development and operations](POSTGRESQL.md)
-documents the SQLAlchemy Core/Psycopg/Alembic choice, connection/transaction
-boundaries, baseline coverage, native test harness and shared integrity rules. Current Sheets composition imports none of this infrastructure
-and still works without database configuration or database dependencies.
+Provider-neutral migration plans live in `migration/`, read-only Sheets extraction in
+`infrastructure/sheets_migration.py`, and target loaders/checkpoints in
+`infrastructure/postgres/migration.py`. [Migration](accounting/SHEETS_MIGRATION.md)
+defines deterministic complete units, dry runs, restart and reconciliation. Loading
+alone does not establish whole-profile acceptance or activate authority.
 
-#254's explicit migration tooling keeps provider-neutral plans in `migration/`,
-the read-only Sheets extraction adapter in `infrastructure/sheets_migration.py`,
-and canonical loading/checkpoints in `infrastructure/postgres/migration.py`.
-The [operator guide](SHEETS_POSTGRES_MIGRATION.md) documents deterministic unit
-ordering, dry-run, restart and the persistent staging checkpoint. This tooling
-does not activate PostgreSQL or meet #257 whole-profile acceptance by itself.
+`postgres/composition.py` assembles reference, transaction/journal, recurring,
+mixed-use, asset, mileage and import services using shared operations, versions and
+loaded baselines. Receipt services require an explicit authorized `DocumentStore`: SQL
+owns metadata and relationships; the store owns bytes.
 
-#245/#246's explicit `postgres/composition.py` now assembles entity-scoped
-reference-data, Simple Ledger and advanced journal services on canonical
-entries/postings. It reuses #253's operation, baseline and version machinery.
-The current Streamlit service composition continues to use Sheets. #250–#252
-extend the opt-in PostgreSQL graph with mileage and bounded transaction imports,
-reuse core default bootstrap, and install receipt services when an authorized
-DocumentStore and stable store kind are explicitly supplied. SQL owns canonical
-metadata/relationships; the store owns bytes. See the adapter and migration
-integration seams in [PostgreSQL development and operations](POSTGRESQL.md).
-#247 adds
-`PostgresLedgerQueryRepository` and `ReportingService` to the opt-in graph, with
-entity-scoped native projections from one committed read-only REPEATABLE READ
-snapshot. Batched reads preserve disjoint simple/journal streams and historical
-references; filters and financial calculations retain their existing application
-and domain owners. Reporting requires its own outer query operation, rather than
-joining a partially written mutation. [Reporting and query-plan coverage](POSTGRESQL.md#reporting-repository-247)
-documents the contract and native validation, supporting the early #221
-commercial web/API milestone.
+`PostgresLedgerQueryRepository` and `ReportingService` read entity-scoped native
+projections through one committed read-only REPEATABLE READ snapshot. Batched reads
+preserve disjoint simple/journal streams and historical references. Reporting uses its
+own outer query operation, never a partially written mutation. See [reporting
+coverage](database/POSTGRESQL.md#reporting-repository).
 
-The opt-in composition also supplies #248's recurring/mixed-use and #249's asset
-services, reusing current domain preparation and canonical source-owned posting
-paths. Reconciliation commits independent occurrences; initial source pairs and
-asset posting calls retain their atomic operation boundaries. See the
-[secondary repository guide](POSTGRESQL.md#recurring-mixed-use-and-asset-repositories-248--249).
-The merged mileage/document/import capabilities (#250–#252) retain their
-separate adapter ownership and explicit document-store binding.
-Later slices, whole-profile
-reconciliation, concurrency verification, complete entity export, and recovery
-rehearsals remain required before #258 commercial production activation. Identity
-and membership remain #222's responsibility rather than a new profile-key
-permission model.
+Recurring reconciliation commits independent occurrences. Initial mixed-use pairs and
+asset postings retain their atomic operation boundaries. See [secondary
+repositories](database/POSTGRESQL.md#recurring-mixed-use-and-asset-repositories). Live
+activation requires [acceptance and cutover](accounting/CUTOVER.md), complete export,
+concurrency verification and recovery evidence. Named memberships own authorization; a
+profile key is not an authorization model.
 
-## Commercial browser/API runtime decision (#276)
+## Commercial browser/API runtime decision
 
-Hosted synthetic Drive composition (#288) reuses the profile-owned
+Hosted synthetic Drive composition (technical-alpha validation) reuses the profile-owned
 `infrastructure/drive_composition.py`, `GoogleDriveDocumentStore` and
-`EntityDocumentStore` with PostgreSQL receipt metadata. The default HTTP runtime
-loads one explicit environment/origin/entity-bound server file, never legacy
-profile/Streamlit configuration. Its fixed synthetic gate cannot authorize a
-private migrated profile. The same small Drive composition owner also serves
-legacy and migrated-profile services. See
-[Hosted synthetic receipt storage](ALPHA_DOCUMENT_STORAGE.md) for configuration,
+`EntityDocumentStore` with PostgreSQL receipt metadata. The default HTTP runtime loads
+one explicit environment/origin/entity-bound server file, never legacy profile/Streamlit
+configuration. Its fixed synthetic gate cannot authorize a private migrated profile. The
+same small Drive composition owner also serves legacy and migrated-profile services. See
+[Hosted synthetic receipt storage](storage/STAGING_RECEIPTS.md) for configuration,
 preflight, custody and evidence boundaries.
 
-[ADR 0002: Commercial web stack and runtime topology](adr/0002-commercial-web-runtime.md)
-selects React/TypeScript with Vite, React Router, TanStack Query and React Hook
-Form; FastAPI/Pydantic/Uvicorn over the existing Python services; and a
-same-origin compiled-SPA/API container on Render with Neon PostgreSQL. It is
-the decision gate for #277 API, #278 browser shell and #279 staging under
-[EPIC #221](https://github.com/Roklion/Project_Tabula_Rasa/issues/221) and
-[initiative #124](https://github.com/Roklion/Project_Tabula_Rasa/issues/124).
-#277/#278 now implement the local FastAPI transport and responsive React shell.
-[Foundation conventions](COMMERCIAL_FOUNDATION.md) owns their DTO/error/context,
-query/cache/form and validation contracts. Hosted deployment remains #279 work;
-these foundations do not change the internal Streamlit/Sheets authority.
+[ADR 0002: Commercial web stack and runtime
+topology](adr/0002-commercial-web-runtime.md) selects React/TypeScript with Vite, React
+Router, TanStack Query and React Hook Form; FastAPI/Pydantic/Uvicorn over the existing
+Python services; and a same-origin compiled-SPA/API container on Render with Neon
+PostgreSQL. [Foundation conventions](browser/FOUNDATION.md) defines DTO/error/context,
+query/cache/form and validation ownership. [Deployment](operations/DEPLOYMENT.md)
+defines environment bindings and promotion. These components do not change the internal
+Streamlit/Sheets authority.
 
 The HTTP composition resolves server-authorized entity context before invoking
-`create_postgres_services`, retaining `create_application` authority/environment
-checks for migrated profiles; handlers translate transport models and call the
-existing application/query owners. OpenAPI generates browser transport types
-without making application services depend on HTTP DTOs. #280 carries the
-original loaded baseline through API responses, forms and edit/delete commands;
-it is #253's explicit commercial-caller dependency, not the whole web epic.
+`create_postgres_services`, retaining `create_application` authority/environment checks
+for migrated profiles; handlers translate transport models and call the existing
+application/query owners. OpenAPI generates browser transport types without making
+application services depend on HTTP DTOs. Protected forms carry the original loaded
+baseline through responses, forms and edit/delete commands, following the shared
+database mutation contract.
 
-#222 owns real sessions, memberships, authorization and onboarding; #223 owns
-durable jobs, audit and operations. The ADR defines their context, cookie/CSRF,
-request-ID, health and worker seams. No client-selected profile/entity ID grants
-authorization. [Commercial development and deployment](COMMERCIAL_WEB.md)
-defines package ownership, local commands, environment/secret boundaries,
-restricted synthetic alpha access and #279's persistent staging/manual setup
-checkpoint. Production authority/recovery and external beta retain the separate
-#220/#222/#223/#224 gates.
+Identity and tenancy owns real sessions, memberships, authorization and onboarding;
+platform operations owns durable jobs, audit and operations. The ADR defines their
+context, cookie/CSRF, request-ID, health and worker seams. No client-selected
+profile/entity ID grants authorization. [Commercial development and
+deployment](browser/RUNTIME.md) defines package ownership, local commands,
+environment/secret boundaries, restricted synthetic alpha access and deployment's
+persistent staging/manual setup checkpoint. Production authority/recovery and external
+beta retain the separate PostgreSQL persistence, identity and tenancy, platform
+operations and external release and customer lifecycle gates.
 
-## Commercial identity decision (#310)
+## Commercial identity decision
 
-[ADR 0003](adr/0003-commercial-identity-and-tenancy.md) selects ZITADEL Cloud
-hosted OIDC login, durable opaque PostgreSQL sessions, stable internal users,
-organization-wide memberships and five server-owned roles. It extends the
-existing RequestContext/session/ScopeBoundary seams and canonical business
-entities; it does not install login or alter current Streamlit/Sheets access.
-[Commercial identity](COMMERCIAL_IDENTITY.md) owns the operator checkpoints,
-threat cases and #311–#321 handoff under #222/#124. Restricted synthetic alpha,
-lasting owner cutover and external beta keep their independent stage gates.
+[ADR 0003](adr/0003-commercial-identity-and-tenancy.md) selects ZITADEL Cloud hosted
+OIDC login, durable opaque PostgreSQL sessions, stable internal users, organization-wide
+memberships and five server-owned roles. It extends the existing
+RequestContext/session/ScopeBoundary seams and canonical business entities; it does not
+install login or alter current Streamlit/Sheets access. [Commercial
+identity](identity/PROVIDER_SETUP.md) owns the operator checkpoints, threat cases and
+identity control plane and hosted identity rollout handoff within the identity layer.
+Restricted synthetic alpha, lasting owner cutover and external beta keep their
+independent stage gates.
 
 ## Implementation map
 
 Whole-profile acceptance extends migration reconciliation with complete export
-validation on one snapshot. Native per-entity authority controls block prepared
-or rolled-back target writes and persist the first committed PostgreSQL mutation
-that ends Sheets rollback. Existing Google receipt ownership stays bound to the
-original selected profile through a thin entity adapter. The
-[acceptance and cutover guide](BOOKKEEPING_CUTOVER.md) owns maintenance, trusted
-configuration, independent production gates and the recovery boundary. This
-composition is not commercial membership authorization; #222 remains its owner.
-The Streamlit edition continues to use Sheets and refuses profiles configured
-for maintenance or PostgreSQL. The commercial web/API stack remains #221 work.
+validation on one snapshot. Native per-entity authority controls block prepared or
+rolled-back target writes and persist the first committed PostgreSQL mutation that ends
+Sheets rollback. Existing Google receipt ownership stays bound to the original selected
+profile through a thin entity adapter. The [acceptance and cutover
+guide](accounting/CUTOVER.md) owns maintenance, trusted configuration, independent
+production gates and the recovery boundary. This composition is not commercial
+membership authorization; identity and tenancy remains its owner. The Streamlit edition
+continues to use Sheets and refuses profiles configured for maintenance or PostgreSQL.
+The commercial web/API stack remains browser and API workflows work.
 
 | Area | Primary implementation |
 | --- | --- |
@@ -848,8 +813,8 @@ into the existing reporting models. `infrastructure/postgres/entity_export.py`
 reads the full selected entity in an independent read-only database snapshot.
 It does not use worksheet-shaped CRUD records or regenerate source history.
 
-`scripts/export_postgres_entity.py` composes this capability for an authorized
-operator and writes private artifacts outside Git checkouts. DocumentStore
-continues to own external bytes. Commercial customer authorization/delivery
-belongs to #224; #258 must verify the target export alongside its other
-activation gates. See [the export operator guide](BOOKKEEPING_EXPORT.md).
+`scripts/export_postgres_entity.py` composes this capability for an authorized operator
+and writes private artifacts outside Git checkouts. DocumentStore continues to own
+external bytes. Commercial customer authorization/delivery belongs to external release
+and customer lifecycle; authority cutover must verify the target export alongside its
+other activation gates. See [the export operator guide](accounting/EXPORT.md).

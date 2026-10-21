@@ -1,4 +1,4 @@
-"""Explicit read-only core/secondary evidence; #257 owns final acceptance."""
+"""Read-only core/secondary reconciliation; whole-profile acceptance is separate."""
 
 from dataclasses import asdict
 from datetime import date

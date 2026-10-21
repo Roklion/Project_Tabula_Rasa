@@ -1,4 +1,4 @@
-"""Opt-in #288 browser release gate on retained, synthetic staging only.
+"""Opt-in browser release validation on retained, synthetic staging only.
 
 No database/admin credentials, remote fault injection, traces or byte deletion.
 The same journey is exercised against disposable PostgreSQL in repository CI.
@@ -270,7 +270,7 @@ def run(environ, release, *, allow_writes=False):
         with operation('configuration'):
             origin, username, password = configuration(environ, release, allow_writes)
         print(json.dumps({'run': run_id, 'release': release, 'status': 'started'}), flush=True)
-        # Reuse #279's anonymous restriction, identity, routing and DB read smoke.
+        # Reuse deployment smoke for anonymous restrictions, identity, routing and DB reads.
         with operation('initial_smoke'):
             smoke(origin, username, password, release)
         with operation('browser_start'):
