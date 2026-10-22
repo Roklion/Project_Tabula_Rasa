@@ -259,3 +259,51 @@ def test_workspace_switch_invite_demote_remove_and_logout(named_server, width):
             assert second.request.get(origin + '/api/v1/session').status == 200
         finally:
             browser.close()
+
+
+@pytest.mark.parametrize('engine', ['chromium', 'firefox', 'webkit'])
+@pytest.mark.parametrize('width', [1440, 320])
+def test_same_name_businesses_remain_distinct_through_selection(named_server, width, engine):
+    origin, repo, alice, _, _, b, _, _ = named_server
+    repo.set_membership(b, alice.id, 'read_only')
+    name = 'Shared independent business ' * 4
+    with repo.database.transaction() as connection:
+        connection.execute(text("UPDATE business_entities SET name=:name WHERE id IN ('alpha','beta')"), {'name': name})
+        configuration_hash = connection.scalar(text("SELECT configuration_hash FROM identity_environments WHERE environment='test'"))
+    sessions = PostgresSessionRepository(repo.database, 'test', configuration_hash)
+    raw, _ = sessions.issue(verified())
+    sessions.select(raw, 'alpha')
+    with sync_playwright() as playwright:
+        browser = getattr(playwright, engine).launch()
+        try:
+            context = browser.new_context(viewport={'width': width, 'height': 1000})
+            context.add_cookies([{'name': 'tabula_dev_session', 'value': raw, 'url': origin, 'httpOnly': True, 'sameSite': 'Lax'}])
+            page = context.new_page()
+            # Isolate explicit selection from focus/periodic authority checks.
+            page.add_init_script("Object.defineProperty(document, 'visibilityState', {get: () => 'hidden'})")
+            page.goto(origin)
+            selector = page.get_by_label('Select business')
+            expect(selector.locator('option[value="alpha"]')).to_have_text(name.strip() + ' (reference: alpha)')
+            expect(selector.locator('option[value="beta"]')).to_have_text(name.strip() + ' (reference: beta)')
+            selector.select_option('beta')
+            dialog = page.get_by_role('alertdialog', name='Switch business')
+            expect(dialog).to_be_visible()
+            expect(dialog.get_by_text('Business reference: beta', exact=True)).to_be_visible()
+            dialog.get_by_role('button', name='Keep current business').click()
+            expect(selector).to_have_value('alpha')
+            assert context.request.get(origin + '/api/v1/session').json()['entity']['id'] == 'alpha'
+            selector.select_option('beta')
+            page.get_by_role('button', name='Discard draft and switch').click()
+            expect(page.get_by_text('Role: read only', exact=True)).to_be_visible()
+            expect(page.get_by_text('Business reference: beta', exact=True)).to_be_visible()
+            assert context.request.get(origin + '/api/v1/session').json()['entity']['id'] == 'beta'
+            assert context.request.get(origin + '/api/v1/entities/unknown/accounts').status == 403
+            page.goto(origin + '/businesses')
+            businesses = page.get_by_role('region', name='Available businesses')
+            expect(businesses.get_by_text(name.strip() + ' (reference: alpha)', exact=False)).to_be_visible()
+            expect(businesses.get_by_text(name.strip() + ' (reference: beta)', exact=False)).to_be_visible()
+            expect(businesses.get_by_text('Selected business', exact=True)).to_be_visible()
+            assert_accessible(page)
+            assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+        finally:
+            browser.close()

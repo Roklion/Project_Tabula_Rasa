@@ -318,7 +318,10 @@ membership and claimed profile IDs do not unlock that interface.
   write permission. [Named-user authentication](docs/identity/AUTHENTICATION.md) owns the
   operator settings, session policy and remaining release gates.
 - Named users can switch among server-authorized business choices.
-  Business and role labels use server claims; backing organization names stay hidden. Confirmed switching discards
+  Business and role labels use server claims; backing organization names stay hidden.
+  Duplicate business names include the full stable business reference in selector/list
+  labels. Confirmation names the target reference, and the shell retains the selected
+  reference so users can distinguish same-name ledgers before entering records. Confirmed switching discards
   private drafts/uploads/queries and receipt URLs, returns to Dashboard and
   signals other tabs to reload authority. An uncertain switch unmounts private
   content and offers a safe reload/sign-out state.

@@ -11,7 +11,10 @@ owns provider verification.
 
 The labeled business selector lists only current server-authorized business names.
 The business name and role come from server claims; backing organization names are
-not product labels. My Businesses lists independently authorized business access
+not product labels. Same-name choices in the selector and My Businesses append the
+full stable business reference. Switch confirmation identifies its target reference;
+the shell displays the selected reference even if the available list is refreshing.
+References identify ledgers and confer no authority. My Businesses lists independently authorized business access
 and offers Create another business. Read-only members can switch and sign out. Selection updates
 the durable server session after Origin/CSRF and current membership validation;
 an arbitrary URL, entity ID or role never grants access.

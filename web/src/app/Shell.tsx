@@ -34,6 +34,7 @@ export function Shell() {
       <div className={styles.brand}>Project <br />Tabula Rasa</div>
       <div className={styles.context}><span className="muted">Business</span>
         <strong>{session.entity.name}</strong>
+        <span>Business reference: {session.entity.id}</span>
         {session.entity.role && <span>Role: {session.entity.role.replace('_', ' ')}</span>}
         <EntitySelector activeId={session.entity.id} />
         {session.trusted_development && <span className={styles.badge}>Technical alpha · development</span>}
