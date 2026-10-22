@@ -615,8 +615,12 @@ edition.
   supported standard bookkeeping default. Back preserves names. Creating opens
   Dashboard with account review, first transaction and ledger next actions.
   Confirmed setup selection signals peer tabs to clear stale scope and reload authority.
-  Additional business creation is Owner-only in Workspace & members and shares
-  the same form and server bootstrap owner.
+  The retained Workspace & members additional-business control receives a safe
+  denial: the server no longer appends a business to an existing container.
+  Each new business requires a fresh private authorization container and Owner
+  membership. Business-first onboarding replaces that control separately;
+  [Business tenancy](docs/identity/BUSINESS_TENANCY.md) owns the server contract
+  and non-destructive deployment procedure.
 - Progress and failures use shared status/alert components. Explicit retries
   retain the request ID and submitted payload; refresh checks the durable
   server receipt. Only opaque user/workspace-scoped request IDs enter tab session

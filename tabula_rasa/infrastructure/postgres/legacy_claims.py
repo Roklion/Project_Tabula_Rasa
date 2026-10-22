@@ -46,6 +46,13 @@ class PostgresLegacyClaims:
                 # Same entity lock as the accepted cutover; serializes claims/ledger boundary.
                 connection.execute(text('SELECT pg_advisory_xact_lock(hashtextextended(:id,258))'),
                                    {'id': claim.entity_id})
+            # Include inactive bindings. Preflight must reject the same occupied
+            # container as apply, without changing an existing approved claim.
+            occupied = connection.scalar(text('''SELECT entity_id FROM organization_entities
+                WHERE organization_id=:org AND entity_id<>:entity'''),
+                {'org': claim.organization_id, 'entity': claim.entity_id})
+            if occupied is not None:
+                raise IdentityError('forbidden')
             owner = connection.scalar(text("""SELECT b.id FROM identity_bindings b
                 JOIN identity_users u ON u.id=b.user_id AND u.state='active'
                 JOIN memberships m ON m.user_id=u.id AND m.state='active' AND m.role='owner'

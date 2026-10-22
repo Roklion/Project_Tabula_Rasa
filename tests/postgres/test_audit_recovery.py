@@ -397,10 +397,14 @@ def test_real_pg_dump_restore_retains_audit_archive(database):
         restored = Database(DatabaseSettings(database.engine.url.set(database=name)))
         from tabula_rasa.infrastructure.postgres.audit_recovery import _inventory
         with database.transaction(read_only=True) as source_connection, restored.transaction(read_only=True) as target_connection:
-            source_inventory = _inventory(source_connection, '0015_support_controls')
-            target_inventory = _inventory(target_connection, '0015_support_controls')
+            from tabula_rasa.infrastructure.postgres.migrations import current_revision
+            source_inventory = _inventory(source_connection, current_revision(source_connection))
+            target_inventory = _inventory(target_connection, current_revision(target_connection))
             for key in source_inventory:
                 assert target_inventory[key] == source_inventory[key], key
+            assert target_connection.scalar(text('''SELECT count(*) FROM pg_constraint
+                WHERE conrelid='organization_entities'::regclass
+                AND conname='one_business_per_organization' AND convalidated''')) == 1
         for scope in expected:
             assert verify(restored, expected[scope], scope)['status'] == 'matched'
             assert reader(restored, scope).query(limit=1000) == source_events[scope]

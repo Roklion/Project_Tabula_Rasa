@@ -63,9 +63,10 @@ def test_bootstrap_atomic_retry_restart_multiple_orgs_and_isolation(database, mo
     for org in (foreign['organization_id'], 'unknown'):
         with pytest.raises(IdentityError, match='forbidden'):
             service.bootstrap(alice, uuid4().hex, 'A', 'Attack', org)
-    third = service.bootstrap(alice, uuid4().hex, 'A', 'Another business', results[0]['organization_id'])
-    assert third['organization_id'] == results[0]['organization_id'] != second['organization_id']
-    assert len(sessions.identity.allowed_entities(alice.user_id)) == 3
+    with pytest.raises(IdentityError, match='forbidden'):
+        service.bootstrap(alice, uuid4().hex, 'A', 'Another business', results[0]['organization_id'])
+    assert second['organization_id'] != results[0]['organization_id']
+    assert len(sessions.identity.allowed_entities(alice.user_id)) == 2
     assert len(sessions.identity.allowed_entities(bob.user_id)) == 1
     with database.transaction(read_only=True) as connection:
         from tabula_rasa.ledger_defaults import DEFAULT_ACCOUNTS, DEFAULT_CATEGORIES

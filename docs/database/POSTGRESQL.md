@@ -48,6 +48,13 @@ support grants and immutable support-action records. It provisions no operators
 and changes no financial v1 export fields. See [Support operations](../operations/SUPPORT.md)
 for human-approved provisioning, revocation and compatible rollback.
 
+Forward revision `0016_business_tenancy` enforces one retained business per
+private organization, including inactive bindings. It changes no canonical
+bookkeeping/export fields and performs no automatic conversion. Ambiguous
+legacy containers block the entire upgrade transaction. Follow the read-only
+inventory, explicit reconciliation and compatible rollback procedure in
+[Business tenancy](../identity/BUSINESS_TENANCY.md) before deploying.
+
 ## Access and migration tools
 
 Revision `0014_document_locations` permits managed S3 connection references and retains

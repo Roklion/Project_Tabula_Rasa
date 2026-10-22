@@ -34,8 +34,9 @@ There is no persistent private browser cache or client authorization fallback.
 ## Members and invitations
 
 Open **Workspace & members**. Owner/Admin members see current membership and
-invitation administration for their workspace. Roles apply to every active
-business in that workspace. Admins can grant Editor, Accountant and Read-only,
+invitation administration for their workspace. The retained workspace container
+owns exactly one business; roles apply only to that business. See [Business tenancy](BUSINESS_TENANCY.md) for persistent
+boundaries and non-destructive rollout. Admins can grant Editor, Accountant and Read-only,
 demote or deactivate themselves, and manage non-Owner/non-Admin members. Owners can manage
 all roles. Grant ownership is a separate explicitly confirmed Owner action;
 Owner grants and removal/demotion require provider authentication within five
@@ -99,11 +100,10 @@ legal/tax fields are accepted. Books use the existing standard chart of accounts
 and Income/Expense category defaults from `LedgerSetupService`; no second default
 inventory or new currency/tax setup is introduced.
 
-`POST /api/v1/workspaces/{organization_id}/businesses` uses the same body and bootstrap
-owner, requiring current Owner `entity:manage` authority in that organization. There is
-no commercial entitlement/billing policy yet; external release and customer lifecycle
-owns that future boundary. Admin and ordinary memberships confer no creation right. The
-workspace name in this shared request does not rename an existing workspace.
+`POST /api/v1/workspaces/{organization_id}/businesses` rejects new additions,
+including Owner requests. Exact authorized historical receipts remain replayable.
+Every new business must use a fresh backing organization. The retained request
+workspace name does not grant authority or rename an existing container.
 
 One database transaction creates organization, Owner membership, canonical
 business entity, ownership binding, default records and an idempotency receipt.
@@ -127,7 +127,9 @@ Create ledger uses the existing atomic bootstrap, then selects the authorized
 business, notifies peer tabs to discard stale scope through the existing data-free
 scope-change signal, and opens Dashboard with account, first-transaction and ledger actions.
 Repeat visits open the existing ledger; they do not create another workspace.
-Owners can add another business in Workspace & members using the same setup flow.
+The old additional-business control cannot add to an existing container.
+Business-first onboarding replaces it with creation of an independent business;
+see [Business tenancy](BUSINESS_TENANCY.md) for the backend contract and rollout.
 
 The tab stores only an opaque request ID keyed by authenticated user and target
 workspace in session storage. Names, invitation credentials, sessions and ledger
@@ -179,3 +181,7 @@ HTTP/CSRF/secret-safe denials. `test_workspace_browser.py` exercises two users a
 desktop/mobile widths, switching, membership administration, revocation, logout
 and accessibility using the compiled app and disposable PostgreSQL. These are
 synthetic local/CI checks, not hosted-provider or external-beta approval.
+
+Business tenancy requires forward revision `0016_business_tenancy`. Read the
+[business tenancy rollout](BUSINESS_TENANCY.md) before deploying; an ambiguous
+legacy container blocks migration without automatic conversion.
