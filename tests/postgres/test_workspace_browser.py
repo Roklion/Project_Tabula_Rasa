@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from playwright.sync_api import expect, sync_playwright
@@ -112,6 +113,17 @@ def test_first_ledger_retry_refresh_repeat_visit_and_two_entity_switch(named_ser
             peer.get_by_role('button', name='Create another business', exact=True).click()
             expect(peer.get_by_label('Business name')).to_be_visible()
             peer.get_by_label('Business name').fill('Another unsubmitted peer draft')
+            # The old organization-addition endpoint stays denied while the
+            # business-first form below creates an independent container.
+            current = context.request.get(origin + '/api/v1/session').json()
+            denied = context.request.post(origin + '/api/v1/workspaces/' + current['organization_id'] + '/businesses',
+                headers={'Origin': origin, 'X-CSRF-Token': current['csrf_token']},
+                data={'request_id': uuid4().hex, 'workspace_name': 'Ignored', 'business_name': 'Rejected addition'})
+            assert denied.status == 403
+            expect(peer.get_by_label('Business name')).to_have_value('Another unsubmitted peer draft')
+            assert len(context.request.get(origin + '/api/v1/entities').json()['items']) == 1
+            with repo.database.transaction(read_only=True) as connection:
+                assert connection.scalar(text('SELECT count(*) FROM workspace_bootstraps WHERE user_id=:user'), {'user': actor}) == 1
             page.bring_to_front()
             page.goto(origin + '/businesses')
             # Wait for the async list before clicking a control below it.
@@ -139,6 +151,8 @@ def test_first_ledger_retry_refresh_repeat_visit_and_two_entity_switch(named_ser
                 context.request.get(origin + '/api/v1/session').json()['entity']['id'])
             choices = context.request.get(origin + '/api/v1/entities').json()['items']
             assert len(choices) == 2
+            assert {item['role'] for item in choices} == {'owner'}
+            expect(peer.get_by_label('Business name')).to_have_count(0)
             assert len({item['organization_id'] for item in choices}) == 2
             first = next(item['id'] for item in choices if item['name'] == first_name)
             page.get_by_label('Select business').select_option(first)
