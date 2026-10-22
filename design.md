@@ -622,7 +622,8 @@ edition.
   The server creates a private backing organization and grants the creator Owner;
   no workspace name or organization selector appears in setup. Each new business
   uses an independent container and copies no other memberships. Existing data
-  is not converted or granted access implicitly.
+  is not converted or granted access implicitly. Persistent boundaries and the
+  non-destructive rollout are defined in [Business tenancy](docs/identity/BUSINESS_TENANCY.md).
 - Authenticated My Businesses lists permitted names and each specific role, with
   Create another business available independently of the current business role.
   It shares the first-use form and bootstrap owner. Business & members retains

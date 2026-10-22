@@ -125,3 +125,30 @@ def test_claim_application_rolls_back_as_one_control_plane_transaction(database)
     with database.transaction(read_only=True) as connection:
         assert connection.scalar(text('SELECT count(*) FROM legacy_entity_claims')) == 0
     assert status(database)['state'] == 'prepared'
+
+
+@pytest.mark.parametrize('inactive', [False, True])
+def test_claim_preview_and_apply_refuse_container_already_reserved_for_another_business(database, inactive):
+    identity = PostgresIdentityRepository(database)
+    plans = [loaded(database, profile) for profile in ('alpha', 'beta')]
+    controller = PostgresCutoverController(database)
+    for plan in plans:
+        controller.prepare(plan, mode='rehearsal', evidence=REHEARSAL_EVIDENCE)
+    user = identity.resolve_user(verified())
+    org = identity.create_organization(user.id, 'Independent business')
+    first = claim_for(database, 'alpha', org, user)
+    second = claim_for(database, 'beta', org, user)
+    # Preview was made when empty; filling the container invalidates that plan.
+    preview = PostgresLegacyClaims(database).claim(second)
+    apply_claim(database, first)
+    if inactive:
+        with database.transaction() as connection:
+            connection.execute(text("UPDATE organization_entities SET state='inactive' WHERE entity_id='alpha'"))
+    repo = PostgresLegacyClaims(database)
+    for operation in (lambda: repo.claim(second), lambda: repo.claim(second, apply=True,
+            expected_plan=preview['plan_sha256'], approval_sha256=APPROVAL)):
+        with pytest.raises(IdentityError, match='forbidden'):
+            operation()
+    with database.transaction(read_only=True) as connection:
+        assert connection.scalar(text('SELECT count(*) FROM legacy_entity_claims')) == 1
+        assert connection.scalar(text('SELECT count(*) FROM business_entities')) == 2

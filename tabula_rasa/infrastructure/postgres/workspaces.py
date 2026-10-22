@@ -13,7 +13,7 @@ from tabula_rasa.application.ledger_setup import LedgerSetupService
 from tabula_rasa.application.workspaces import (
     InvitationCredential, grant_allowed, normalized_email, require_capability, require_bootstrap_id,
 )
-from .control_plane import PostgresIdentityRepository, identity_operation
+from .control_plane import ENTITY_ACCESS_SQL, PostgresIdentityRepository, identity_operation
 from .reference_data import PostgresLedgerSetupRepository
 from .sessions import credential_hash
 from .audit import AuditContext, audit_context
@@ -38,11 +38,11 @@ class PostgresWorkspaceRepository:
     def _role(connection, user, org, *, lock=False):
         if lock and not connection.scalar(text("SELECT id FROM organizations WHERE id=:org AND state='active' FOR UPDATE"), {'org': org}):
             raise IdentityError('forbidden')
-        role = connection.scalar(text('''SELECT m.role FROM memberships m
-            JOIN organizations o ON o.id=m.organization_id AND o.state='active'
-            JOIN identity_users u ON u.id=m.user_id AND u.state='active'
-            WHERE m.organization_id=:org AND m.user_id=:user AND m.state='active' '''),
-            {'org': org, 'user': user})
+        # Compatibility organization routes resolve through the unique business
+        # and its current membership; a supplied container ID grants no authority.
+        row = connection.execute(text(ENTITY_ACCESS_SQL + ' AND e.organization_id=:org'),
+            {'org': org, 'user': user}).mappings().first()
+        role = row['role'] if row else None
         if role is None:
             raise IdentityError('forbidden')
         return role

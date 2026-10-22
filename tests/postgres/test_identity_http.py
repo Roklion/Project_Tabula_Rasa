@@ -139,9 +139,12 @@ def test_read_only_identity_management_scope_denial_and_outage_logout(database):
     repo.set_membership(a, alice.id, 'read_only')
     with database.transaction() as connection:
         entity(connection, 'alpha-extra')
-    repo.bind_entity(a, 'alpha-extra')
+    extra = repo.create_organization(bob.id, 'Independent')
+    repo.bind_entity(extra, 'alpha-extra')
+    repo.set_membership(extra, alice.id, 'read_only')
     client, auth, factory = client_for(database)
     raw, session = auth.sessions.issue(verified())
+    auth.sessions.select(raw, 'alpha')
     with client:
         client.cookies.set(auth.session_cookie, raw, domain='127.0.0.1', path='/')
         client.cookies.set(auth.csrf_cookie, session.csrf_token, domain='127.0.0.1', path='/')

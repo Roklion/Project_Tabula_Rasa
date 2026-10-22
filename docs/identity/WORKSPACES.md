@@ -39,8 +39,9 @@ There is no persistent private browser cache or client authorization fallback.
 
 Open **Business & members**. Owner/Admin members see current membership and
 invitation administration for the selected business. Newly created businesses each
-have an independent backing organization. Existing multi-business containers require
-explicit reconciliation before the business-centric model can be released; this UI
+have an independent backing organization enforced by the database. Ambiguous legacy
+containers fail closed and block upgrade until separately approved reconciliation.
+See [Business tenancy](BUSINESS_TENANCY.md) for persistent boundaries and rollout. This UI
 does not split historical grants or change their scope. Admins can grant Editor, Accountant and Read-only,
 demote or deactivate themselves, and manage non-Owner/non-Admin members. Owners can manage
 all roles. Grant ownership is a separate explicitly confirmed Owner action;
@@ -111,9 +112,9 @@ callers with `workspace_name` and `business_name`; it always creates a new conta
 The deprecated `/api/v1/workspaces/{organization_id}/businesses` rejects new additions,
 even for Owners, while permitting authorized exact replay of historical receipts.
 Internal organization/schema names remain implementation details. Existing
-multi-business containers require explicit role, invitation, provider and claim
-reconciliation plus persistent one-to-one enforcement before the business-centric
-model can be released. New creation does not convert those records. Do not silently
+multi-business containers block the forward constraint upgrade and require explicit
+role, invitation, provider and claim reconciliation through the
+[non-destructive tenancy rollout](BUSINESS_TENANCY.md). New creation does not convert those records. Do not silently
 convert existing staging or owner data or infer independent historical grants.
 
 One database transaction creates organization, Owner membership, canonical
@@ -202,3 +203,7 @@ HTTP/CSRF/secret-safe denials. `test_workspace_browser.py` exercises two users a
 desktop/mobile widths, switching, membership administration, revocation, logout
 and accessibility using the compiled app and disposable PostgreSQL. These are
 synthetic local/CI checks, not hosted-provider or external-beta approval.
+
+Business tenancy requires forward revision `0016_business_tenancy`. Read the
+[business tenancy rollout](BUSINESS_TENANCY.md) before deploying; an ambiguous
+legacy container blocks migration without automatic conversion.

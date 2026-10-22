@@ -58,13 +58,14 @@ def test_bootstrap_atomic_retry_restart_multiple_orgs_and_isolation(database, mo
     with pytest.raises(IdentityError, match='conflict'):
         service.bootstrap(alice, key, 'A', 'Changed business')
     assert service.bootstrap_status(bob, key)['state'] == 'not_started'
-    create(service, alice, 'Second')
+    second = create(service, alice, 'Second')
     foreign = create(service, bob, 'Foreign')
     for org in (foreign['organization_id'], 'unknown'):
         with pytest.raises(IdentityError, match='forbidden'):
             service.bootstrap(alice, uuid4().hex, 'A', 'Attack', org)
     with pytest.raises(IdentityError, match='forbidden'):
         service.bootstrap(alice, uuid4().hex, 'A', 'Another business', results[0]['organization_id'])
+    assert second['organization_id'] != results[0]['organization_id']
     assert len(sessions.identity.allowed_entities(alice.user_id)) == 2
     assert len(sessions.identity.allowed_entities(bob.user_id)) == 1
     with database.transaction(read_only=True) as connection:
