@@ -199,3 +199,33 @@ it('resumes an interrupted additional creation and retries the same payload afte
   expect(create.mock.calls[0][1]).toEqual({ request_id: 'additional-request', business_name: 'Business' });
   expect(create.mock.calls[1][1]).toEqual(create.mock.calls[0][1]);
 });
+
+it('resumes a preceding workspace receipt and retries only authorized selection', async () => {
+  const member = { ...session, actor_id: setup.actor_id, trusted_development: false };
+  const oldSlot = `tabula-setup:${member.actor_id}:${member.organization_id}`;
+  sessionStorage.setItem(oldSlot, 'workspace-request');
+  const status = vi.spyOn(api, 'bootstrapStatus').mockResolvedValue({ state: 'ready', entity_id: 'existing-business' });
+  vi.spyOn(api, 'session').mockResolvedValue(member);
+  const select = vi.spyOn(api, 'selectEntity').mockRejectedValue(new ApiError('forbidden'));
+  const create = vi.spyOn(api, 'createBusiness');
+  render(<LedgerSetup session={member} />);
+  await screen.findByRole('alert');
+  expect(status).toHaveBeenCalledExactlyOnceWith('workspace-request', expect.any(AbortSignal));
+  fireEvent.click(screen.getByRole('button', { name: 'Retry same setup' }));
+  await waitFor(() => expect(select).toHaveBeenCalledTimes(2));
+  expect(create).not.toHaveBeenCalled();
+  expect(sessionStorage.getItem(oldSlot)).toBe('workspace-request');
+});
+
+it('keeps the preceding workspace request ID on an uncommitted additional setup', async () => {
+  const member = { ...session, actor_id: setup.actor_id, trusted_development: false };
+  sessionStorage.setItem(`tabula-setup:${member.actor_id}:${member.organization_id}`, 'workspace-request');
+  vi.spyOn(api, 'bootstrapStatus').mockResolvedValue({ state: 'not_started' });
+  const create = vi.spyOn(api, 'createBusiness').mockRejectedValue(new ApiError('validation'));
+  render(<LedgerSetup session={member} />);
+  expect(await screen.findByText(/Setup was interrupted/)).toBeVisible();
+  await review();
+  fireEvent.click(screen.getByRole('button', { name: 'Create business' }));
+  await screen.findByRole('alert');
+  expect(create).toHaveBeenCalledExactlyOnceWith(member, { request_id: 'workspace-request', business_name: 'Business' });
+});

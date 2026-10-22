@@ -99,6 +99,14 @@ def test_first_ledger_retry_refresh_repeat_visit_and_two_entity_switch(named_ser
             expect(page.get_by_role('heading', name='Accounts', exact=True)).to_be_visible()
             expect(page.get_by_role('alert')).to_have_count(0)
             assert context.request.get(origin + '/api/v1/entities/alpha/accounts').status == 403
+            current = context.request.get(origin + '/api/v1/session').json()
+            previous_slot = f'tabula-setup:{actor}:{current["organization_id"]}'
+            page.evaluate("([key, receipt]) => sessionStorage.setItem(key, receipt)", [previous_slot, receipt])
+            page.goto(origin + '/businesses')
+            expect(page.get_by_role('region', name='Available businesses').get_by_role('listitem')).to_have_count(1)
+            page.get_by_role('button', name='Create another business', exact=True).click()
+            expect(page.get_by_role('heading', name='Your ledger is ready')).to_be_visible()
+            assert page.evaluate("key => sessionStorage.getItem(key)", previous_slot) is None
             peer.goto(origin + '/businesses')
             expect(peer.get_by_role('region', name='Available businesses').get_by_role('listitem')).to_have_count(1)
             peer.get_by_role('button', name='Create another business', exact=True).click()

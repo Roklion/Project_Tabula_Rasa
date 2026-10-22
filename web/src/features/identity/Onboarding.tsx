@@ -23,6 +23,7 @@ export function LedgerSetup({ session }: { session: SessionState }) {
   const confirmed = useRef<Schemas['BusinessCreateResult'] | undefined>(undefined);
   const mounted = useRef(false);
   const request = useRef<string | undefined>(undefined);
+  const receiptSlot = useRef(key);
 
   async function finish(result: Schemas['BusinessCreateResult']) {
     if (result.state !== 'ready' || !result.entity_id) return;
@@ -32,7 +33,7 @@ export function LedgerSetup({ session }: { session: SessionState }) {
     if (current.actor_id !== session.actor_id || current.state === 'needs_setup') throw new Error('Business context unavailable');
     if (current.entity.id !== result.entity_id) await api.selectEntity(current, result.entity_id);
     if (!mounted.current) return;
-    sessionStorage.removeItem(key);
+    sessionStorage.removeItem(receiptSlot.current);
     notifyPeerScopeChange();
     window.location.replace('/');
   }
@@ -43,6 +44,12 @@ export function LedgerSetup({ session }: { session: SessionState }) {
     async function resume() {
       try {
         request.current = sessionStorage.getItem(key) ?? undefined;
+        if (!request.current && session.state !== 'needs_setup') {
+          // Resume the preceding workspace UI's exact handle without allocating a new request.
+          const previous = `tabula-setup:${session.actor_id}:${session.organization_id}`;
+          const existing = sessionStorage.getItem(previous);
+          if (existing) { request.current = existing; receiptSlot.current = previous; }
+        }
         if (request.current) {
           const result = await api.bootstrapStatus(request.current, controller.signal);
           if (controller.signal.aborted) return;

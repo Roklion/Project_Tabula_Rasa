@@ -156,7 +156,9 @@ completion. Explicit **Retry same setup** retains the same request and payload; 
 automatic create retry occurs. Browser storage must be available before creation.
 Closing the tab ends the browser resume handle; server receipts and completed businesses
 remain durable and discoverable at login. An old first-use receipt can still resume
-through the new business status endpoint without provisioning again. If a completed
+through the new business status endpoint without provisioning again. An additional-business
+receipt from the preceding workspace interface is also resumed from its original
+user/organization handle and retired only after authorized selection. If a completed
 receipt cannot select its business, retry repeats only authorized selection, never
 creation.
 
