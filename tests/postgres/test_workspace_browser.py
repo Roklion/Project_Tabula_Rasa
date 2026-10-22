@@ -104,9 +104,17 @@ def test_first_ledger_retry_refresh_repeat_visit_and_two_entity_switch(named_ser
             page.get_by_role('button', name='Create another business', exact=True).click()
             page.get_by_label('Business name').fill('Second business')
             review_action = page.get_by_role('button', name='Review defaults')
-            following = page.get_by_role('heading', name='Other ways to get started')
-            assert following.bounding_box()['y'] - (review_action.bounding_box()['y'] + review_action.bounding_box()['height']) >= 32
+            # A focused field may still scroll the viewport. Read both rectangles
+            # in one layout snapshot rather than mixing separate viewport offsets.
+            section = page.get_by_role('region', name='Other ways to get started')
+            gap = section.evaluate("""(section, action) =>
+                section.getBoundingClientRect().top - action.getBoundingClientRect().bottom""",
+                review_action.element_handle())
+            assert gap >= 32
+            expect(page.get_by_label('Business name')).to_have_value('Second business')
             evidence(page, 'another-business')
+            expect(page.get_by_label('Business name')).to_have_value('Second business')
+            expect(review_action).to_be_enabled()
             review_action.click()
             page.get_by_role('button', name='Create business', exact=True).click()
             expect(page.get_by_role('heading', name='Your ledger is ready')).to_be_visible()
