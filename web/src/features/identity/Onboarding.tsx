@@ -7,7 +7,7 @@ import { notifyPeerScopeChange } from '../../app/authSignals';
 
 /** Persist only an opaque receipt key. Authority always comes from the session/API. */
 function receiptKey(session: SessionState) {
-  return `tabula-setup:${session.actor_id}:first`;
+  return `tabula-setup:${session.actor_id}:${session.state === 'needs_setup' ? 'first' : `additional:${session.entity.id}`}`;
 }
 
 export function LedgerSetup({ session }: { session: SessionState }) {

@@ -331,7 +331,8 @@ membership and claimed profile IDs do not unlock that interface.
   Recipient-bound invitation credentials appear once for private distribution;
   authenticated acceptance/decline is also available without a selected business.
   [Business lifecycle](docs/identity/WORKSPACES.md) owns the exact security and
-  retry contract. First-use browser onboarding retains its own contract; the bootstrap service supplies
+  retry contract. Browser creation receipts are scoped to the user and first-use/current-business
+  context so an old completed setup cannot redirect a new creation. The bootstrap service supplies
   its transactional backend without adding a separate profile configuration UI.
 
 **Current behavior** for the technical-alpha application:

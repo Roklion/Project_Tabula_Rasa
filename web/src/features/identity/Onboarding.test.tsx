@@ -161,3 +161,41 @@ it('retries selection of a confirmed refreshed receipt without submitting creati
   expect(create).not.toHaveBeenCalled();
   expect(sessionStorage.getItem('tabula-setup:new-user:first')).toBe('original-request-id');
 });
+
+it('starts an additional business independently of stale first-use and other-actor receipts', async () => {
+  const member = { ...session, actor_id: setup.actor_id, trusted_development: false };
+  sessionStorage.setItem('tabula-setup:new-user:first', 'completed-first-request');
+  sessionStorage.setItem('tabula-setup:other-user:additional:alpha', 'foreign-request');
+  sessionStorage.setItem('tabula-setup:new-user:additional:old-business', 'old-context-request');
+  const status = vi.spyOn(api, 'bootstrapStatus').mockRejectedValue(new ApiError('forbidden'));
+  const create = vi.spyOn(api, 'createBusiness').mockRejectedValue(new ApiError('validation'));
+  render(<LedgerSetup session={member} />);
+  await review();
+  expect(status).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Create business' }));
+  await screen.findByRole('alert');
+  const payload = create.mock.calls[0][1];
+  expect(payload.request_id).not.toBe('completed-first-request');
+  expect(payload.request_id).not.toBe('foreign-request');
+  expect(payload.request_id).not.toBe('old-context-request');
+  expect(sessionStorage.getItem('tabula-setup:new-user:additional:alpha')).toBe(payload.request_id);
+  expect(sessionStorage.getItem('tabula-setup:new-user:first')).toBe('completed-first-request');
+});
+
+it('resumes an interrupted additional creation and retries the same payload after refresh', async () => {
+  const member = { ...session, actor_id: setup.actor_id, trusted_development: false };
+  sessionStorage.setItem('tabula-setup:new-user:first', 'completed-first-request');
+  sessionStorage.setItem('tabula-setup:new-user:additional:alpha', 'additional-request');
+  const status = vi.spyOn(api, 'bootstrapStatus').mockResolvedValue({ state: 'not_started' });
+  const create = vi.spyOn(api, 'createBusiness').mockRejectedValue(new ApiError('validation'));
+  render(<LedgerSetup session={member} />);
+  expect(await screen.findByText(/Setup was interrupted/)).toBeVisible();
+  expect(status).toHaveBeenCalledExactlyOnceWith('additional-request', expect.any(AbortSignal));
+  await review();
+  fireEvent.click(screen.getByRole('button', { name: 'Create business' }));
+  await screen.findByRole('alert');
+  fireEvent.click(screen.getByRole('button', { name: 'Retry same setup' }));
+  await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
+  expect(create.mock.calls[0][1]).toEqual({ request_id: 'additional-request', business_name: 'Business' });
+  expect(create.mock.calls[1][1]).toEqual(create.mock.calls[0][1]);
+});

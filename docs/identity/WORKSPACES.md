@@ -146,8 +146,10 @@ and ledger actions. Visiting, returning or opening an invitation never creates r
 Shared section spacing distinguishes heading-to-content gaps from independent sections,
 including the section following Review defaults. Feedback and focus use shared controls.
 
-The tab stores only an opaque request ID keyed by authenticated user, never names,
-invitation credentials, sessions or ledger contents. After refresh, reopen creation:
+The tab stores only an opaque request ID keyed by authenticated user and creation
+context (first use or the currently selected business), never names,
+invitation credentials, sessions or ledger contents. Completed first-use and other
+business-context handles cannot become the next creation. After refresh, reopen creation:
 a committed receipt selects its authorized business; otherwise re-enter the original
 business name. After an uncertain response, one bounded status readback may confirm
 completion. Explicit **Retry same setup** retains the same request and payload; no

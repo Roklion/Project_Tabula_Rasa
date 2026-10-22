@@ -89,6 +89,9 @@ def test_first_ledger_retry_refresh_repeat_visit_and_two_entity_switch(named_ser
             assert context.request.get(origin + '/api/v1/businesses/creation/' + receipt).json()['state'] == 'ready'
             with repo.database.transaction(read_only=True) as connection:
                 assert connection.scalar(text('SELECT count(*) FROM workspace_bootstraps WHERE user_id=:user'), {'user': actor}) == 1
+            # Model a reload after commit but before the first receipt is retired.
+            page.evaluate("([key, receipt]) => sessionStorage.setItem(key, receipt)",
+                [f'tabula-setup:{actor}:first', receipt])
             page.reload()
             expect(page.get_by_role('heading', name='Your ledger is ready')).to_be_visible()
             expect(page.get_by_role('button', name='Create your first business', exact=True)).to_have_count(0)
@@ -97,11 +100,16 @@ def test_first_ledger_retry_refresh_repeat_visit_and_two_entity_switch(named_ser
             expect(page.get_by_role('alert')).to_have_count(0)
             assert context.request.get(origin + '/api/v1/entities/alpha/accounts').status == 403
             peer.goto(origin + '/businesses')
+            expect(peer.get_by_role('region', name='Available businesses').get_by_role('listitem')).to_have_count(1)
             peer.get_by_role('button', name='Create another business', exact=True).click()
+            expect(peer.get_by_label('Business name')).to_be_visible()
             peer.get_by_label('Business name').fill('Another unsubmitted peer draft')
             page.bring_to_front()
             page.goto(origin + '/businesses')
+            # Wait for the async list before clicking a control below it.
+            expect(page.get_by_role('region', name='Available businesses').get_by_role('listitem')).to_have_count(1)
             page.get_by_role('button', name='Create another business', exact=True).click()
+            expect(page.get_by_label('Business name')).to_be_visible()
             page.get_by_label('Business name').fill('Second business')
             review_action = page.get_by_role('button', name='Review defaults')
             # A focused field may still scroll the viewport. Read both rectangles
