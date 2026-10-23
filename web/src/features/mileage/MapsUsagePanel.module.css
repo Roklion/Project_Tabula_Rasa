@@ -1,0 +1,7 @@
+.panel { min-width: 0; font-size: var(--type-secondary); overflow-wrap: anywhere; }
+.panel summary { cursor: pointer; min-height: var(--control-height); padding-block: 8px; }
+.body { display: grid; gap: 12px; padding-top: 8px; }
+.body p { margin: 0; color: var(--secondary); }
+.body h2 { font-size: inherit; margin: 0 0 6px; }
+.body ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.body button { justify-self: start; }

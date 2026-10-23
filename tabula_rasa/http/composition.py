@@ -37,11 +37,12 @@ class PostgresRuntime:
     """One pool; compose a fresh service graph after resolving each request."""
 
     def __init__(self, database, resolver, *, service_factory, maps=None, identity=None, connections=None,
-                 workspace_bootstrap=True):
+                 workspace_bootstrap=True, maps_quota=None):
         self.database = database
         self.resolve_context = resolver
         self.service_factory = service_factory
         self.maps = maps
+        self.maps_quota = maps_quota
         self.identity = identity
         self.connections = connections
         from tabula_rasa.infrastructure.postgres.support import PostgresSupport
@@ -95,7 +96,11 @@ class PostgresRuntime:
                 if self.maps is not None:
                     self.maps.close()
             finally:
-                self.database.dispose()
+                try:
+                    if self.maps_quota is not None:
+                        self.maps_quota.close()
+                finally:
+                    self.database.dispose()
 
 
 def open_runtime(settings):
@@ -104,6 +109,7 @@ def open_runtime(settings):
     database = None
     identity = None
     maps = None
+    maps_quota = None
     try:
         from .migrated_configuration import load_migrated_bindings
         migrated = load_migrated_bindings(settings, dict(os.environ))
@@ -155,10 +161,12 @@ def open_runtime(settings):
                                                       secrets=profile_secrets, connections=connections)
             service_factory.validate()
         from .maps import environment_maps
+        from .maps_quota import environment_maps_quota
         maps = environment_maps(dict(os.environ))
+        maps_quota = environment_maps_quota(dict(os.environ))
         runtime = PostgresRuntime(database, resolver, service_factory=service_factory,
                                   maps=maps, identity=identity, connections=connections,
-                                  workspace_bootstrap=migrated is None)
+                                  workspace_bootstrap=migrated is None, maps_quota=maps_quota)
         if migrated is not None and not runtime.ready():
             raise RuntimeError('The migrated database is not ready.')
         if settings.trusted_entity_id:
@@ -175,8 +183,12 @@ def open_runtime(settings):
                 if maps is not None:
                     maps.close()
             finally:
-                if database is not None:
-                    database.dispose()
+                try:
+                    if maps_quota is not None:
+                        maps_quota.close()
+                finally:
+                    if database is not None:
+                        database.dispose()
         if not isinstance(error, Exception):
             raise
         # Startup failures must not retain raw configuration/provider text.
@@ -217,8 +229,10 @@ def open_migrated_runtime(settings, *, resolve_context, entity_profiles, profile
                                            connections=connection_manager)
         services.validate()
         from .maps import load_mileage_maps
+        from .maps_quota import load_maps_quota
         runtime = PostgresRuntime(database, resolve_context, service_factory=services,
                                   maps=load_mileage_maps(profile_secrets),
+                                  maps_quota=load_maps_quota(profile_secrets),
                                   identity=resolve_context if isinstance(resolve_context, NamedIdentity) else None,
                                   connections=connection_manager, workspace_bootstrap=False)
         if not runtime.ready():

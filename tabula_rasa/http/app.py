@@ -28,7 +28,7 @@ from .errors import (
 )
 from .models.common import Health, Version
 from .routes import accounting, accounts, auth, documents, financial_csv, imports, mileage, mileage_imports, references, reporting, secondary, session
-from .routes import connections, periods, support
+from .routes import connections, maps_quota, periods, support
 
 logger = logging.getLogger("tabula_rasa.http")
 
@@ -175,6 +175,7 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
         return Version(release=request.app.state.settings.release_id)
 
     app.include_router(session.router)
+    app.include_router(maps_quota.router)
     from .routes import workspaces
     app.include_router(workspaces.router)
     app.include_router(auth.router)
