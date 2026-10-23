@@ -38,7 +38,7 @@ export function secondaryResponse(url: URL, capabilities = session.capabilities)
     const path = url.pathname;
     // Every request stays intercepted. Unmatched reads are empty synthetic lists;
     // mutation tests below replace only the endpoint they explicitly exercise.
-    const json = path.endsWith('/session') ? { ...session, capabilities } : path === '/api/v1/entities' ? { items: [session.entity] }
+    const json = path.endsWith('/session') ? { ...session, capabilities } : path === '/api/v1/businesses' ? { items: [session.entity] }
       : path.endsWith('/accounts') ? { items: [account, accumulated, equity] } : path.endsWith('/categories') ? { items: [category] }
         : path.endsWith('/payees') || path.endsWith('/tags') ? { items: references } : path.endsWith('/transactions') ? { items: [transaction] }
           : path.endsWith('/journals') ? { items: [journalRecord] }

@@ -35,17 +35,20 @@ class PostgresWorkspaceRepository:
             raise IdentityError('forbidden')
 
     @staticmethod
-    def _role(connection, user, org, *, lock=False):
+    def _business_access(connection, user, org, *, lock=False):
         if lock and not connection.scalar(text("SELECT id FROM organizations WHERE id=:org AND state='active' FOR UPDATE"), {'org': org}):
             raise IdentityError('forbidden')
         # Compatibility organization routes resolve through the unique business
         # and its current membership; a supplied container ID grants no authority.
         row = connection.execute(text(ENTITY_ACCESS_SQL + ' AND e.organization_id=:org'),
             {'org': org, 'user': user}).mappings().first()
-        role = row['role'] if row else None
-        if role is None:
+        if row is None:
             raise IdentityError('forbidden')
-        return role
+        return row
+
+    @classmethod
+    def _role(cls, connection, user, org, *, lock=False):
+        return cls._business_access(connection, user, org, lock=lock)['role']
 
     def _manage(self, connection, actor, org, *users):
         self._users(connection, actor, *users)
@@ -99,6 +102,25 @@ class PostgresWorkspaceRepository:
                 return {'state': 'not_started', 'organization_id': None, 'entity_id': None}
             self._role(connection, actor, row['organization_id'])
             return self._bootstrap_result(row)
+
+    def business_operation(self, session, business_id, operation, *args):
+        # Thin business adapter: the same transaction and policy/locks own both
+        # public business routes and retained organization compatibility routes.
+        if operation not in {'members', 'invitations', 'invite', 'change_member', 'grant_ownership', 'revoke_invitation'}:
+            raise IdentityError('forbidden')
+        read_only = operation in {'members', 'invitations'}
+        with identity_operation(self.database, read_only=read_only) as connection:
+            business = connection.execute(text(ENTITY_ACCESS_SQL + ' AND e.entity_id=:business'),
+                {'user': session.user_id, 'business': business_id}).mappings().first()
+            if business is None:
+                raise IdentityError('forbidden')
+            org = business['organization_id']
+            if operation == 'grant_ownership':
+                target, version = args
+                return self.change_member(session.user_id, org, target, 'owner', True, version, session=session, ownership=True)
+            if operation == 'change_member':
+                return self.change_member(session.user_id, org, *args, session=session)
+            return getattr(self, operation)(session.user_id, org, *args)
 
     def members(self, actor, org):
         with identity_operation(self.database, read_only=True) as connection:
@@ -165,17 +187,12 @@ class PostgresWorkspaceRepository:
         hashed = credential_hash(credential)
         with identity_operation(self.database) as connection:
             # Discover only internally, then use the standard user/org lock order.
-            row = connection.execute(text('SELECT * FROM workspace_invitations WHERE credential_hash=:hash'), {'hash': hashed}).mappings().first()
-            if row is None or row['email_key'] != normalized_email(session.verified_email):
-                raise IdentityError('invitation_invalid')
+            row = self._recipient_invitation(connection, session, hashed)
             self._users(connection, session.user_id, row['inviter_id'])
             acting_role = self._role(connection, row['inviter_id'], row['organization_id'], lock=True)
-            row = connection.execute(text('SELECT * FROM workspace_invitations WHERE credential_hash=:hash FOR UPDATE'), {'hash': hashed}).mappings().one()
+            row = self._recipient_invitation(connection, session, hashed, lock=True)
             self._require_fresh(session)
-            if row['state'] != 'pending':
-                raise IdentityError('invitation_used')
-            if row['expires_at'] <= self.clock():
-                raise IdentityError('invitation_expired')
+            self._require_pending(row)
             if not grant_allowed(acting_role, row['role']):
                 raise IdentityError('forbidden')
             if accept:
@@ -186,6 +203,35 @@ class PostgresWorkspaceRepository:
             connection.execute(text('UPDATE workspace_invitations SET state=:state,responded_by=:user WHERE id=:id'),
                 {'id': row['id'], 'user': session.user_id, 'state': 'accepted' if accept else 'declined'})
             return {'state': 'accepted' if accept else 'declined'}
+
+    def preview_invitation(self, session, credential):
+        """Only the verified recipient may discover the one offered business."""
+        self._require_fresh(session)
+        with identity_operation(self.database, read_only=True) as connection:
+            row = self._recipient_invitation(connection, session, credential_hash(credential))
+            self._require_pending(row)
+            business = self._business_access(connection, row['inviter_id'], row['organization_id'])
+            if not grant_allowed(business['role'], row['role']):
+                raise IdentityError('forbidden')
+            existing_role = connection.scalar(text("""SELECT role FROM memberships
+                WHERE organization_id=:org AND user_id=:user AND state='active'"""),
+                {'org': row['organization_id'], 'user': session.user_id})
+            return {'business_id': business['entity_id'], 'business_name': business['name'],
+                    'role': existing_role or row['role'], 'expires_at': row['expires_at']}
+
+    @staticmethod
+    def _recipient_invitation(connection, session, hashed, *, lock=False):
+        query = 'SELECT * FROM workspace_invitations WHERE credential_hash=:hash'
+        row = connection.execute(text(query + (' FOR UPDATE' if lock else '')), {'hash': hashed}).mappings().first()
+        if row is None or row['email_key'] != normalized_email(session.verified_email):
+            raise IdentityError('invitation_invalid')
+        return row
+
+    def _require_pending(self, row):
+        if row['state'] != 'pending':
+            raise IdentityError('invitation_used')
+        if row['expires_at'] <= self.clock():
+            raise IdentityError('invitation_expired')
 
     def _require_fresh(self, session):
         # Match the verified OIDC auth_time tolerance; retain the five-minute

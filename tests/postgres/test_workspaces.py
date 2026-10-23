@@ -269,17 +269,23 @@ def test_owner_grant_requires_recent_authentication_and_admin_can_self_demote(da
         service.change_member(stale, org, alice.user_id, 'admin', True, alice_version)
 
 
-def test_concurrent_last_owner_removals_retain_one_owner(database):
+@pytest.mark.parametrize('business_scope', [False, True])
+def test_concurrent_last_owner_removals_retain_one_owner(database, business_scope):
     _, _, alice = context(database)
     _, _, bob = context(database, 'bob')
     service = WorkspaceService(PostgresWorkspaceRepository(database))
-    org = create(service, alice)['organization_id']
+    business = create(service, alice)
+    org = business['organization_id']
     repo = PostgresIdentityRepository(database)
     repo.set_membership(org, bob.user_id, 'owner')
     versions = {item['user_id']: item['authorization_version'] for item in service.members(alice, org)}
     def demote(session):
         try:
-            service.change_member(session, org, session.user_id, 'editor', True, versions[session.user_id])
+            if business_scope:
+                service.business_operation(session, business['entity_id'], 'change_member',
+                    session.user_id, 'editor', True, versions[session.user_id])
+            else:
+                service.change_member(session, org, session.user_id, 'editor', True, versions[session.user_id])
             return 'demoted'
         except IdentityError as error:
             return error.code

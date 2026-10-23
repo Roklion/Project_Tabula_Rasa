@@ -5,6 +5,14 @@ one business, Admin of another and Read-only in a third. Membership versions,
 invitations and last-active-owner protection apply independently to each
 business. My Businesses is a derived authorized list, not a tenant record.
 
+The previous interface grouped businesses under a selected workspace and implied
+one shared role. Current business-first navigation is flat: the same verified
+identity can select A as Owner and B as Admin or Read-only. Member/invitation APIs
+take a business ID and resolve its private container server-side. The compatibility
+organization APIs remain deprecated; they do not authorize another business.
+No table deletion, identity/session rewrite or automatic grant conversion follows
+the presentation change.
+
 The retained `organization_entities` mapping (not a new ledger table) associates
 the immutable canonical `business_entities.id` with its authorization container.
 Revision `0016_business_tenancy` adds `UNIQUE (organization_id)` alongside the
@@ -126,6 +134,17 @@ denies additions; a pre-pivot image is not automatically compatible. If no such
 image exists, stop writers and deploy a compatible forward fix or use the
 approved isolated database/document recovery procedure. Never drop the unique
 constraint, reset data or reactivate stale Sheets as routine rollback.
+
+The final browser revision additionally needs business-member and invitation review
+APIs before its assets are promoted. Verify Owner A/Admin B and a Read-only recipient
+shared by two independent Owners, flat list selection/refresh, role change and
+revocation, peer-tab drafts/uploads/receipt cleanup, forged private requests and
+long names at desktop/390px/320px. Retain revision, schema, route, browser, viewport,
+safe timing/status and current-head required CI/review references in the owning
+release discussion. Prior workspace/shared-role evidence does not establish this
+model. Hosted provider recovery/rollback and owner binding/authority activation
+remain separate; this UI neither changes approved historical entity/claim IDs nor
+executes the owner cutover.
 
 The existing narrowly scoped hosted support-schema maintenance command targets
 its original transition; it is not approval to upgrade business tenancy. Use

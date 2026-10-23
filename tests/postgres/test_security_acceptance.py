@@ -30,6 +30,7 @@ PRIVATE = tuple(r for r in iter_route_contexts(create_app(schema_only=True).rout
 
 def concrete_path(route, organization='foreign'):
     return (path_for(route).replace('{organization_id}', organization)
+            .replace('{business_id}', 'foreign')
             .replace('{user_id}', 'unknown').replace('{invitation_id}', 'unknown')
             .replace('{request_id}', 'synthetic-request-123'))
 

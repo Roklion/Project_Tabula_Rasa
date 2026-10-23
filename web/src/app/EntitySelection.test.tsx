@@ -12,8 +12,8 @@ it('distinguishes same-name businesses by full stable reference and confirms the
   render(<ScopeBoundary session={session}><EntitySelectionContext.Provider value={{ pending: false, select, items: [first, second] }}>
     <EntitySelector activeId={first.id} />
   </EntitySelectionContext.Provider></ScopeBoundary>);
-  expect(screen.getByRole('option', { name: `Shared business (reference: ${first.id})` })).toBeVisible();
-  expect(screen.getByRole('option', { name: `Shared business (reference: ${second.id})` })).toBeVisible();
+  expect(screen.getByRole('option', { name: `Shared business (reference: ${first.id}) · Owner` })).toBeVisible();
+  expect(screen.getByRole('option', { name: `Shared business (reference: ${second.id}) · Owner` })).toBeVisible();
   fireEvent.change(screen.getByLabelText('Select business'), { target: { value: second.id } });
   expect(screen.getByText(`Business reference: ${second.id}`)).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: 'Discard draft and switch' }));

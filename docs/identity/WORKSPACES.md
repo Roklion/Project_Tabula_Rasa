@@ -10,6 +10,10 @@ owns provider verification.
 ## Switching and access changes
 
 The labeled business selector lists only current server-authorized business names.
+It is one flat list across independent backing organizations, with each business's
+specific Owner, Admin, Editor, Accountant or Read-only role. **My Businesses**
+also offers **Open business**, using the same discard confirmation and authorized
+selection as the sidebar. There is no organization/workspace selector.
 The business name and role come from server claims; backing organization names are
 not product labels. Same-name choices in the selector and My Businesses append the
 full stable business reference. Switch confirmation identifies its target reference;
@@ -49,6 +53,13 @@ Owner grants and removal/demotion require provider authentication within five
 minutes. The database rejects removing the last active Owner, including races.
 Loaded membership authorization versions reject stale changes.
 
+The canonical settings route is `/business/members`; the old `/workspace` URL
+redirects there. The header, invitation form and stable business reference identify
+the selected business. Ownership actions have their own separated section.
+Changes request a data-free authority check in peer tabs: only a changed identity,
+selected business, authorization version or capabilities remount private state.
+An unrelated membership change leaves the valid selected business intact.
+
 After confirming a membership change or ownership grant, a live **Working**
 message remains visible while both dialog actions are disabled. Wait for the
 confirmed success notice or safe failure guidance. A rejected request restores
@@ -57,6 +68,17 @@ uncertain outcome disables resubmission: close the dialog and reload the member
 list to inspect current state before another change. Commands never retry
 automatically. The reported staging latency is a separate investigation; local
 synthetic delayed-response coverage does not establish its cause.
+
+For an authorized synthetic hosted latency investigation, identify the exact
+release, route, browser, viewport, login age and safe request reference. Compare
+the browser's confirm-to-status time, the mutation request's network duration,
+the correlated sanitized HTTP `duration_ms`, and the subsequent member-list
+refresh. Distinguish provider reauthentication, network/server/database waits
+and list refresh; preserve rejection/uncertain stop guidance and never retry a
+possibly completed mutation to gather timing. Retain only sanitized measurements
+in the owning issue/release discussion. Reproducing a material delay requires a
+focused follow-up with evidence and an explicit owner; local timing cannot close
+that hosted investigation.
 
 The approved early restricted-beta delivery is **operator-distributed**, not
 outbound email. An authorized administrator enters the recipient email and role.
@@ -78,6 +100,15 @@ OIDC login. The session retains that login's verified email server-side; a brows
 email or another session's later email change cannot substitute for it. Email
 comparison trims and ignores case without plus-tag or dot rewriting. Stable
 issuer/subject mapping remains the identity key; matching emails never link users.
+
+**Review invitation** first shows the offered business name, stable reference and
+effective role to the verified recipient. Preview is read-only and grants no
+membership or discovery of sibling businesses. Editing the credential discards
+that preview. Accept/decline revalidates all guards and consumes the credential
+once; preview cannot reserve or extend it. Confirmed acceptance selects that
+business through the existing server selection boundary. If selection fails
+after confirmed acceptance, reload My Businesses to select the granted business;
+do not resubmit the consumed invitation.
 
 Only the hash is stored with invitation lifecycle/recipient metadata. The native
 transaction rechecks recipient, current inviter grant authority, expiry and
@@ -187,6 +218,22 @@ and external release and customer lifecycle still own adversarial hosted accepta
 operations/legal and external-beta admission within the identity layer.
 
 ## Migration and validation
+
+The browser uses `GET /api/v1/businesses` for flat business choices (ID, name,
+role only), `/api/v1/businesses/{business_id}/members` and
+`/api/v1/businesses/{business_id}/invitations` for administration, plus
+`POST /api/v1/invitations/preview` for recipient review. Backing organizations
+resolve server-side from fresh authorized business access; body/header selectors
+grant no authority. These adapters reuse the original role policy, lock order,
+membership versions, recent authentication and invitation transactions.
+The `/api/v1/workspaces/*` routes are deprecated compatibility, including receipt
+status and membership APIs. Existing session/entity DTO organization claims remain
+compatibility/internal context for old clients and creation-receipt recovery;
+they are neither product navigation nor authorization supplied by a browser.
+Per-business pseudonymous HTTP telemetry uses the resolved target business,
+even when it differs from the selected ledger; no invitation credential or
+recipient email enters telemetry. The existing privileged accounting-audit
+boundary remains unchanged and is not exposed as member-readable history.
 
 Apply forward revision `0010_workspace_lifecycle` using the existing explicit deployment
 migration command. It adds invitation/idempotency tables and the Server-only verified

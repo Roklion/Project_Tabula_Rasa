@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 from uuid import uuid4
+from time import perf_counter
 
 import pytest
 from playwright.sync_api import expect, sync_playwright
@@ -14,6 +15,93 @@ from tests.postgres.test_identity import verified
 from tests.postgres.test_identity_browser import named_server as named_server, configure_login
 from tests.postgres.browser_quality_support import assert_accessible
 from tests.test_oidc import oidc as oidc
+
+
+@pytest.mark.parametrize('engine', ['chromium', 'firefox', 'webkit'])
+@pytest.mark.parametrize('width', [1440, 390, 320])
+def test_independent_roles_flat_navigation_and_shared_invitee(named_server, engine, width):
+    from tabula_rasa.application.workspaces import WorkspaceService
+    from tabula_rasa.infrastructure.postgres.workspaces import PostgresWorkspaceRepository
+
+    origin, repo, alice, bob, a, b, _, _ = named_server
+    with repo.database.transaction() as connection:
+        configuration_hash = connection.scalar(text("SELECT configuration_hash FROM identity_environments WHERE environment='test'"))
+        connection.execute(text("UPDATE business_entities SET name=:name WHERE id='alpha'"),
+            {'name': 'Independent long business name ' * 5})
+    sessions = PostgresSessionRepository(repo.database, 'test', configuration_hash)
+    alice_raw, alice_session = sessions.issue(verified())
+    _, bob_session = sessions.issue(verified('bob'))
+    guest_raw, guest = sessions.issue(verified('shared-read-only'))
+    service = WorkspaceService(PostgresWorkspaceRepository(repo.database))
+    repo.set_membership(b, alice.id, 'admin')
+    invitations = [service.invite(actor, org, guest.verified_email, 'read_only')
+                   for actor, org in ((alice_session, a), (bob_session, b))]
+    with sync_playwright() as playwright:
+        browser = getattr(playwright, engine).launch()
+        try:
+            owner_context = browser.new_context(viewport={'width': width, 'height': 1000})
+            guest_context = browser.new_context(viewport={'width': width, 'height': 1000})
+            for context, raw in ((owner_context, alice_raw), (guest_context, guest_raw)):
+                context.add_cookies([{'name': 'tabula_dev_session', 'value': raw, 'url': origin, 'httpOnly': True, 'sameSite': 'Lax'}])
+            owner, invitee = owner_context.new_page(), guest_context.new_page()
+            owner.goto(origin + '/businesses')
+            available = owner.get_by_role('region', name='Available businesses')
+            expect(available.get_by_text('Owner', exact=True)).to_be_visible()
+            expect(available.get_by_text('Admin', exact=True)).to_be_visible()
+            # List and sidebar share one confirmation/selection boundary.
+            available.get_by_role('button', name='Open business').focus()
+            owner.keyboard.press('Enter')
+            owner.get_by_role('button', name='Discard draft and switch').click()
+            expect(owner.get_by_text('Role: Admin', exact=True)).to_be_visible()
+            expect(owner).to_have_url(origin + '/')
+            owner.goto(origin + '/business/members')
+            expect(owner.locator('header').first).to_contain_text('Business & members')
+            expect(owner.get_by_role('button', name='Grant ownership')).to_have_count(0)
+            assert_accessible(owner)
+            for index, invitation in enumerate(invitations):
+                invitee.goto(origin + '/invitations')
+                invitee.get_by_label('Invitation credential', exact=True).fill(invitation.credential)
+                invitee.get_by_role('button', name='Review invitation').click()
+                offer = invitee.get_by_role('region', name='Invited business')
+                expect(offer.get_by_text('Business reference: ' + ('alpha' if index == 0 else 'beta'), exact=True)).to_be_visible()
+                expect(offer.get_by_text('Your role in this business: Read-only', exact=True)).to_be_visible()
+                assert_accessible(invitee)
+                invitee.get_by_role('button', name='Accept invitation').click()
+                expect(invitee.get_by_text('Role: Read-only', exact=True)).to_be_visible()
+                assert guest_context.request.get(origin + '/api/v1/session').json()['entity']['id'] == ('alpha' if index == 0 else 'beta')
+                if index == 0:
+                    choices = guest_context.request.get(origin + '/api/v1/businesses').json()['items']
+                    assert [item['id'] for item in choices] == ['alpha']
+                    assert guest_context.request.get(origin + '/api/v1/entities/beta/accounts').status == 403
+            invitee.goto(origin + '/businesses')
+            expect(invitee.get_by_role('region', name='Available businesses').get_by_text('Read-only', exact=True)).to_have_count(2)
+            # A's role/removal never changes valid B authorization or selected scope.
+            beta_before = sessions.validate(guest_raw).selected
+            member = next(item for item in service.members(alice_session, a) if item['user_id'] == guest.user_id)
+            started = perf_counter()
+            service.business_operation(alice_session, 'alpha', 'change_member',
+                guest.user_id, 'read_only', False, member['authorization_version'])
+            mutation_ms = (perf_counter() - started) * 1000
+            invitee.reload()
+            expect(invitee.get_by_role('region', name='Available businesses').get_by_role('listitem')).to_have_count(1)
+            assert sessions.validate(guest_raw).selected == beta_before
+            assert guest_context.request.get(origin + '/api/v1/businesses/alpha/members').status == 403
+            assert owner_context.request.get(origin + '/api/v1/session').json()['entity']['role'] == 'admin'
+            owner.goto(origin + '/businesses')
+            expect(owner.get_by_role('heading', name='My Businesses', exact=True)).to_be_visible()
+            expect(owner.get_by_role('region', name='Available businesses').get_by_role('listitem')).to_have_count(2)
+            assert_accessible(owner)
+            assert owner.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            assert invitee.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            if root := os.environ.get('TABULA_RASA_BROWSER_EVIDENCE'):
+                target = Path(root)
+                target.mkdir(parents=True, exist_ok=True)
+                owner.screenshot(path=str(target / f'{engine}-{width}-flat-businesses.png'), full_page=True)
+                invitee.screenshot(path=str(target / f'{engine}-{width}-isolated-revocation.png'), full_page=True)
+            # Synthetic local timing is diagnostic only, never hosted-latency evidence.
+            print(f'local synthetic membership mutation: {engine} {width}px {mutation_ms:.1f}ms')
+        finally:
+            browser.close()
 
 
 @pytest.mark.parametrize('engine', ['chromium', 'firefox', 'webkit'])
@@ -60,6 +148,9 @@ def test_first_ledger_retry_refresh_repeat_visit_and_two_entity_switch(named_ser
             page.bring_to_front()
             endpoint = '**/api/v1/businesses'
             def unavailable(route):
+                if route.request.method != 'POST':
+                    route.continue_()
+                    return
                 expect(page.get_by_role('button', name='Retry same setup', exact=True)).to_be_disabled()
                 evidence(page, 'pending-first')
                 route.fulfill(status=503, content_type='application/json',
@@ -77,6 +168,9 @@ def test_first_ledger_retry_refresh_repeat_visit_and_two_entity_switch(named_ser
             page.get_by_role('button', name='Review defaults').click()
             # Commit on the real API, then lose only its response.
             def lost_response(route):
+                if route.request.method != 'POST':
+                    route.continue_()
+                    return
                 response = route.fetch()
                 assert response.status == 200
                 route.fulfill(status=503, content_type='application/json',
@@ -201,6 +295,7 @@ def test_onboarding_invitee_joins_existing_workspace_without_new_ownership(named
             peer.get_by_role('button', name='Create your first business', exact=True).click()
             peer.get_by_label('Business name').fill('Unsubmitted invitee draft')
             page.bring_to_front()
+            page.get_by_role('button', name='Review invitation').click()
             page.get_by_role('button', name='Accept invitation').click()
             expect(page.get_by_role('heading', name='Your ledger is ready')).to_be_visible()
             expect(peer.get_by_role('heading', name='Your ledger is ready')).to_be_visible()
@@ -238,16 +333,16 @@ def test_workspace_switch_invite_demote_remove_and_logout(named_server, width):
             assert first.request.get(origin + '/api/v1/entities/unknown/accounts').status == 403
             owner.get_by_label('Select business').select_option('beta')
             owner.get_by_role('button', name='Discard draft and switch').click()
-            expect(owner.get_by_text('Role: read only', exact=True)).to_be_visible()
+            expect(owner.get_by_text('Role: Read-only', exact=True)).to_be_visible()
             expect(owner).to_have_url(origin + '/')
             expect(owner.get_by_text('Private alpha account', exact=True)).to_have_count(0)
             owner.goto(origin + '/accounts')
             expect(owner.get_by_text('Private alpha account', exact=True)).to_have_count(0)
             owner.get_by_label('Select business').select_option('alpha')
             owner.get_by_role('button', name='Discard draft and switch').click()
-            expect(owner.get_by_text('Role: owner', exact=True)).to_be_visible()
+            expect(owner.get_by_text('Role: Owner', exact=True)).to_be_visible()
             expect(owner).to_have_url(origin + '/')
-            owner.get_by_role('link', name='Business & members').click()
+            owner.get_by_role('complementary').get_by_role('link', name='Business & members').click()
             owner.get_by_label('Recipient email').fill('shared@example.test')
             owner.get_by_label('Invitation role').select_option('editor')
             owner.get_by_role('button', name='Create invitation', exact=True).click()
@@ -257,11 +352,12 @@ def test_workspace_switch_invite_demote_remove_and_logout(named_server, width):
             owner.get_by_role('button', name='Dismiss credential').click()
             member.goto(origin + '/workspace')
             member.get_by_label('Invitation credential', exact=True).fill(credential)
+            member.get_by_role('button', name='Review invitation').click()
             member.get_by_role('button', name='Accept invitation').click()
             expect(member.get_by_label('Select business')).to_be_visible()
-            member.get_by_label('Select business').select_option('alpha')
-            member.get_by_role('button', name='Discard draft and switch').click()
-            expect(member.get_by_text('Role: editor', exact=True)).to_be_visible()
+            # Confirmed acceptance now selects the explicitly reviewed business.
+            expect(member.get_by_label('Select business')).to_have_value('alpha')
+            expect(member.get_by_text('Role: Editor', exact=True)).to_be_visible()
             owner.reload()
             editor = owner.locator('section.surface').filter(has=owner.get_by_text('Current role: Editor · active', exact=True))
             editor.get_by_label('Member role').select_option('read_only')
@@ -269,14 +365,14 @@ def test_workspace_switch_invite_demote_remove_and_logout(named_server, width):
             owner.get_by_role('button', name='Confirm membership change', exact=True).click()
             expect(owner.get_by_text('Current role: Read-only · active', exact=True)).to_be_visible()
             member.evaluate("window.dispatchEvent(new Event('focus'))")
-            expect(member.get_by_text('Role: read only', exact=True)).to_be_visible()
+            expect(member.get_by_text('Role: Read-only', exact=True)).to_be_visible()
             read_only = owner.locator('section.surface').filter(has=owner.get_by_text('Current role: Read-only · active', exact=True))
             read_only.get_by_label('Active membership').uncheck()
             read_only.get_by_role('button', name='Review membership change').click()
             owner.get_by_role('button', name='Confirm membership change', exact=True).click()
             expect(owner.get_by_text('Current role: Read-only · inactive', exact=True)).to_be_visible()
             member.evaluate("window.dispatchEvent(new Event('focus'))")
-            expect(member.get_by_text('Role: owner', exact=True)).to_be_visible()
+            expect(member.get_by_text('Role: Owner', exact=True)).to_be_visible()
             assert second.request.get(origin + '/api/v1/entities/alpha/accounts').status == 403
             assert_accessible(owner)
             assert_accessible(member)
@@ -313,8 +409,8 @@ def test_same_name_businesses_remain_distinct_through_selection(named_server, wi
             page.add_init_script("Object.defineProperty(document, 'visibilityState', {get: () => 'hidden'})")
             page.goto(origin)
             selector = page.get_by_label('Select business')
-            expect(selector.locator('option[value="alpha"]')).to_have_text(name.strip() + ' (reference: alpha)')
-            expect(selector.locator('option[value="beta"]')).to_have_text(name.strip() + ' (reference: beta)')
+            expect(selector.locator('option[value="alpha"]')).to_have_text(name.strip() + ' (reference: alpha) · Owner')
+            expect(selector.locator('option[value="beta"]')).to_have_text(name.strip() + ' (reference: beta) · Read-only')
             selector.select_option('beta')
             dialog = page.get_by_role('alertdialog', name='Switch business')
             expect(dialog).to_be_visible()
@@ -324,7 +420,7 @@ def test_same_name_businesses_remain_distinct_through_selection(named_server, wi
             assert context.request.get(origin + '/api/v1/session').json()['entity']['id'] == 'alpha'
             selector.select_option('beta')
             page.get_by_role('button', name='Discard draft and switch').click()
-            expect(page.get_by_text('Role: read only', exact=True)).to_be_visible()
+            expect(page.get_by_text('Role: Read-only', exact=True)).to_be_visible()
             expect(page.get_by_text('Business reference: beta', exact=True)).to_be_visible()
             assert context.request.get(origin + '/api/v1/session').json()['entity']['id'] == 'beta'
             assert context.request.get(origin + '/api/v1/entities/unknown/accounts').status == 403

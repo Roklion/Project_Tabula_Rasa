@@ -80,5 +80,16 @@ class InvitationResponse(DTO):
     accept: bool
 
 
+class InvitationPreviewRequest(DTO):
+    credential: SecretStr = Field(min_length=32, max_length=256)
+
+
+class InvitationPreview(DTO):
+    business_id: str
+    business_name: str
+    role: Role
+    expires_at: datetime
+
+
 class InvitationOutcome(DTO):
     state: Literal['accepted', 'declined']

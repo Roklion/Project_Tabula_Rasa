@@ -4,6 +4,26 @@ import { ApiError, createApi } from './client';
 import { session } from '../test/fixtures';
 
 describe('typed client', () => {
+  it('uses business IDs for member writes and exposes no organization selector', async () => {
+    const requests: Request[] = [];
+    const client = createApi((async (request: Request) => {
+      requests.push(request);
+      return request.method === 'GET' ? new Response(JSON.stringify({ items: [] })) : new Response(null, { status: 204 });
+    }) as typeof fetch);
+    await client.entities();
+    await client.changeMember(session, 'target', { role: 'read_only', active: false, authorization_version: 1 });
+    await client.grantOwnership(session, 'target', 1);
+    await client.revokeInvitation(session, 'invite');
+    expect(new URL(requests[0].url).pathname).toBe('/api/v1/businesses');
+    expect(requests.slice(1).map(request => new URL(request.url).pathname)).toEqual([
+      '/api/v1/businesses/alpha/members/target', '/api/v1/businesses/alpha/members/target/ownership',
+      '/api/v1/businesses/alpha/invitations/invite',
+    ]);
+    for (const request of requests.slice(1)) {
+      expect(request.headers.get('X-CSRF-Token')).toBe(session.csrf_token);
+      expect(request.url).not.toContain('/org/');
+    }
+  });
   it('rechecks authority after a membership command loses access and does not retry', async () => {
     const notify = vi.spyOn(window, 'dispatchEvent');
     const fetcher = vi.fn(async () => new Response(JSON.stringify({ error: { code: 'forbidden', message: 'safe' }, request_id: 'reference' }), { status: 403 }));

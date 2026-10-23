@@ -70,6 +70,19 @@ the running application. All data is synthetic.
 
 ## Sanitized evidence and unresolved gap register
 
+Independent-business acceptance extends the existing matrix rather than replacing
+it. `test_business_access.py` covers the business-only list, foreign member/invite
+IDs, recipient preview without discovery or consumption, wrong recipient/stale
+authentication/expiry/revocation/suspension, independent roles and preserved B
+session/receipt bytes after revoking A. The workspace native-browser module adds
+Owner A/Admin B, two independent Owners and one shared Read-only invitee through
+review/acceptance, selection, refresh and isolated revocation on all three engines
+at 1440/390/320px. Existing identity, security and scope tests continue to own
+forged ledger/document/export selectors, session expiry/logout, slow-response
+cancellation and draft/upload/receipt cleanup. Keep final business-first evidence
+with the selected release's external-beta admission record; older workspace
+tests and synthetic local passes do not establish hosted recovery or beta approval.
+
 Local evidence identifies the tested Git revision/diff, PostgreSQL version, commands and
 pass/fail totals. Hosted evidence also identifies release, schema and current-head CI
 run. Retain synthetic test names, safe statuses, request/check IDs only. Never attach

@@ -13,7 +13,7 @@ export function visualReview(): Plugin {
         if (!url.pathname.startsWith('/api')) return next();
         response.setHeader('Content-Type', 'application/json');
         response.setHeader('Cache-Control', 'no-store');
-        const supported = url.pathname === '/api/v1/session' || url.pathname === '/api/v1/entities'
+        const supported = url.pathname === '/api/v1/session' || url.pathname === '/api/v1/businesses'
           || /^\/api\/v1\/entities\/[^/]+\/(?:reports\/summary|ledger|accounts|categories|payees|tags|transactions|journals|mixed-use|recurring|assets|assets\/types|mileage|mileage\/maps|documents)$/.test(url.pathname)
           || /^\/api\/v1\/entities\/[^/]+\/(?:mixed-use|recurring|assets|mileage)\/[^/]+$/.test(url.pathname)
           || /^\/api\/v1\/entities\/[^/]+\/(?:transactions|mixed-use)\/[^/]+\/receipts$/.test(url.pathname);

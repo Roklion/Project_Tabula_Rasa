@@ -47,6 +47,13 @@ class WorkspaceService:
     def bootstrap_status(self, session, request_id):
         return self.repository.bootstrap_status(session.user_id, request_id)
 
+    def business_operation(self, session, business_id, operation, *args):
+        """Resolve the private container server-side and reuse its policy owner."""
+        return self.repository.business_operation(session, business_id, operation, *args)
+
+    def preview_invitation(self, session, credential):
+        return self.repository.preview_invitation(session, credential)
+
     def members(self, session, organization_id):
         return self.repository.members(session.user_id, organization_id)
 

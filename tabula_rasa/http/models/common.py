@@ -73,6 +73,16 @@ class EntityList(DTO):
     items: list[EntityInfo]
 
 
+class BusinessInfo(DTO):
+    id: str
+    name: str
+    role: str | None = None
+
+
+class BusinessList(DTO):
+    items: list[BusinessInfo]
+
+
 class EntitySelection(DTO):
     entity_id: str
 

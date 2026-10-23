@@ -2,9 +2,17 @@ from fastapi import APIRouter, Request, Response
 
 from ..context import require_csrf, resolve_context
 from ..errors import ERROR_RESPONSES, TransportError
-from ..models.common import EntityInfo, EntityList, EntitySelection, SessionInfo, SetupSessionInfo
+from ..models.common import BusinessInfo, BusinessList, EntityInfo, EntityList, EntitySelection, SessionInfo, SetupSessionInfo
 
 router = APIRouter(responses=ERROR_RESPONSES)
+
+
+@router.get('/api/v1/businesses', response_model=BusinessList, tags=['Business access'], operation_id='list_businesses')
+def list_businesses(request: Request):
+    # Public business choices carry no backing-container claims. The retained
+    # entities endpoint is compatibility for old clients and restricted alpha.
+    return BusinessList(items=[BusinessInfo(id=item.id, name=item.name, role=item.role)
+                            for item in list_entities(request).items])
 
 
 @router.get("/api/v1/session", response_model=SessionInfo | SetupSessionInfo, tags=["Session"], operation_id="get_session")

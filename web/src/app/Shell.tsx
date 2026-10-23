@@ -7,6 +7,7 @@ import { entryRoutes, isEntryRoute, isReferenceRoute, matchesRoute, mileageRoute
 import { WorkflowNav } from '../components/WorkflowNav';
 import { EntitySelector } from './EntitySelection';
 import { AuthContext } from './authContext';
+import { roleLabel } from './roles';
 
 export function Shell() {
   const session = useEntity();
@@ -35,7 +36,7 @@ export function Shell() {
       <div className={styles.context}><span className="muted">Business</span>
         <strong>{session.entity.name}</strong>
         <span>Business reference: {session.entity.id}</span>
-        {session.entity.role && <span>Role: {session.entity.role.replace('_', ' ')}</span>}
+        {session.entity.role && <span>Role: {roleLabel(session.entity.role)}</span>}
         <EntitySelector activeId={session.entity.id} />
         {session.trusted_development && <span className={styles.badge}>Technical alpha · development</span>}
       </div>
@@ -46,12 +47,12 @@ export function Shell() {
           : path === '/transactions' && isEntryRoute(location.pathname) || path === '/categories' && isReferenceRoute(location.pathname) ? 'true' : undefined}>{name}</Link>)}
       </nav>
       {!session.trusted_development && <Link to="/businesses">My Businesses</Link>}
-      {!session.trusted_development && <Link to="/workspace">Business & members</Link>}
+      {!session.trusted_development && <Link to="/business/members">Business & members</Link>}
       <p className={styles.footer}>Bookkeeping with clarity.</p>
       {!session.trusted_development && <button onClick={auth.logout}>Sign out</button>}
     </aside>
     <div className={styles.content}>
-      <header className={styles.topbar}><span>{workflowName ?? navigation.find(([path]) => matchesRoute(location.pathname, path))?.[1] ?? (matchesRoute(location.pathname, '/businesses') ? 'My Businesses' : undefined) ?? (['/workspace', '/workspace/'].includes(location.pathname) ? 'Business & members' : 'Tabula Rasa')}</span>
+      <header className={styles.topbar}><span>{workflowName ?? navigation.find(([path]) => matchesRoute(location.pathname, path))?.[1] ?? (matchesRoute(location.pathname, '/businesses') ? 'My Businesses' : undefined) ?? (matchesRoute(location.pathname, '/business/members') ? 'Business & members' : 'Tabula Rasa')}</span>
         <span className="muted">{session.entity.name}</span></header>
       <main ref={main} id="main" tabIndex={-1} className={styles.main} key={location.key}>{isEntryRoute(location.pathname) ? <WorkflowNav label="Entries" routes={entryRoutes} canWrite={session.capabilities.includes('bookkeeping:write')} />
         : matchesRoute(location.pathname, '/mileage') ? <WorkflowNav label="Mileage workflows" routes={mileageRoutes} canWrite={session.capabilities.includes('bookkeeping:write')} />

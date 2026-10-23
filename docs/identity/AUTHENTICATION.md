@@ -47,9 +47,9 @@ provisioned by this code.
 
 ## Login and browser lifecycle
 
-Signed-out, session-unavailable and workspace-setup-required views consume the shared
+Signed-out, session-unavailable and business-setup-required views consume the shared
 commercial headers, surfaces and native action controls. They retain the context
-boundary's private-view removal, reload and sign-out behavior; workspace selection and
+boundary's private-view removal, reload and sign-out behavior; business selection and
 onboarding follow the [business lifecycle contract](WORKSPACES.md).
 
 The infrastructure adapter uses pinned Authlib 1.7.2 (BSD-3-Clause, Python 3.10+)

@@ -14,7 +14,7 @@ const account = { id: 'synthetic-account', name: longName, type: 'Bank', classif
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/v1/**', route => {
     const path = new URL(route.request().url()).pathname;
-    const json = path.endsWith('/session') ? session : path === '/api/v1/entities' ? { items: [session.entity] }
+    const json = path.endsWith('/session') ? session : path === '/api/v1/businesses' ? { items: [session.entity] }
       : path.endsWith('/reports/summary') ? {
         profit_loss: { income: '0.00', expenses: '0.00', net: '0.00' },
         balance_sheet: { assets: [], liabilities: [], equity: [], current_earnings: '0.00', total_assets: '0.00',

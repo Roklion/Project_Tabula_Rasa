@@ -334,6 +334,15 @@ membership and claimed profile IDs do not unlock that interface.
   retry contract. Browser creation receipts are scoped to the user and first-use/current-business
   context so an old completed setup cannot redirect a new creation. The bootstrap service supplies
   its transactional backend without adding a separate profile configuration UI.
+- My Businesses and the sidebar show one flat set of authorized businesses,
+  each with its independent role. Open business and sidebar selection share the
+  same target-reference/discard confirmation. Long option labels stay contained;
+  the complete selected name and stable reference remain visible in the shell.
+  Business & members uses `/business/members` (the old `/workspace` URL redirects),
+  names the business/reference on the member and invitation surface, and separates
+  ownership actions from routine role changes. Review invitation shows only the
+  recipient's offered business and effective role before acceptance or decline.
+  Acceptance selects that business through the authorized selection boundary.
 
 **Current behavior** for the technical-alpha application:
 

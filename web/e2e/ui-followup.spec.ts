@@ -12,7 +12,7 @@ test.beforeEach(async ({ page }) => {
   await page.route('**/api/v1/**', route => {
     const url = new URL(route.request().url());
     const path = url.pathname;
-    const json = path.endsWith('/session') ? session : path === '/api/v1/entities' ? { items: [session.entity, { id: 'beta', name: longName + ' second business' }] }
+    const json = path.endsWith('/session') ? session : path === '/api/v1/businesses' ? { items: [session.entity, { id: 'beta', name: longName + ' second business' }] }
       : path.endsWith('/members') ? { items: [member] } : path.endsWith('/invitations') ? { items: [] }
         : path.includes('/mileage') ? secondaryResponse(url) : coreResponse(url);
     return route.fulfill({ json });

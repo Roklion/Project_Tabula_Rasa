@@ -8,6 +8,56 @@ import { InvitationAcceptance } from './InvitationAcceptance';
 import * as authSignals from '../../app/authSignals';
 
 afterEach(() => vi.restoreAllMocks());
+async function reviewInvitation() {
+  vi.spyOn(api, 'previewInvitation').mockResolvedValue({ business_id: 'alpha', business_name: 'Alpha', role: 'read_only', expires_at: '2026-10-25T00:00:00Z' });
+  fireEvent.click(screen.getByRole('button', { name: 'Review invitation' }));
+  await screen.findByRole('button', { name: 'Accept invitation' });
+}
+
+it('shows the specific offered business before responding and discards it when the credential changes', async () => {
+  const preview = vi.spyOn(api, 'previewInvitation').mockResolvedValue({
+    business_id: 'independent-b', business_name: 'Independent B', role: 'accountant', expires_at: '2026-10-25T00:00:00Z',
+  });
+  const respond = vi.spyOn(api, 'respondInvitation');
+  render(<InvitationAcceptance session={session} />);
+  fireEvent.change(screen.getByLabelText('Invitation credential'), { target: { value: 'private-credential' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Review invitation' }));
+  expect(await screen.findByText('Business reference: independent-b')).toBeVisible();
+  expect(screen.getByText('Your role in this business: Accountant')).toBeVisible();
+  expect(preview).toHaveBeenCalledExactlyOnceWith(session, 'private-credential');
+  expect(respond).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText('Invitation credential'), { target: { value: 'different-credential' } });
+  expect(screen.queryByRole('region', { name: 'Invited business' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Accept invitation' })).not.toBeInTheDocument();
+});
+
+it('does not retry a confirmed acceptance when subsequent business selection fails', async () => {
+  const respond = vi.spyOn(api, 'respondInvitation').mockResolvedValue({ state: 'accepted' });
+  const select = vi.spyOn(api, 'selectEntity').mockRejectedValue(new ApiError('forbidden'));
+  render(<InvitationAcceptance session={session} />);
+  fireEvent.change(screen.getByLabelText('Invitation credential'), { target: { value: 'private-credential' } });
+  await reviewInvitation();
+  fireEvent.click(screen.getByRole('button', { name: 'Accept invitation' }));
+  expect(await screen.findByText(/Invitation accepted.*reload My Businesses/)).toBeVisible();
+  expect(await screen.findByRole('alert')).toBeVisible();
+  expect(respond).toHaveBeenCalledTimes(1);
+  expect(select).toHaveBeenCalledExactlyOnceWith(session, 'alpha');
+  expect(screen.getByLabelText('Invitation credential')).toHaveValue('');
+  expect(screen.queryByRole('button', { name: 'Accept invitation' })).not.toBeInTheDocument();
+});
+
+it('stops after an uncertain invitation response and clears the private credential', async () => {
+  const respond = vi.spyOn(api, 'respondInvitation').mockRejectedValue(new ApiError('unavailable'));
+  render(<InvitationAcceptance session={session} />);
+  fireEvent.change(screen.getByLabelText('Invitation credential'), { target: { value: 'private-credential' } });
+  await reviewInvitation();
+  fireEvent.click(screen.getByRole('button', { name: 'Accept invitation' }));
+  expect(await screen.findByText(/The invitation outcome could not be confirmed/)).toBeVisible();
+  expect(screen.getByLabelText('Invitation credential')).toHaveValue('');
+  expect(screen.getByLabelText('Invitation credential')).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Review invitation' })).toBeDisabled();
+  expect(respond).toHaveBeenCalledTimes(1);
+});
 
 it.each([
   ['reauthentication_required', 'Sign in again to continue. Re-enter any invitation credential after login.'],
@@ -19,6 +69,7 @@ it.each([
   const respond = vi.spyOn(api, 'respondInvitation').mockRejectedValue(new ApiError(code as ErrorCode));
   render(<InvitationAcceptance session={session} />);
   fireEvent.change(screen.getByLabelText('Invitation credential'), { target: { value: 'synthetic-credential' } });
+  await reviewInvitation();
   fireEvent.click(screen.getByRole('button', { name: 'Accept invitation' }));
   expect(await screen.findByText(message)).toBeVisible();
   expect(screen.getByLabelText('Invitation credential')).toHaveValue('');
@@ -32,6 +83,7 @@ it('allows an authenticated decline without retaining the credential', async () 
   vi.spyOn(api, 'respondInvitation').mockResolvedValue({ state: 'declined' });
   render(<InvitationAcceptance session={session} />);
   fireEvent.change(screen.getByLabelText('Invitation credential'), { target: { value: 'synthetic-credential' } });
+  await reviewInvitation();
   fireEvent.click(screen.getByRole('button', { name: 'Decline invitation' }));
   expect(await screen.findByText('Invitation declined.')).toBeVisible();
   expect(screen.getByLabelText('Invitation credential')).toHaveValue('');
@@ -43,9 +95,11 @@ it('clears a previous decline notice before another invitation response', async 
     .mockRejectedValueOnce(new ApiError('invitation_invalid'));
   render(<InvitationAcceptance session={session} />);
   fireEvent.change(screen.getByLabelText('Invitation credential'), { target: { value: 'first-credential' } });
+  await reviewInvitation();
   fireEvent.click(screen.getByRole('button', { name: 'Decline invitation' }));
   expect(await screen.findByText('Invitation declined.')).toBeVisible();
   fireEvent.change(screen.getByLabelText('Invitation credential'), { target: { value: 'next-credential' } });
+  await reviewInvitation();
   fireEvent.click(screen.getByRole('button', { name: 'Accept invitation' }));
   expect(screen.queryByText('Invitation declined.')).not.toBeInTheDocument();
   expect(await screen.findByRole('alert')).toBeVisible();

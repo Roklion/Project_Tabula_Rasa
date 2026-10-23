@@ -95,10 +95,10 @@ it('does not reinterpret a rejected request as uncertain success', async () => {
 });
 
 it('returns invitees to acceptance after required reauthentication and clears the credential', async () => {
-  vi.spyOn(api, 'respondInvitation').mockRejectedValue(new ApiError('reauthentication_required'));
+  vi.spyOn(api, 'previewInvitation').mockRejectedValue(new ApiError('reauthentication_required'));
   render(<InvitationAcceptance session={setup} />);
   fireEvent.change(screen.getByLabelText('Invitation credential'), { target: { value: 'private-credential' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Accept invitation' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Review invitation' }));
   expect(await screen.findByRole('link', { name: 'Sign in again' })).toHaveAttribute('href', '/api/v1/auth/login?return_path=/invitations');
   expect(screen.getByLabelText('Invitation credential')).toHaveValue('');
 });
@@ -124,7 +124,7 @@ it('offers independent business creation to an existing read-only member and lis
     items: [{ ...member.entity, role: 'read_only' }, { id: 'other', name: 'Other business', role: 'owner' }] }}>
     <BusinessesPage /></EntitySelectionContext.Provider></ScopeBoundary>);
   expect(screen.getByRole('heading', { name: 'My Businesses' })).toBeVisible();
-  expect(screen.getByText('read only')).toBeVisible();
+  expect(screen.getByText('Read-only')).toBeVisible();
   expect(screen.getByText('Other business')).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: 'Create another business' }));
   await review();
