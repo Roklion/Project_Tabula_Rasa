@@ -32,3 +32,9 @@ def test_api_schema_import_does_not_load_legacy_ui_or_google_clients():
         "assert not {'streamlit', 'gspread', 'tabula_rasa.storage'}.intersection(sys.modules)"],
         cwd=ROOT, capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stderr
+
+
+def test_migrated_startup_checks_work_without_legacy_runtime_dependencies():
+    result = subprocess.run([sys.executable, '-m', 'tests.http.migrated_runtime_probe'],
+        cwd=ROOT, capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr
