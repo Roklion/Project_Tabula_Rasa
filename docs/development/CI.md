@@ -26,6 +26,16 @@ dependency: missing, pending, skipped, cancelled, timed-out and failed results
 cannot satisfy it. Current-head triggers, PR cancellation, permissions and
 release-image consumers are preserved.
 
+The controlled-transport UI shards run in the official Playwright Noble image,
+with its version matched to the lockfile's `@playwright/test`. Browsers and OS
+libraries are preinstalled, avoiding per-shard apt downloads from regional Ubuntu
+mirrors. Node 24 and npm dependencies still use the existing setup steps.
+Update the image tag together with Playwright; CI policy rejects version drift.
+The container uses an init process and host IPC for browser process cleanup and
+Chromium shared memory. Native PostgreSQL/browser coverage retains its separate
+runner and installation path. Both UI shards, all projects, worker limits,
+artifacts, time budgets and the aggregate success requirement remain unchanged.
+
 The Python job has no compiled SPA. Native browser scenarios retain prerequisite
 skips there and run in the required native job with
 `TABULA_RASA_REQUIRE_BROWSER_TESTS=1`. CI policy checks the explicit invocation

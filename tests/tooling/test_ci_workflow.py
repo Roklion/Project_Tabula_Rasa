@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import json
 from pathlib import Path
 import shlex
 import shutil
@@ -100,7 +101,15 @@ def test_browser_shards_preserve_every_project_without_blanket_retries() -> None
     assert browser["strategy"] == {"fail-fast": "false", "matrix": {"shard": ["1", "2"]}}
     commands = [step.get("run", "") for step in browser["steps"]]
     assert "npm --prefix web run test:browser -- --shard=${{ matrix.shard }}/2" in commands
-    assert "npm --prefix web exec -- playwright install --with-deps chromium firefox webkit" in commands
+    # Preinstalled engines/libraries avoid a regional apt mirror download on
+    # each shard. Browser revisions must match the installed test package.
+    package = json.loads((PROJECT_ROOT / "web/package.json").read_text(encoding="utf-8"))
+    lock = json.loads((PROJECT_ROOT / "web/package-lock.json").read_text(encoding="utf-8"))
+    version = package["devDependencies"]["@playwright/test"]
+    assert lock["packages"]["node_modules/@playwright/test"]["version"] == version
+    assert browser["container"]["image"] == f"mcr.microsoft.com/playwright:v{version}-noble"
+    assert browser["container"]["options"] == "--init --ipc=host"
+    assert not any("playwright install" in command or "apt-get" in command for command in commands)
     assert not any("pytest" in command or "test:contracts" in command for command in commands)
     config = (PROJECT_ROOT / "web/playwright.config.ts").read_text(encoding="utf-8")
     assert "fullyParallel: true" in config  # shard by tests, not imbalanced files
