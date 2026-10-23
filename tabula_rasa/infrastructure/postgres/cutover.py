@@ -8,8 +8,6 @@ from sqlalchemy import text
 from tabula_rasa.bookkeeping_export.format import build_artifact, validate_artifact
 from tabula_rasa.migration.model import MigrationError, digest
 from .entity_export import PostgresEntityExportRepository
-from .migration_acceptance import PostgresMigrationAcceptance, SOURCE_CONTRACT
-from .migration import validate_plan
 from .migrations import current_revision, head_revision
 from .identity import database_identity as database_identity
 
@@ -72,6 +70,9 @@ class PostgresCutoverController:
         No source mutation or backend activation occurs. The resulting target
         is protected against bookkeeping writes pending the operator decision.
         """
+        from .migration import validate_plan
+        from .migration_acceptance import PostgresMigrationAcceptance, SOURCE_CONTRACT
+
         validate_plan(plan)
         if mode not in {"rehearsal", "commercial_production"}:
             raise CutoverError("An explicit cutover environment is required.")
@@ -140,6 +141,8 @@ class PostgresCutoverController:
 
     def rollback(self, plan):
         """Use a freshly extracted frozen-format source; refuse any divergence."""
+        from .migration import validate_plan
+
         validate_plan(plan)
         binding = plan.snapshot.binding
         with self.database.transaction(require_outer=True) as connection:

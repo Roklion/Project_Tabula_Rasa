@@ -118,6 +118,7 @@ jobs:
           SCHEMA=$(python -c 'from tabula_rasa.infrastructure.postgres.migrations import head_revision; print(head_revision())')
           docker build --platform linux/amd64 --build-arg RELEASE_ID="$GITHUB_SHA" --build-arg SCHEMA_REVISION="$SCHEMA" -f deploy/commercial/Dockerfile -t tabula-commercial:ci .
           docker run --rm tabula-commercial:ci python -c 'import sys; from tabula_rasa.http.app import create_app; from tabula_rasa.http.alpha_documents import load_alpha_document_store; create_app(schema_only=True).openapi(); assert not {"streamlit", "gspread", "tabula_rasa.storage"}.intersection(sys.modules)'
+          docker run --rm --mount type=bind,source=${{ github.workspace }}/tests/http/migrated_runtime_probe.py,target=/app/migrated_runtime_probe.py,readonly tabula-commercial:ci python /app/migrated_runtime_probe.py
       - name: Upload run-once contract results
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
