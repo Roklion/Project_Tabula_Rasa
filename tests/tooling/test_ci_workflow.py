@@ -100,7 +100,12 @@ def test_browser_shards_preserve_every_project_without_blanket_retries() -> None
     assert "if" not in browser and "services" not in browser
     assert browser["strategy"] == {"fail-fast": "false", "matrix": {"shard": ["1", "2"]}}
     commands = [step.get("run", "") for step in browser["steps"]]
-    assert "npm --prefix web run test:browser -- --shard=${{ matrix.shard }}/2" in commands
+    shard = next(step for step in browser["steps"] if step.get("name") == "Run browser UI shard")
+    assert shard["env"] == {"HOME": "/root"}
+    assert shard["run"].splitlines() == [
+        'git config --global --add safe.directory "$GITHUB_WORKSPACE"',
+        'npm --prefix web run test:browser -- --shard=${{ matrix.shard }}/2',
+    ]
     # Preinstalled engines/libraries avoid a regional apt mirror download on
     # each shard. Browser revisions must match the installed test package.
     package = json.loads((PROJECT_ROOT / "web/package.json").read_text(encoding="utf-8"))

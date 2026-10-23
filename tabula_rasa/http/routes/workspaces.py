@@ -92,7 +92,8 @@ def business_revoke_invitation(business_id: str, invitation_id: str, request: Re
     return Response(status_code=204)
 
 
-@router.post('/api/v1/invitations/preview', response_model=InvitationPreview, operation_id='preview_invitation')
+@router.post('/api/v1/invitations/preview', response_model=InvitationPreview, operation_id='preview_invitation',
+             responses={410: {'model': ErrorEnvelope, 'description': 'Invitation expired'}})
 def preview_invitation(body: InvitationPreviewRequest, request: Request):
     service, session = workflow(request)
     return service.preview_invitation(session, body.credential.get_secret_value())

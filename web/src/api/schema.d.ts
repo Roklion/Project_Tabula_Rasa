@@ -3558,6 +3558,11 @@ export interface components {
         SessionInfo: {
             /** Actor Id */
             actor_id: string;
+            /**
+             * Business Creation Available
+             * @default false
+             */
+            business_creation_available: boolean;
             /** Cache Scope */
             cache_scope: string;
             /** Capabilities */
@@ -3580,6 +3585,11 @@ export interface components {
         SetupSessionInfo: {
             /** Actor Id */
             actor_id: string;
+            /**
+             * Business Creation Available
+             * @default false
+             */
+            business_creation_available: boolean;
             /** Cache Scope */
             cache_scope: string;
             /**
@@ -12855,6 +12865,15 @@ export interface operations {
             };
             /** @description Duplicate or concurrent change */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Invitation expired */
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -32,6 +32,7 @@ class FakeRuntime:
             "session-1", "test-csrf",
         )
         self.accounts = Mock()
+        self.workspaces = SimpleNamespace(bootstrap_enabled=False)
         self.accounts.list.return_value = [RECORD]
         self.accounts.create.return_value = RECORD
         self.services = Mock(return_value=SimpleNamespace(
@@ -123,6 +124,38 @@ def test_canonical_origin_accepts_browser_mutations_without_relaxing_scope(runti
         runtime.services.assert_not_called()
 
 
+@pytest.mark.parametrize('enabled', [False, True])
+@pytest.mark.parametrize('selected', [None, EntityAccess('alpha', 'organization', 'Alpha', 'read_only', 1)])
+def test_named_session_exposes_runtime_creation_availability_before_and_after_selection(runtime, enabled, selected):
+    settings = HttpSettings('test', 'http://testserver', access_mode='named_user')
+    now = datetime.now(timezone.utc)
+    sessions = Mock()
+    sessions.validate.return_value = AuthenticatedSession('actor', 'session-1', 'test-csrf', now,
+        now + timedelta(hours=12), selected)
+    sessions.select.return_value = AuthenticatedSession('actor', 'session-1', 'test-csrf', now,
+        now + timedelta(hours=12), EntityAccess('beta', 'other-organization', 'Beta', 'owner', 1))
+    runtime.identity = runtime.resolve_context = NamedIdentity(settings, sessions, Mock())
+    runtime.workspaces = SimpleNamespace(bootstrap_enabled=enabled)
+    with TestClient(create_app(settings=settings, runtime_factory=lambda _: runtime)) as client:
+        result = client.get('/api/v1/session')
+        assert result.status_code == 200
+        assert result.json()['business_creation_available'] is enabled
+        assert result.json()['state'] == ('ready' if selected else 'needs_setup')
+        switched = client.post('/api/v1/session/entity', json={'entity_id': 'beta'},
+            headers={'Origin': 'http://testserver', 'X-CSRF-Token': 'test-csrf'})
+        assert switched.status_code == 200
+        assert switched.json()['business_creation_available'] is enabled
+        assert switched.json()['entity']['id'] == 'beta'
+
+
+def test_preview_contract_declares_expired_envelope(tmp_path):
+    output = tmp_path / 'openapi.json'
+    export_schema(output)
+    schema = json.loads(output.read_text())
+    response = schema['paths']['/api/v1/invitations/preview']['post']['responses']['410']
+    assert response['content']['application/json']['schema']['$ref'] == '#/components/schemas/ErrorEnvelope'
+
+
 @pytest.mark.parametrize('origin', ['https://named.example.test:invalid', 'https://named.example.test:65536'])
 def test_invalid_origin_port_rejected(origin):
     with pytest.raises(ValueError, match='Invalid HTTP configuration'):
@@ -188,6 +221,7 @@ def test_session_and_health_lifecycle(runtime):
         session = client.get("/api/v1/session").json()
         assert session["entity"] == {"id": "alpha", "name": "Alpha"}
         assert session["csrf_token"] == "test-csrf"
+        assert session["business_creation_available"] is False
         assert client.get("/health/live").json() == {"status": "live"}
         runtime.healthy = False
         assert client.get("/health/ready").status_code == 503

@@ -4843,6 +4843,11 @@
             "title": "Actor Id",
             "type": "string"
           },
+          "business_creation_available": {
+            "default": false,
+            "title": "Business Creation Available",
+            "type": "boolean"
+          },
           "cache_scope": {
             "title": "Cache Scope",
             "type": "string"
@@ -4894,6 +4899,11 @@
           "actor_id": {
             "title": "Actor Id",
             "type": "string"
+          },
+          "business_creation_available": {
+            "default": false,
+            "title": "Business Creation Available",
+            "type": "boolean"
           },
           "cache_scope": {
             "title": "Cache Scope",
@@ -17156,6 +17166,16 @@
               }
             },
             "description": "Duplicate or concurrent change"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invitation expired"
           },
           "422": {
             "content": {

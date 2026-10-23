@@ -254,3 +254,9 @@ synthetic local/CI checks, not hosted-provider or external-beta approval.
 Business tenancy requires forward revision `0016_business_tenancy`. Read the
 [business tenancy rollout](BUSINESS_TENANCY.md) before deploying; an ambiguous
 legacy container blocks migration without automatic conversion.
+
+The session's `business_creation_available` flag reports the composed bootstrap
+service's availability, independently of the selected business role. Both first-use
+and existing-member views offer creation only when it is true. Migrated-profile
+compositions keep bootstrap disabled; invitation and operator migration paths
+remain available, and the service continues to reject unsupported creation.

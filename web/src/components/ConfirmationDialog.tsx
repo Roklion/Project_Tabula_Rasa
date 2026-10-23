@@ -30,7 +30,9 @@ export function ConfirmationDialog({ title, children, keepLabel, confirmLabel, o
       // disabled. Keep the reauthentication link reachable in either direction.
       const index = buttons.findIndex(button => button === document.activeElement);
       event.preventDefault();
-      buttons[(index + (event.shiftKey ? -1 : 1) + buttons.length) % buttons.length].focus();
+      const next = index < 0 ? (event.shiftKey ? buttons.length - 1 : 0)
+        : (index + (event.shiftKey ? -1 : 1) + buttons.length) % buttons.length;
+      buttons[next].focus();
     }}>
     <div id={description}>{children}</div>
     {pending && <p role="status" aria-live="polite" className="notice neutral">Working… Please wait for confirmation before trying again.</p>}

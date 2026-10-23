@@ -146,7 +146,12 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm --prefix web ci
-      - run: npm --prefix web run test:browser -- --shard=${{ matrix.shard }}/2
+      - name: Run browser UI shard
+        env:
+          HOME: /root
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          npm --prefix web run test:browser -- --shard=${{ matrix.shard }}/2
       - name: Upload browser UI results
         if: ${{ always() }}
         uses: actions/upload-artifact@v4

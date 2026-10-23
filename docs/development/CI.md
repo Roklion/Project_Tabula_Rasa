@@ -32,7 +32,10 @@ libraries are preinstalled, avoiding per-shard apt downloads from regional Ubunt
 mirrors. Node 24 and npm dependencies still use the existing setup steps.
 Update the image tag together with Playwright; CI policy rejects version drift.
 The container uses an init process and host IPC for browser process cleanup and
-Chromium shared memory. Native PostgreSQL/browser coverage retains its separate
+Chromium shared memory. The browser step uses the image user's owned home
+(`/root`) so Firefox can start, and trusts only the mounted checkout path for
+Git provenance reads. Checkout's temporary Git configuration does not survive
+into ordinary run steps. Native PostgreSQL/browser coverage retains its separate
 runner and installation path. Both UI shards, all projects, worker limits,
 artifacts, time budgets and the aggregate success requirement remain unchanged.
 

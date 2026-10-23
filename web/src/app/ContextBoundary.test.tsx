@@ -185,7 +185,7 @@ it('discards private drafts on a cross-tab scope signal and ignores a late switc
 
 it('does not compose private UI for needs-setup or failed initial identity', async () => {
   const identity = { state: 'needs_setup' as const, actor_id: 'alice', organization_id: null,
-    entity: null, capabilities: [], cache_scope: 'new', csrf_token: 'csrf', trusted_development: false as const };
+    entity: null, capabilities: [], cache_scope: 'new', csrf_token: 'csrf', trusted_development: false as const, business_creation_available: false };
   vi.spyOn(api, 'session').mockResolvedValue(identity);
   vi.spyOn(api, 'entities').mockResolvedValue({ items: [] });
   render(<ContextBoundary><p>Private ledger</p></ContextBoundary>);

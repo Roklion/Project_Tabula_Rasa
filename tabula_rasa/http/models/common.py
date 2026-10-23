@@ -100,6 +100,7 @@ class SessionInfo(DTO):
     cache_scope: str
     csrf_token: str
     trusted_development: bool
+    business_creation_available: bool = False
 
 
 class SetupSessionInfo(DTO):
@@ -111,3 +112,4 @@ class SetupSessionInfo(DTO):
     cache_scope: str
     csrf_token: str
     trusted_development: Literal[False] = False
+    business_creation_available: bool = False

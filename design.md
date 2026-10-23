@@ -634,7 +634,10 @@ edition.
   is not converted or granted access implicitly. Persistent boundaries and the
   non-destructive rollout are defined in [Business tenancy](docs/identity/BUSINESS_TENANCY.md).
 - Authenticated My Businesses lists permitted names and each specific role, with
-  Create another business available independently of the current business role.
+  Create another business available independently of the current business role
+  when the server advertises business creation availability. Migrated-profile
+  runtimes disable bootstrap and omit creation controls in both first-use and
+  existing-member views; invitation and operator migration paths remain available.
   It shares the first-use form and bootstrap owner. Business & members retains
   member/invitation actions and has no Add business within a container action.
   The existing authorized selector and scope boundary still own selection and

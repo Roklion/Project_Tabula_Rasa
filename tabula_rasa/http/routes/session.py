@@ -19,7 +19,8 @@ def list_businesses(request: Request):
 def get_session(request: Request):
     runtime = request.app.state.runtime
     if getattr(runtime, "identity", None) is not None:
-        return runtime.identity.info(runtime.identity.authenticated(request))
+        return runtime.identity.info(runtime.identity.authenticated(request),
+            business_creation_available=runtime.workspaces.bootstrap_enabled)
     return context_info(request, resolve_context(request))
 
 
@@ -63,7 +64,7 @@ def select_entity(body: EntitySelection, request: Request, response: Response):
         session = auth.authenticated(request)
         require_csrf(request, session.csrf_token)
         selected = auth.sessions.select(request.cookies.get(auth.session_cookie, ""), body.entity_id)
-        return auth.info(selected)
+        return auth.info(selected, business_creation_available=runtime.workspaces.bootstrap_enabled)
     context = resolve_context(request)
     resolver = runtime.resolve_context
     # Selection is functional alpha context, never proof of membership. Only the
