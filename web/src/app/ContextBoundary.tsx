@@ -47,6 +47,7 @@ export function ContextBoundary({ children, onScopeChange }: { children: ReactNo
   const [entities, setEntities] = useState<Schemas['EntityInfo'][]>([]);
   const [entityError, setEntityError] = useState<unknown>();
   const [switching, setSwitching] = useState(false);
+  const selecting = useRef(false);
   const [selectionError, setSelectionError] = useState<unknown>();
   useEffect(() => {
     if (resetRoute.current && state.session) {
@@ -60,6 +61,10 @@ export function ContextBoundary({ children, onScopeChange }: { children: ReactNo
     const channel = typeof BroadcastChannel === 'undefined' ? undefined : new BroadcastChannel('tabula-auth');
     authChannel.current = channel;
     if (channel) channel.onmessage = event => {
+      if (event.data === 'authority-check') {
+        window.dispatchEvent(new Event('tabula:identity-check'));
+        return;
+      }
       if (event.data === 'scope-changed') {
         resetRoute.current = true;
         identityGeneration.current++; setEntities([]); setState({}); setGeneration(value => value + 1);
@@ -170,7 +175,8 @@ export function ContextBoundary({ children, onScopeChange }: { children: ReactNo
       : <><PageHeader title="Join an invited business" /><InvitationAcceptance key={state.session.actor_id} session={state.session} /><div className="actions"><a className="button" href="/">Return to your dashboard</a></div></>}
     <div className="actions"><ActionButton onClick={() => void logout()}>Sign out</ActionButton></div></section></main>;
   async function select(id: string) {
-    if (!state.session || state.session.state === 'needs_setup') return;
+    if (!state.session || state.session.state === 'needs_setup' || selecting.current) return;
+    selecting.current = true;
     setSwitching(true);
     if (!state.session.trusted_development) identityGeneration.current++;
     const expected = identityGeneration.current;
@@ -198,7 +204,7 @@ export function ContextBoundary({ children, onScopeChange }: { children: ReactNo
         else setSelectionError(error);
       }
     }
-    finally { setSwitching(false); }
+    finally { selecting.current = false; setSwitching(false); }
   }
   return <AuthContext.Provider value={{ logout: () => void logout() }}><EntitySelectionContext.Provider value={{ items: entities, select, pending: switching }}>
     {switching && <LoadingState label="Switching business…" />}

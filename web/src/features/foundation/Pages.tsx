@@ -10,7 +10,7 @@ import { ActionButton, PageHeader, TableRegion } from '../../components/VisualPr
 
 export function Dashboard() {
   const session = useEntity();
-  return <><p className="eyebrow">Your workspace</p><h1>Dashboard</h1>
+  return <><p className="eyebrow">Your business</p><h1>Dashboard</h1>
     <p className="lead">A clear view of {session.entity.name}.</p>
     <section className="surface"><h2>Start with your accounts</h2>
       <p>Review the accounts connected to this business.</p><Link to="/accounts" className="button">View accounts</Link>
@@ -37,7 +37,7 @@ export function Accounts() {
 
 export function PlannedPage({ title }: { title: string }) {
   return <><PageHeader title={title} /><EmptyState title="Not available in this technical alpha">
-    {title === 'Data & backup' ? 'Import and backup controls are not available on this commercial page. Mileage CSV is available from Mileage.' : 'This workflow is not available in this commercial workspace.'}
+    {title === 'Data & backup' ? 'Import and backup controls are not available on this commercial page. Mileage CSV is available from Mileage.' : 'This workflow is not available for this business.'}
   </EmptyState></>;
 }
 

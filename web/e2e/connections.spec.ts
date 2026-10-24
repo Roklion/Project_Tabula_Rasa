@@ -12,7 +12,7 @@ test('owner connection confirmation is accessible and usable at desktop and mobi
   let revision = 1;
   let status = 'pending';
   await page.route('**/api/v1/session', route => route.fulfill({ json: session }));
-  await page.route('**/api/v1/entities', route => route.fulfill({ json: { items: [session.entity] } }));
+  await page.route('**/api/v1/businesses', route => route.fulfill({ json: { items: [session.entity] } }));
   await page.route('**/api/v1/entities/alpha/connections/google-drive', async route => {
     if (route.request().method() === 'POST') {
       expect(route.request().postDataJSON()).toEqual({ revision, connect: status !== 'connected' });
@@ -49,7 +49,7 @@ test('ordinary commercial members have no legacy or connection administration co
     entity: { id: 'alpha', name: 'Alpha demonstration' }, capabilities: ['bookkeeping:read'],
     cache_scope: 'reader-alpha', csrf_token: 'synthetic-csrf', trusted_development: false,
   } }));
-  await page.route('**/api/v1/entities', route => route.fulfill({ json: { items: [{ id: 'alpha', name: 'Alpha demonstration' }] } }));
+  await page.route('**/api/v1/businesses', route => route.fulfill({ json: { items: [{ id: 'alpha', name: 'Alpha demonstration' }] } }));
   await page.goto('/data');
   await expect(page.getByRole('heading', { name: 'Data & backup', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'External connections' })).toHaveCount(0);

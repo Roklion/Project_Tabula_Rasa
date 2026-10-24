@@ -23,6 +23,24 @@ function authChannel() {
   return channels;
 }
 
+it.each([false, true])('peer authority checks remount private drafts only when selected authority changes: %s', async changed => {
+  const channels = authChannel();
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  const current = { ...session, trusted_development: false };
+  const check = vi.spyOn(api, 'session').mockResolvedValue(current);
+  vi.spyOn(api, 'entities').mockResolvedValue({ items: [session.entity] });
+  function Draft() {
+    const [value, setValue] = useState('');
+    return <input aria-label="Scoped private draft" value={value} onChange={event => setValue(event.target.value)} />;
+  }
+  render(<ContextBoundary><Draft /></ContextBoundary>);
+  fireEvent.change(await screen.findByLabelText('Scoped private draft'), { target: { value: 'retained in this business' } });
+  if (changed) check.mockResolvedValue({ ...current, cache_scope: 'new-membership-version', capabilities: ['bookkeeping:read'] });
+  await act(async () => channels[0].onmessage?.({ data: 'authority-check' }));
+  await waitFor(() => expect(check.mock.calls.length).toBeGreaterThanOrEqual(2));
+  await waitFor(() => expect(screen.getByLabelText('Scoped private draft')).toHaveValue(changed ? '' : 'retained in this business'));
+});
+
 it.each(['resolve', 'reject'])('ignores a late initial session %s after cross-tab logout', async outcome => {
   const channels = authChannel();
   let resolve!: (value: typeof session) => void;
@@ -167,7 +185,7 @@ it('discards private drafts on a cross-tab scope signal and ignores a late switc
 
 it('does not compose private UI for needs-setup or failed initial identity', async () => {
   const identity = { state: 'needs_setup' as const, actor_id: 'alice', organization_id: null,
-    entity: null, capabilities: [], cache_scope: 'new', csrf_token: 'csrf', trusted_development: false as const };
+    entity: null, capabilities: [], cache_scope: 'new', csrf_token: 'csrf', trusted_development: false as const, business_creation_available: false };
   vi.spyOn(api, 'session').mockResolvedValue(identity);
   vi.spyOn(api, 'entities').mockResolvedValue({ items: [] });
   render(<ContextBoundary><p>Private ledger</p></ContextBoundary>);

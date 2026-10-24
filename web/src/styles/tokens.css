@@ -62,6 +62,8 @@ main > p + :is(section, form),
 main > :is(section, form) ~ h2 { margin-top: var(--space-8); }
 /* Use shared section rhythm inside standalone onboarding and business settings. */
 .workflowSections > :is(section, form, .actions) + :is(section, form, .actions) { margin-top: var(--space-8); }
+.workflowSections > h2 { margin-top: var(--space-8); }
+.ownershipAction { border-top: 1px solid var(--border); margin-top: var(--space-8); padding-top: var(--space-4); }
 .sectionHeader p { color: var(--secondary); margin: 0; overflow-wrap: anywhere; }
 .surface { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-surface); padding: var(--space-4); overflow-wrap: anywhere; min-width: 0; box-shadow: var(--shadow-surface); }
 .surface-secondary { background: var(--surface-secondary); }

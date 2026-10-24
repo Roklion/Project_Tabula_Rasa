@@ -26,8 +26,13 @@ export function ConfirmationDialog({ title, children, keepLabel, confirmLabel, o
       const buttons = Array.from(ref.current!.querySelectorAll<HTMLElement>('a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled)'));
       const first = buttons[0], last = buttons.at(-1);
       if (!first || !last) { event.preventDefault(); return; }
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      // WebKit's native Tab order may skip links when full keyboard access is
+      // disabled. Keep the reauthentication link reachable in either direction.
+      const index = buttons.findIndex(button => button === document.activeElement);
+      event.preventDefault();
+      const next = index < 0 ? (event.shiftKey ? buttons.length - 1 : 0)
+        : (index + (event.shiftKey ? -1 : 1) + buttons.length) % buttons.length;
+      buttons[next].focus();
     }}>
     <div id={description}>{children}</div>
     {pending && <p role="status" aria-live="polite" className="notice neutral">Working… Please wait for confirmation before trying again.</p>}

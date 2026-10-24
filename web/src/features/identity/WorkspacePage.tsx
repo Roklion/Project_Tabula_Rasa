@@ -1,15 +1,15 @@
 import { useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, ApiError, type Schemas } from '../../api/client';
+import { api, type Schemas } from '../../api/client';
 import { resourceKey } from '../../api/query';
 import { useEntity } from '../../app/context';
 import { ErrorNotice, Field, LoadingState, SuccessNotice } from '../../components/States';
 import { ActionButton, FormSection, PageHeader } from '../../components/VisualPrimitives';
 import { InvitationAcceptance } from './InvitationAcceptance';
 import { ConfirmationDialog } from '../../components/ConfirmationDialog';
-
-const roleNames = { owner: 'Owner', admin: 'Admin', editor: 'Editor', accountant: 'Accountant', read_only: 'Read-only' };
-type Role = keyof typeof roleNames;
+import { roleNames, type Role } from '../../app/roles';
+import { notifyPeerAuthorityCheck } from '../../app/authSignals';
+import { uncertainIdentityCommand } from './commandOutcome';
 
 function MemberEditor({ member, owner, onSave, onGrant }: { member: Schemas['Member']; owner: boolean; onSave: (role: Role, active: boolean) => Promise<void>; onGrant: () => Promise<void> }) {
   const actor = useEntity().actor_id;
@@ -27,19 +27,21 @@ function MemberEditor({ member, owner, onSave, onGrant }: { member: Schemas['Mem
     try { await operation(); close(); }
     catch (failure) {
       setError(failure);
-      setUncertain(!(failure instanceof ApiError && ['validation', 'invariant', 'required', 'forbidden', 'unauthorized', 'reauthentication_required', 'stale', 'conflict', 'concurrent_write'].includes(failure.code)));
+      setUncertain(uncertainIdentityCommand(failure));
     } finally { submitting.current = false; setPending(false); }
   }
   const allowed = owner || member.role === 'admin' && member.user_id === actor || !['owner', 'admin'].includes(member.role);
   return <section className="surface"><h3>{member.display_name || 'Business member'}</h3>
     <p>Current role: {roleNames[member.role]} · {member.state}</p>
-    {allowed && <><Field id={'role-' + member.user_id} label="Member role"><select id={'role-' + member.user_id} value={role} disabled={pending}
+    {allowed && <><Field id={'role-' + member.user_id} label="Member role"><select id={'role-' + member.user_id} value={role} disabled={pending || uncertain}
       onChange={event => setRole(event.target.value as Role)}>
       {(Object.keys(roleNames) as Role[]).filter(item => item === 'owner' ? member.role === 'owner' : owner || item !== 'admin' || member.role === 'admin').map(item => <option key={item} value={item}>{roleNames[item]}</option>)}
     </select></Field>
-    <label><input type="checkbox" checked={active} disabled={pending} onChange={event => setActive(event.target.checked)} /> Active membership</label>
-    <div className="actions"><ActionButton disabled={pending} onClick={() => setConfirm(true)}>Review membership change</ActionButton></div></>}
-    {owner && (member.role !== 'owner' || member.state !== 'active') && <div className="actions"><ActionButton disabled={pending} onClick={() => setGrant(true)}>Grant ownership</ActionButton></div>}
+    <label><input type="checkbox" checked={active} disabled={pending || uncertain} onChange={event => setActive(event.target.checked)} /> Active membership</label>
+    <div className="actions"><ActionButton disabled={pending || uncertain} onClick={() => { setError(undefined); setConfirm(true); }}>Review membership change</ActionButton></div></>}
+    {owner && (member.role !== 'owner' || member.state !== 'active') && <section className="ownershipAction" aria-label="Ownership">
+      <h4>Ownership</h4><p>Owners can administer this business and authorize recovery. A recent sign-in is required.</p>
+      <div className="actions"><ActionButton disabled={pending || uncertain} onClick={() => { setError(undefined); setGrant(true); }}>Grant ownership</ActionButton></div></section>}
     {grant && <ConfirmationDialog title="Grant ownership" keepLabel="Keep current role" confirmLabel="Confirm ownership grant" pending={pending} confirmDisabled={uncertain} onKeep={() => setGrant(false)}
       onConfirm={() => void submit(onGrant, () => setGrant(false))}>
       Give this member full Owner authority, including business administration and recovery approval?
@@ -53,6 +55,7 @@ function MemberEditor({ member, owner, onSave, onGrant }: { member: Schemas['Mem
       {uncertain && <p role="alert">The outcome could not be confirmed. Close this dialog and reload the member list before making another change.</p>}
     </ConfirmationDialog>}
     {error !== undefined && !confirm && !grant && <ErrorNotice error={error} />}
+    {uncertain && !confirm && !grant && <p role="alert">Reload the member list to inspect the outcome before making another change.</p>}
   </section>;
 }
 
@@ -70,16 +73,19 @@ function MemberAdministration() {
   const [issued, setIssued] = useState<string>();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>();
+  const submitting = useRef(false);
   async function invite() {
+    if (submitting.current) return;
+    submitting.current = true;
     setIssued(undefined); setError(undefined); setPending(true);
     try {
       const result = await api.invite(session, { email, role });
       setIssued(result.credential); setEmail('');
     } catch (failure) { setError(failure); }
-    finally { await cache.invalidateQueries({ queryKey: invitationKey }); setPending(false); }
+    finally { await cache.invalidateQueries({ queryKey: invitationKey }); setPending(false); submitting.current = false; }
   }
   return <><form className="surface" onSubmit={event => { event.preventDefault(); void invite(); }}>
-    <FormSection title="Invite a collaborator"><Field id="invite-email" label="Recipient email"><input id="invite-email" type="email" value={email} required maxLength={320} disabled={pending} onChange={event => setEmail(event.target.value)} /></Field>
+    <FormSection title="Invite to this business"><p>{session.entity.name} · Business reference: {session.entity.id}</p><Field id="invite-email" label="Recipient email"><input id="invite-email" type="email" value={email} required maxLength={320} disabled={pending} onChange={event => setEmail(event.target.value)} /></Field>
       <Field id="invite-role" label="Invitation role"><select id="invite-role" value={role} disabled={pending} onChange={event => setRole(event.target.value as typeof role)}>
         {(['admin', 'editor', 'accountant', 'read_only'] as const).filter(item => owner || item !== 'admin').map(item => <option key={item} value={item}>{roleNames[item]}</option>)}
       </select></Field></FormSection>
@@ -99,10 +105,11 @@ function MemberAdministration() {
       await api.changeMember(session, member.user_id, { role, active, authorization_version: member.authorization_version });
       setResult('Membership change confirmed.');
       window.dispatchEvent(new Event('tabula:identity-check'));
+      notifyPeerAuthorityCheck();
     } finally { await cache.invalidateQueries({ queryKey: key }); }
   }} onGrant={async () => {
     setResult('');
-    try { await api.grantOwnership(session, member.user_id, member.authorization_version); setResult('Ownership grant confirmed.'); }
+    try { await api.grantOwnership(session, member.user_id, member.authorization_version); setResult('Ownership grant confirmed.'); window.dispatchEvent(new Event('tabula:identity-check')); notifyPeerAuthorityCheck(); }
     finally { await cache.invalidateQueries({ queryKey: key }); }
   }} />)}
   <h2>Invitations</h2>
@@ -110,16 +117,19 @@ function MemberAdministration() {
   {invitations.data?.items.length === 0 && <p>No invitations.</p>}
   {invitations.data?.items.map(item => <section className="surface" key={item.id}><p>{item.recipient_email} · {roleNames[item.role]} · {item.state} · expires {new Date(item.expires_at).toLocaleString()}</p>
     {item.state === 'pending' && (owner || item.role !== 'admin') && <ActionButton disabled={pending} onClick={() => {
-      setPending(true); setError(undefined); void api.revokeInvitation(session, item.id).catch(setError).finally(async () => { await cache.invalidateQueries({ queryKey: invitationKey }); setPending(false); });
+      if (submitting.current) return;
+      submitting.current = true;
+      setPending(true); setError(undefined); void api.revokeInvitation(session, item.id).catch(setError).finally(async () => { await cache.invalidateQueries({ queryKey: invitationKey }); setPending(false); submitting.current = false; });
     }}>Revoke invitation</ActionButton>}</section>)}
   </>;
 }
 
 export function WorkspacePage() {
   const session = useEntity();
-  return <><PageHeader title="Business & members" description={session.entity.name} />
+  return <div className="workflowSections"><PageHeader title="Business & members" description={session.entity.name} />
+    <p>Business reference: {session.entity.id}</p>
     <p>Manage members and invitations for the selected business.</p>
     {session.capabilities.includes('members:manage') && !session.trusted_development ? <MemberAdministration /> : <p>Business administration requires Owner or Admin access.</p>}
     {!session.trusted_development && <InvitationAcceptance session={session} />}
-  </>;
+  </div>;
 }

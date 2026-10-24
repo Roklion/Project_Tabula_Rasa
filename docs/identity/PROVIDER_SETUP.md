@@ -197,13 +197,14 @@ Editor/Accountant/Read-only, and Owner assignment uses the separate ownership
 action. Deny replay and cross-organization use. Pending invites grant no
 discovery/document access. Preserve last-owner rules and safe 403 responses.
 
-First-use workspace creation binds the signed-in internal user as Owner. Ledger
+First-use business creation binds the signed-in internal user as Owner of that business. Ledger
 bootstrap reuses `LedgerSetupService` defaults within the supported database
 transaction/idempotent bootstrap; first-use onboarding shows start-fresh versus the
 explicitly separate authority cutover and live owner cutover operator migration. Account
-creation alone confers no access to any preexisting workspace. A user with no
+creation alone confers no access to any preexisting business. A user with no
 memberships remains in the authenticated `needs_setup` state, able to log out, accept an
-invitation or create their own workspace.
+invitation or create their own business. Each business has its own role and private
+authorization container; My Businesses is a flat authorized navigation list.
 
 ## Threat model and required acceptance cases
 

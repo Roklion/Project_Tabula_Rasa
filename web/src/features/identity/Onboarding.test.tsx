@@ -10,7 +10,7 @@ import { ContextBoundary } from '../../app/ContextBoundary';
 import { InvitationAcceptance } from './InvitationAcceptance';
 
 const setup: SessionState = { state: 'needs_setup', actor_id: 'new-user', organization_id: null,
-  entity: null, capabilities: [], cache_scope: 'setup', csrf_token: 'csrf', trusted_development: false };
+  entity: null, capabilities: [], cache_scope: 'setup', csrf_token: 'csrf', trusted_development: false, business_creation_available: true };
 afterEach(() => { vi.restoreAllMocks(); sessionStorage.clear(); window.history.replaceState({}, '', '/'); });
 
 async function review() {
@@ -95,10 +95,10 @@ it('does not reinterpret a rejected request as uncertain success', async () => {
 });
 
 it('returns invitees to acceptance after required reauthentication and clears the credential', async () => {
-  vi.spyOn(api, 'respondInvitation').mockRejectedValue(new ApiError('reauthentication_required'));
+  vi.spyOn(api, 'previewInvitation').mockRejectedValue(new ApiError('reauthentication_required'));
   render(<InvitationAcceptance session={setup} />);
   fireEvent.change(screen.getByLabelText('Invitation credential'), { target: { value: 'private-credential' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Accept invitation' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Review invitation' }));
   expect(await screen.findByRole('link', { name: 'Sign in again' })).toHaveAttribute('href', '/api/v1/auth/login?return_path=/invitations');
   expect(screen.getByLabelText('Invitation credential')).toHaveValue('');
 });
@@ -118,17 +118,29 @@ it('routes an existing invited member to acceptance and preserves that route thr
 
 
 it('offers independent business creation to an existing read-only member and lists current access', async () => {
-  const member = { ...session, trusted_development: false, capabilities: ['bookkeeping:read'] };
+  const member = { ...session, trusted_development: false, capabilities: ['bookkeeping:read'], business_creation_available: true };
   const select = vi.fn();
   render(<ScopeBoundary session={member}><EntitySelectionContext.Provider value={{ pending: false, select,
     items: [{ ...member.entity, role: 'read_only' }, { id: 'other', name: 'Other business', role: 'owner' }] }}>
     <BusinessesPage /></EntitySelectionContext.Provider></ScopeBoundary>);
   expect(screen.getByRole('heading', { name: 'My Businesses' })).toBeVisible();
-  expect(screen.getByText('read only')).toBeVisible();
+  expect(screen.getByText('Read-only')).toBeVisible();
   expect(screen.getByText('Other business')).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: 'Create another business' }));
   await review();
   expect(screen.queryByText(/Workspace:/)).not.toBeInTheDocument();
+});
+
+it('retains invitation and migration paths while hiding creation when runtime bootstrap is disabled', () => {
+  const member = { ...session, trusted_development: false, business_creation_available: false };
+  const view = render(<ScopeBoundary session={member}><BusinessesPage /></ScopeBoundary>);
+  expect(screen.queryByRole('button', { name: 'Create another business' })).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Join an invited business' })).toBeVisible();
+  view.unmount();
+  render(<Onboarding session={{ ...setup, business_creation_available: false }} />);
+  expect(screen.queryByRole('button', { name: 'Create your first business' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Join an invited business' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Move existing Sheets books' })).toBeVisible();
 });
 
 it('keeps creation pending and submits a business-only payload once', async () => {

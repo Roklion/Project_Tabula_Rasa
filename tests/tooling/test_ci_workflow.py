@@ -79,7 +79,9 @@ def test_ci_preserves_complete_python_and_windows_coverage() -> None:
     assert native_job["env"]["TABULA_RASA_TEST_DATABASE_URL"].startswith("postgresql+psycopg://")
     native = next(step for step in native_job["steps"] if step.get("name") ==
                   "Run native browser concurrency and core workflow tests")
-    command = shlex.split(native["run"])
+    native_lines = native["run"].splitlines()
+    assert native_lines[0] == 'git config --global --add safe.directory "$GITHUB_WORKSPACE"'
+    command = shlex.split(native_lines[1])
     assert command[:3] == ["python", "-m", "pytest"]
     # Detect newly added native suites instead of silently skipping them in the
     # complete Python job (which deliberately has no compiled SPA).
@@ -91,7 +93,25 @@ def test_ci_preserves_complete_python_and_windows_coverage() -> None:
     assert native["env"]["TABULA_RASA_REQUIRE_BROWSER_TESTS"] == "1"
     commands = [step.get("run", "") for step in native_job["steps"]]
     assert "npm --prefix web run build" in commands
-    assert "python -m playwright install --with-deps chromium firefox webkit" in commands
+    version = next(line.removeprefix("playwright==") for line in
+                   (PROJECT_ROOT / "requirements-dev.txt").read_text().splitlines()
+                   if line.startswith("playwright=="))
+    assert native_job["container"] == {
+        "image": f"mcr.microsoft.com/playwright/python:v{version}-noble",
+        "options": "--init --ipc=host",
+    }
+    assert not any(step.get("uses", "").startswith("actions/setup-python@")
+                   for step in native_job["steps"])
+    runtime = next(step for step in native_job["steps"]
+                   if step.get("name") == "Verify image Python runtime")
+    assert "import ssl, sys" in runtime["run"] and "sys.version_info[:2] == (3, 12)" in runtime["run"]
+    assert "python -m pip install -r requirements-dev.txt" in commands
+    assert native_job["env"]["HOME"] == "/root"
+    assert native_job["env"]["TABULA_RASA_TEST_DATABASE_URL"] == (
+        "postgresql+psycopg://tabula_test@postgres:5432/tabula_test"
+    )
+    assert "ports" not in native_job["services"]["postgres"]
+    assert not any("playwright install" in command or "apt-get" in command for command in commands)
     assert not any("test:e2e" in command or "test:browser" in command for command in commands)
 
 

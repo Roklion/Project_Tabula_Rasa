@@ -39,9 +39,9 @@ class NamedIdentity:
         selected = session.selected
         return session.cache_id + (":" + str(selected.authorization_version) if selected else ":setup")
 
-    def info(self, session):
+    def info(self, session, *, business_creation_available=False):
         common = dict(actor_id=session.user_id, cache_scope=self.scope(session), csrf_token=session.csrf_token,
-                      trusted_development=False)
+                      trusted_development=False, business_creation_available=business_creation_available)
         if session.selected is None:
             return SetupSessionInfo(**common)
         selected = session.selected

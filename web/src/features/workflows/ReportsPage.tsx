@@ -36,7 +36,7 @@ export function ReportsPage({ dashboard = false }: { dashboard?: boolean }) {
       <p>Review your accounts and opening balances, then open your ledger. An empty ledger is ready to use.</p>
       <div className="actions"><Link className="button" to="/accounts">Review accounts</Link>
         {session.capabilities.includes('bookkeeping:write') && <Link className="button" to="/transactions/new">Add a transaction</Link>}
-        <Link className="button" to="/transactions">Open ledger</Link><Link className="button" to="/workspace">Workspace &amp; collaborators</Link></div>
+        <Link className="button" to="/transactions">Open ledger</Link><Link className="button" to="/business/members">Business &amp; members</Link></div>
     </section>}
     <section className="surface periodControls" aria-label="Report period"><SectionHeader title="Report period"
       description="From and To include both dates. The balance sheet uses To as its as-of date; current account balances always cover all dates." />

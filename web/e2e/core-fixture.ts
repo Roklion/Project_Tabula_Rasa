@@ -27,7 +27,7 @@ export function coreResponse(url: URL) {
       && (!url.searchParams.get('kind') || url.searchParams.get('kind') === 'All' || row.kind === url.searchParams.get('kind'))
       && (!url.searchParams.has('tag_ids') || row.tags.some(tag => tag === ordinary.tags[0])));
 
-    const json = path.endsWith('/session') ? session : path === '/api/v1/entities' ? { items: [session.entity] }
+    const json = path.endsWith('/session') ? session : path === '/api/v1/businesses' ? { items: [session.entity] }
       : path.endsWith('/reports/summary') ? report : path.endsWith('/ledger') ? { items }
         : { items: path.endsWith('/accounts') ? [account] : path.endsWith('/tags') ? [{ id: 'tag', name: ordinary.tags[0], active: true, baseline: 'synthetic' }] : [] };
     return json;

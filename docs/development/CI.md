@@ -36,7 +36,17 @@ Chromium shared memory. The browser step uses the image user's owned home
 (`/root`) so Firefox can start, and trusts only the mounted checkout path for
 Git provenance reads. Checkout's temporary Git configuration does not survive
 into ordinary run steps. Native PostgreSQL/browser coverage retains its separate
-runner and installation path. Both UI shards, all projects, worker limits,
+job and uses the official Playwright Python Noble image, matched to the pinned
+`playwright` version in `requirements-dev.txt`. It likewise uses preinstalled
+engines and system libraries, an owned home and narrow checkout trust; Python
+3.12 comes from the image, with an explicit version and SSL-import check before
+dependency installation. Do not replace it with the host runner's tool-cache
+Python: that build may require SSL libraries absent from the container's Noble
+base. Node 24 still uses setup-node and development dependency installation
+remains mandatory; no setup-python or pip-cache probe runs in this job.
+PostgreSQL is reachable only by its service name (`postgres`) on the private job
+network, without publishing a host port. Application servers and browsers share
+the job container's loopback network. Both UI shards, all projects, worker limits,
 artifacts, time budgets and the aggregate success requirement remain unchanged.
 
 The Python job has no compiled SPA. Native browser scenarios retain prerequisite

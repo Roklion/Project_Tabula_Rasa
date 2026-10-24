@@ -73,6 +73,16 @@ class EntityList(DTO):
     items: list[EntityInfo]
 
 
+class BusinessInfo(DTO):
+    id: str
+    name: str
+    role: str | None = None
+
+
+class BusinessList(DTO):
+    items: list[BusinessInfo]
+
+
 class EntitySelection(DTO):
     entity_id: str
 
@@ -90,6 +100,7 @@ class SessionInfo(DTO):
     cache_scope: str
     csrf_token: str
     trusted_development: bool
+    business_creation_available: bool = False
 
 
 class SetupSessionInfo(DTO):
@@ -101,3 +112,4 @@ class SetupSessionInfo(DTO):
     cache_scope: str
     csrf_token: str
     trusted_development: Literal[False] = False
+    business_creation_available: bool = False
