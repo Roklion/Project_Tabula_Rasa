@@ -7,6 +7,7 @@ uvicorn==0.54.0
 pandas==2.3.3
 openpyxl==3.1.5
 requests==2.34.2
+google-auth==2.56.0
 Authlib==1.7.2
 joserfc==1.7.5
 cryptography==50.0.1

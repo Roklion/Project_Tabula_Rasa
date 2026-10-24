@@ -17,6 +17,8 @@ from tests.postgres.test_http_baselines import commercial as commercial
 from tests.postgres.secondary_support import mixed
 from tests.test_application_documents import FakeDocumentStore
 from tests.test_financial_csv import csv_rows
+from tests.http.test_maps_quota import CONFIG as QUOTA_CONFIG, report as quota_report
+from tabula_rasa.http.maps_quota import MapsQuotaAdapter
 
 
 @pytest.fixture
@@ -40,6 +42,53 @@ def maps_runtime(monkeypatch):
         original(self, *args, **kwargs)
     monkeypatch.setattr(PostgresRuntime, '__init__', initialize)
     return routes
+
+
+@pytest.fixture
+def quota_runtime(monkeypatch):
+    original = PostgresRuntime.__init__
+    provider = Mock()
+    provider.fetch_report.return_value = quota_report()
+    def initialize(self, *args, **kwargs):
+        kwargs['maps_quota'] = MapsQuotaAdapter(QUOTA_CONFIG, client_factory=lambda _: provider)
+        original(self, *args, **kwargs)
+    monkeypatch.setattr(PostgresRuntime, '__init__', initialize)
+    return provider
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+def test_usage_load_refresh_and_business_reset_use_production_handlers(quota_runtime, commercial, commercial_server, width):
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page(viewport={'width': width, 'height': 1000})
+            page.goto(commercial_server + '/accounts')
+            summary = page.locator('summary').filter(has_text='Google Maps API usage')
+            expect(summary).to_be_visible()
+            quota_runtime.fetch_report.assert_not_called()
+            summary.focus()
+            summary.press('Enter')
+            expect(page.get_by_role('button', name='Load usage', exact=True)).to_be_enabled()
+            quota_runtime.fetch_report.assert_not_called()
+            page.get_by_role('button', name='Load usage', exact=True).click()
+            expect(page.get_by_text('ComputeRoutes: 120/Unlimited (per minute)', exact=True)).to_be_visible()
+            expect(page.get_by_text('Autocomplete requests: 0/Unlimited (per minute)', exact=True)).to_be_visible()
+            assert quota_runtime.fetch_report.call_count == 1
+            page.get_by_role('button', name='Refresh', exact=True).click()
+            expect(page.get_by_role('button', name='Refresh', exact=True)).to_be_enabled()
+            assert quota_runtime.fetch_report.call_count == 2
+            assert page.evaluate('document.documentElement.scrollWidth <= document.documentElement.clientWidth')
+            page.get_by_label('Select business').select_option('beta')
+            page.get_by_role('button', name='Discard draft and switch', exact=True).click()
+            expect(page.get_by_label('Select business')).to_have_value('beta')
+            expect(page.get_by_role('button', name='Refresh', exact=True)).to_have_count(0)
+            expect(summary.locator('..')).not_to_have_attribute('open', '')
+            summary.click()
+            page.get_by_role('button', name='Load usage', exact=True).click()
+            expect(page.get_by_text('ComputeRoutes: 120/Unlimited (per minute)', exact=True)).to_be_visible()
+            assert quota_runtime.fetch_report.call_count == 2  # Authorized deployment cache reuse.
+        finally:
+            browser.close()
 
 
 PLACES_STUB = """class TestPlaceWidget extends HTMLElement {

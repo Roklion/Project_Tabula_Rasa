@@ -173,6 +173,10 @@ export function createApi(fetcher: typeof fetch = (...args) => fetch(...args)) {
       '/api/v1/entities/{entity_id}/mileage', listParams(s, signal)))),
     mileageMaps: (s: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
       '/api/v1/entities/{entity_id}/mileage/maps', listParams(s, signal)))),
+    mapsQuotaStatus: (s: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
+      '/api/v1/entities/{entity_id}/maps/usage', listParams(s, signal)))),
+    loadMapsQuota: (s: Session, refresh: boolean) => safe(async () => unwrap(await client.POST(
+      '/api/v1/entities/{entity_id}/maps/usage', { ...createParams(s), body: { refresh } }))),
     calculateMileageRoute: (s: Session, body: Schemas['MileageRouteRequest'], signal?: AbortSignal) => safe(async () => unwrap(await client.POST(
       '/api/v1/entities/{entity_id}/mileage/routes', { ...createParams(s), body, signal }))),
     mileageTrip: (s: Session, id: string, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(

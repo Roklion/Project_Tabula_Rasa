@@ -143,6 +143,82 @@ Future member-triggered creation must use the existing server authorization
 capability/membership resolver before selecting entity/service; role membership alone
 never provisions a platform worker.
 
+### NAS recurring failure and missed-run notifications
+
+The optional `scripts/nas_recurring_monitor.py` is an operator-only, read-only
+adapter around the existing policy and durable queue records. It never schedules,
+claims, retries or generates work. `deploy/nas/run_recurring_monitored.example.sh`
+delegates generation to the existing bounded `run-recurring.sh tick`, then runs
+the inspection in the same verified immutable worker image. The example refuses
+an unconfigured image or missing mounted files before calling the runner. Keep
+the task disabled until the exact installation and notification tests are accepted.
+
+Supply a protected, metadata-only `recurring-monitor.json` with these fields:
+
+```json
+{
+  "database_sha256": "<approved database identity SHA-256>",
+  "database_role": "restricted_worker_role",
+  "entity_ids": ["00000000-0000-4000-8000-000000000001"],
+  "business_time_zone": "America/New_York"
+}
+```
+
+Use the restricted worker connection, not an operator/schema login. The adapter
+verifies the exact database identity and role before entity reads. It requires
+worker authority in the configured business zone, an enabled hourly dispatcher,
+no retained dead jobs, and a successful dispatcher within 90 minutes. Queued
+work or expired running leases older than 90 minutes require attention too.
+Counts cover all retained jobs, rather than only a recent diagnostic sample.
+One unhealthy selected entity makes the overall signal fail; it does not prevent
+the existing runner from processing other entities. These are operational health
+checks, not a second recurrence engine or proof that every intended business
+occurrence has been reconciled. Review legitimate due schedules and attention
+results separately.
+
+Inspection alone sends nothing. The explicit `--notify` flag uses
+`TABULA_RASA_RECURRING_HEARTBEAT_URL` from a separate protected environment file.
+For Better Stack use only its HTTPS `incidents.betterstack.com` heartbeat URL.
+The adapter refuses redirects and sends no body, logs, ledger values, entity IDs,
+database URL or credential material to the provider. It sends success only after
+all entity checks pass and the existing runner exit is zero; otherwise it sends
+`/fail`. An unconfirmed database read or notification is never successful health.
+Container startup, NAS shutdown or network loss can prevent any signal, so the
+independent provider must also detect missing signals.
+
+Before installation, approve the provider/account, recipient, resource allowance,
+exact script/image/binding, protected heartbeat-secret transfer and controlled
+notification tests. A suitable hourly monitor expects a signal every hour with
+30 minutes of grace; missing-signal detection is approximately 90 minutes after
+the last successful signal, plus provider and delivery latency. Confirm the actual
+selected provider settings rather than claiming an alert-time guarantee. Keep
+database settings and heartbeat secrets owner-readable only; mount the non-secret
+script/configuration read-only. No new identity, Google, session or schema grants
+are needed. The example retains the established NAS memory and non-root image
+boundaries and does not request unsupported CPU/PID kernel limits.
+
+Validate the inspection and failure predicate without production bookkeeping
+mutations. Separately verify actual failure-email delivery, a missed-signal alert
+and recovery using an explicitly approved controlled notification test. Never
+poison a live business schedule or invent an entry for an alert test. New Better
+Stack heartbeats remain Pending until the first signal; an unprimed or paused
+monitor supplies no missing-run protection. Before enabling generation/timer,
+verify the tested monitor is active and routed to the accepted recipient. Its
+creation, a successful DSM exit or a local test alone does not prove delivery.
+
+The read-only form is:
+
+```sh
+python scripts/nas_recurring_monitor.py --config /protected/recurring-monitor.json
+```
+
+For the pinned commercial worker image, mount the script and metadata file and
+invoke it through `python -c 'import runpy; runpy.run_path("/monitor.py", run_name="__main__")'`
+from the image's normal `/app` working directory, as the example does. This
+preserves application import resolution without adding legacy UI/Sheets packages.
+After fixing a reported cause, use the existing explicit job recovery procedure;
+the monitor never cancels or recreates jobs to suppress an alert.
+
 ### Bounded staging probe on Render Free
 
 The manual **Inspect or run one synthetic staging job probe** Actions workflow
