@@ -40,6 +40,9 @@ job and uses the official Playwright Python Noble image, matched to the pinned
 `playwright` version in `requirements-dev.txt`. It likewise uses preinstalled
 engines and system libraries, an owned home and narrow checkout trust; Python
 3.12, Node 24 and development dependencies still use explicit setup steps.
+Pip caching is disabled only for this container job because setup-python's cache
+key probes `lsb_release`, which is absent from the image; dependency installation
+remains mandatory.
 PostgreSQL is reachable only by its service name (`postgres`) on the private job
 network, without publishing a host port. Application servers and browsers share
 the job container's loopback network. Both UI shards, all projects, worker limits,
