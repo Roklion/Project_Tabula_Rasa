@@ -39,10 +39,11 @@ into ordinary run steps. Native PostgreSQL/browser coverage retains its separate
 job and uses the official Playwright Python Noble image, matched to the pinned
 `playwright` version in `requirements-dev.txt`. It likewise uses preinstalled
 engines and system libraries, an owned home and narrow checkout trust; Python
-3.12, Node 24 and development dependencies still use explicit setup steps.
-Pip caching is disabled only for this container job because setup-python's cache
-key probes `lsb_release`, which is absent from the image; dependency installation
-remains mandatory.
+3.12 comes from the image, with an explicit version and SSL-import check before
+dependency installation. Do not replace it with the host runner's tool-cache
+Python: that build may require SSL libraries absent from the container's Noble
+base. Node 24 still uses setup-node and development dependency installation
+remains mandatory; no setup-python or pip-cache probe runs in this job.
 PostgreSQL is reachable only by its service name (`postgres`) on the private job
 network, without publishing a host port. Application servers and browsers share
 the job container's loopback network. Both UI shards, all projects, worker limits,

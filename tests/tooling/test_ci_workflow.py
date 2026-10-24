@@ -100,9 +100,12 @@ def test_ci_preserves_complete_python_and_windows_coverage() -> None:
         "image": f"mcr.microsoft.com/playwright/python:v{version}-noble",
         "options": "--init --ipc=host",
     }
-    setup = next(step for step in native_job["steps"]
-                 if step.get("uses", "").startswith("actions/setup-python@"))
-    assert setup["with"] == {"python-version": "3.12"}
+    assert not any(step.get("uses", "").startswith("actions/setup-python@")
+                   for step in native_job["steps"])
+    runtime = next(step for step in native_job["steps"]
+                   if step.get("name") == "Verify image Python runtime")
+    assert "import ssl, sys" in runtime["run"] and "sys.version_info[:2] == (3, 12)" in runtime["run"]
+    assert "python -m pip install -r requirements-dev.txt" in commands
     assert native_job["env"]["HOME"] == "/root"
     assert native_job["env"]["TABULA_RASA_TEST_DATABASE_URL"] == (
         "postgresql+psycopg://tabula_test@postgres:5432/tabula_test"
