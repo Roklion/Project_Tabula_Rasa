@@ -1,5 +1,7 @@
 """Two-user native workspace lifecycle and desktop/mobile cache isolation."""
 
+from uuid import uuid4
+
 import pytest
 from playwright.sync_api import expect, sync_playwright
 from sqlalchemy import text
@@ -82,13 +84,38 @@ def test_first_ledger_retry_refresh_repeat_visit_and_two_entity_switch(named_ser
             page.goto(origin + '/workspace')
             page.get_by_label('Business name').fill('Second business')
             page.get_by_role('button', name='Review defaults').click()
-            page.get_by_role('button', name='Create ledger', exact=True).click()
+            with page.expect_response(lambda response: response.request.method == 'POST'
+                    and response.url.endswith('/businesses')) as denied_addition:
+                page.get_by_role('button', name='Create ledger', exact=True).click()
+            assert denied_addition.value.status == 403
+            expect(page.get_by_role('alert')).to_contain_text('Business access is unavailable.')
+            expect(peer.get_by_label('Business name')).to_have_value('Another unsubmitted peer draft')
+            choices = context.request.get(origin + '/api/v1/entities').json()['items']
+            assert len(choices) == 1
+            with repo.database.transaction(read_only=True) as connection:
+                assert connection.scalar(text('SELECT count(*) FROM workspace_bootstraps WHERE user_id=:user'), {'user': actor}) == 1
+            # The replacement creation UI belongs to business-first onboarding.
+            # Exercise the retained authenticated bootstrap contract here, then
+            # keep the real browser switch/broadcast and cache-isolation checks.
+            session = context.request.get(origin + '/api/v1/session').json()
+            independent = context.request.post(origin + '/api/v1/workspaces/bootstrap',
+                headers={'Origin': origin, 'X-CSRF-Token': session['csrf_token']},
+                data={'request_id': uuid4().hex, 'workspace_name': 'Independent container',
+                      'business_name': 'Second business'})
+            assert independent.status == 200
+            second = independent.json()
+            assert second['organization_id'] != choices[0]['organization_id']
+            page.reload()
+            page.get_by_label('Select business').select_option(second['entity_id'])
+            page.get_by_role('button', name='Discard draft and switch').click()
             expect(page.get_by_role('heading', name='Your ledger is ready')).to_be_visible()
             expect(peer.get_by_role('heading', name='Your ledger is ready')).to_be_visible()
-            expect(peer.get_by_label('Select business')).to_have_value(
-                context.request.get(origin + '/api/v1/session').json()['entity']['id'])
+            expect(peer.get_by_label('Business name')).to_have_count(0)
+            expect(peer.get_by_label('Select business')).to_have_value(second['entity_id'])
             choices = context.request.get(origin + '/api/v1/entities').json()['items']
             assert len(choices) == 2
+            assert {item['role'] for item in choices} == {'owner'}
+            assert len({item['organization_id'] for item in choices}) == 2
             first = next(item['id'] for item in choices if item['name'] == 'First business')
             page.get_by_label('Select business').select_option(first)
             page.get_by_role('button', name='Discard draft and switch').click()
