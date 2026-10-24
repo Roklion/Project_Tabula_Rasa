@@ -17,7 +17,9 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+repository_root = Path(__file__).resolve().parent.parent
+if (repository_root / 'tabula_rasa').is_dir():
+    sys.path.insert(0, str(repository_root))
 
 from sqlalchemy import text
 

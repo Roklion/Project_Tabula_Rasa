@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import json
+from pathlib import Path
+import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -11,6 +13,19 @@ from scripts import nas_recurring_monitor as monitor
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 POLICY = {'authority': 'worker', 'time_zone': 'America/New_York'}
 DEFINITION = {'job_type': 'recurring.dispatch', 'paused': False, 'interval_seconds': 3600}
+
+
+@pytest.mark.parametrize('mounted', [False, True])
+def test_script_reaches_cli_from_repository_or_root_mount(monkeypatch, capsys, mounted):
+    source_path = Path(monitor.__file__)
+    script_path = Path(source_path.anchor) / 'monitor.py' if mounted else source_path
+    monkeypatch.setattr(sys, 'argv', [str(script_path), '--help'])
+    monkeypatch.setattr(sys, 'path', sys.path.copy())
+    namespace = {'__file__': str(script_path), '__name__': '__main__'}
+    with pytest.raises(SystemExit) as exit_info:
+        exec(compile(source_path.read_text(encoding='utf-8'), str(script_path), 'exec'), namespace)
+    assert exit_info.value.code == 0
+    assert '--notify' in capsys.readouterr().out
 
 
 def observations(**changes):

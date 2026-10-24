@@ -28,7 +28,7 @@ case "$mode" in
       printf '%s\n' 'Protected heartbeat configuration is unavailable.' >&2
       exit 1
     fi
-    /bin/sh /volume1/Tabula_Rasa_Postgres/config/bin/run-recurring.sh tick
+    /bin/sh "$config/bin/run-recurring.sh" tick
     worker_exit=$?
     ;;
   *) printf '%s\n' 'Unsupported monitored worker action.' >&2; exit 2 ;;
