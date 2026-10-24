@@ -9,6 +9,7 @@ import pytest
 from tabula_rasa.deployment.alpha import ENGINES, WIDTHS, journey
 from tabula_rasa.deployment import alpha as alpha_gate
 from tabula_rasa.application.documents import DocumentError
+from tabula_rasa.application.journals import JournalService
 from tabula_rasa.infrastructure.postgres.documents import PostgresReceiptRepository
 from tabula_rasa.http.context import TrustedDevelopmentContext
 from tests.postgres.test_browser_baselines import commercial_server as commercial_server
@@ -43,9 +44,11 @@ def test_staging_journey_and_preserved_other_entity(commercial, commercial_serve
     assert all(profile == 'alpha' for profile, _ in document_store.files)
 
 
-@pytest.mark.parametrize('slow_operation', ['upload', 'unlink', 'relink'])
-def test_journey_with_slow_receipt_operation(commercial, commercial_server, document_store, monkeypatch, slow_operation):
-    if slow_operation == 'upload':
+@pytest.mark.parametrize('slow_operation', ['upload', 'unlink', 'relink', 'journal_delete'])
+def test_journey_with_slow_mutation(commercial, commercial_server, document_store, monkeypatch, slow_operation):
+    if slow_operation == 'journal_delete':
+        owner, method = JournalService, 'delete'
+    elif slow_operation == 'upload':
         owner, method = document_store, 'upload'
     else:
         owner, method = PostgresReceiptRepository, 'unlink' if slow_operation == 'unlink' else 'link'
