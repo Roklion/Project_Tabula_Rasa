@@ -122,6 +122,37 @@ quota/monitoring alternative. Provider configuration, rotation and a controlled
 non-sensitive live request remain operator work; synthetic tests prove none of those
 hosted conditions.
 
+### Google Maps API usage
+
+The authenticated sidebar includes a compact **Google Maps API usage**
+expander on desktop and mobile. Open it to check setup; select **Load usage**
+to query the dedicated read-only monitoring identity. **Refresh** bypasses only
+the 120-second monitoring cache. There is no polling or provider request on page
+load, expansion, navigation, focus or reconnect. A report can remain visible
+after its cache expires, with a stale warning and explicit refresh. Signing out
+or switching business discards panel state and late results.
+
+Routes API and Places API (New) have separate compact endpoint rows. Rates use
+the latest sample from a 15-minute lookback, converted to the quota's units.
+Unlimited limits remain **Unlimited**. A successful Monitoring response with no
+matching points shows zero; failures show guidance rather than zero. Google
+can report several minutes late, including up to approximately 240 seconds after
+sampling. This panel is neither a real-time remaining-request counter nor a
+billing/spend meter.
+
+`GET .../maps/usage` checks setup without contacting Google.
+`POST .../maps/usage` accepts only `{ "refresh": false }` (or `true`) to load the
+display. Both require normal authentication, read capability and authorized
+selected-business context before accessing monitoring. POST also requires
+Origin and CSRF. Only display titles, compact rows, safe guidance and cache
+lifetime cross the API; project/user dimensions and credentials stay server-side.
+
+The reader is deployment-wide, separate from browser/server Maps keys and every
+business's Google OAuth grant. Missing monitoring configuration does not disable
+mileage. See [optional HTTP quota monitoring](../GOOGLE_MAPS.md#optional-http-quota-monitoring)
+for both runtime composition paths, operator configuration, later controlled
+production verification and what synthetic/image validation cannot establish.
+
 ## Integration ownership and verification
 
 Local implementation validation on October 13, 2026: 286 affected Python tests

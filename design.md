@@ -247,6 +247,18 @@ It warns that Monitoring may lag several minutes (including up to about 240
 seconds after sampling), and is not a real-time remaining-request or
 billing/spend meter.
 
+In the React/HTTP application, this expander sits below the authenticated
+sidebar utilities and remains available when mobile navigation is collapsed.
+Opening it checks setup only; **Load usage** explicitly queries monitoring.
+Reports are cached for at most 120 seconds per server process. **Refresh**
+bypasses only that monitoring cache; an expired displayed report is labeled
+stale without polling. Failures replace old rows with safe guidance and allow
+an explicit retry. Switching businesses or signing out resets panel state and
+discards late results. Both setup and load requests require the normal session,
+read capability and selected-business authorization; load/refresh also require
+Origin and CSRF. Monitoring configuration and its dedicated identity remain
+deployment-wide and separate from mileage keys and business Google grants.
+
 Require application-password authentication before any ledger page or workbook
 data is visible. Show the business selector when profiles exist and the
 selected workbook title on ordinary pages. The current password grants access
