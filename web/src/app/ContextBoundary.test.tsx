@@ -171,7 +171,7 @@ it('does not compose private UI for needs-setup or failed initial identity', asy
   vi.spyOn(api, 'session').mockResolvedValue(identity);
   vi.spyOn(api, 'entities').mockResolvedValue({ items: [] });
   render(<ContextBoundary><p>Private ledger</p></ContextBoundary>);
-  await screen.findByText('Workspace setup required');
+  await screen.findByText('My Businesses');
   expect(screen.queryByText('Private ledger')).not.toBeInTheDocument();
 });
 

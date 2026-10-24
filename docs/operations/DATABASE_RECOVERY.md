@@ -203,7 +203,7 @@ identity/job/role inventory and external byte recovery remain separate checks.
 Use the application release and immutable Alembic chain appropriate to the requested
 point. Do not upgrade, stamp or downgrade the restored target before checking it: that
 changes the state being verified. The current verifier accepts only complete entity
-export's supported revisions (`0004_mileage_order` through `0015_support_controls`) and
+export's supported revisions (`0004_mileage_order` through `0016_business_tenancy`) and
 requires the exact expected revision. Older/unknown points stop explicitly; use their
 retained release/tooling in an isolated environment and record the gap. Never extend
 ordinary startup with historical format conversion.

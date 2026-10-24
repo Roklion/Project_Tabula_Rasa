@@ -57,7 +57,7 @@ it('read-only workspace UI offers invitation acceptance without fetching adminis
   const members = vi.spyOn(api, 'members');
   const invitations = vi.spyOn(api, 'invitations');
   render(<ScopeBoundary session={{ ...session, trusted_development: false, capabilities: ['bookkeeping:read'] }}><WorkspacePage /></ScopeBoundary>);
-  expect(screen.getByText('Workspace administration requires Owner or Admin access.')).toBeVisible();
+  expect(screen.getByText('Business administration requires Owner or Admin access.')).toBeVisible();
   expect(screen.getByLabelText('Invitation credential')).toBeVisible();
   expect(screen.queryByRole('button', { name: 'Create invitation' })).not.toBeInTheDocument();
   expect(members).not.toHaveBeenCalled();

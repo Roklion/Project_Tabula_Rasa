@@ -309,8 +309,8 @@ membership and claimed profile IDs do not unlock that interface.
   explanation, safe request reference and deliberate Sign in action to restart
   provider reauthentication. The screen never retries automatically or asks users
   to delete cookies; provider query values are never displayed. An ordinary
-  signed-out visit has no failure warning. Authenticated users without active business access see Workspace
-  setup required, an owner-contact instruction and Sign out, not an empty ledger.
+  signed-out visit has no failure warning. Authenticated users without active business access see My Businesses,
+  explicit creation/invitation/migration choices and Sign out, not an empty ledger.
 - Named sessions show the existing business shell with a labeled Sign out
   control. Session loss or authorization-storage outage unmounts private queries,
   drafts and receipt views; confirmed identity/scope/version changes remount the
@@ -319,7 +319,7 @@ membership and claimed profile IDs do not unlock that interface.
   they invalidate pending initial session responses as well as loaded private UI.
 - If selected business access is removed while another authorized business
   remains, session validation selects an available authorized business and the
-  private boundary remounts. Workspace setup required appears only when no
+  private boundary remounts. The no-business My Businesses screen appears only when no
   available business remains.
 - Logout clears the local browser even when server revocation cannot be
   confirmed, and displays a safe failure instead of claiming durable success.
@@ -329,18 +329,22 @@ membership and claimed profile IDs do not unlock that interface.
   Read-only and setup users can inspect identity and sign out without ledger
   write permission. [Named-user authentication](docs/identity/AUTHENTICATION.md) owns the
   operator settings, session policy and remaining release gates.
-- Named users can switch among server-authorized workspace / business choices.
-  Workspace and role labels use server claims. Confirmed switching discards
+- Named users can switch among server-authorized business choices.
+  Business and role labels use server claims; backing organization names stay hidden.
+  Duplicate business names include the full stable business reference in selector/list
+  labels. Confirmation names the target reference, and the shell retains the selected
+  reference so users can distinguish same-name ledgers before entering records. Confirmed switching discards
   private drafts/uploads/queries and receipt URLs, returns to Dashboard and
   signals other tabs to reload authority. An uncertain switch unmounts private
   content and offers a safe reload/sign-out state.
-- Workspace & members exposes Owner/Admin invitation and member administration,
+- Business & members exposes Owner/Admin invitation and member administration,
   with current-role restrictions, loaded membership versions and last-owner
   protection. Ownership grants require a separate confirmation and recent login.
   Recipient-bound invitation credentials appear once for private distribution;
   authenticated acceptance/decline is also available without a selected business.
-  [Workspace lifecycle](docs/identity/WORKSPACES.md) owns the exact security and
-  retry contract. First-use browser onboarding retains its own contract; the bootstrap service supplies
+  [Business lifecycle](docs/identity/WORKSPACES.md) owns the exact security and
+  retry contract. Browser creation receipts are scoped to the user and first-use/current-business
+  context so an old completed setup cannot redirect a new creation. The bootstrap service supplies
   its transactional backend without adding a separate profile configuration UI.
 
 **Current behavior** for the technical-alpha application:
@@ -471,7 +475,7 @@ Independent
 page sections use the 32px spacing token, including sections following explanatory
 text or an action row. Sidebar context controls stay within the available width;
 the selected business's full name remains visible above the selector. The top bar
-identifies Workspace & members rather than displaying a generic Page placeholder.
+identifies Business & members rather than displaying a generic Page placeholder.
 The business-first replacement names and selector require their own selected-release verification.
 
 Transactions and Mileage share an accessible Show filters / Hide filters button.
@@ -621,23 +625,30 @@ edition.
 **Current behavior** for first-use onboarding on the named-user runtime:
 
 - Sign-in explains provider account creation and invited-account login. Users
-  without an active business choose start fresh, join an invitation, or existing
+  without an active business see My Businesses and choose Create your first business,
+  Join an invited business, or existing
   Sheets migration. Existing members go directly to their authorized ledger.
-- Fresh setup collects workspace and business names, then reviews the one
-  supported standard bookkeeping default. Back preserves names. Creating opens
+- Fresh setup collects only a business name, then reviews the one supported
+  standard bookkeeping default. Back preserves the name. Create business opens
   Dashboard with account review, first transaction and ledger next actions.
-  Confirmed setup selection signals peer tabs to clear stale scope and reload authority.
-  The retained Workspace & members additional-business control receives a safe
-  denial: the server no longer appends a business to an existing container.
-  Each new business requires a fresh private authorization container and Owner
-  membership. Business-first onboarding replaces that control separately;
-  [Business tenancy](docs/identity/BUSINESS_TENANCY.md) owns the server contract
-  and non-destructive deployment procedure.
+  The server creates a private backing organization and grants the creator Owner;
+  no workspace name or organization selector appears in setup. Each new business
+  uses an independent container and copies no other memberships. Existing data
+  is not converted or granted access implicitly. Persistent boundaries and the
+  non-destructive rollout are defined in [Business tenancy](docs/identity/BUSINESS_TENANCY.md).
+- Authenticated My Businesses lists permitted names and each specific role, with
+  Create another business available independently of the current business role.
+  It shares the first-use form and bootstrap owner. Business & members retains
+  member/invitation actions and has no Add business within a container action.
+  The existing authorized selector and scope boundary still own selection and
+  remount private state when business authority changes.
 - Progress and failures use shared status/alert components. Explicit retries
-  retain the request ID and submitted payload; refresh checks the durable
-  server receipt. Only opaque user/workspace-scoped request IDs enter tab session
-  storage. Names, credentials, drafts and ledger contents are never restored
-  from browser storage. Business selection remains server-authorized.
+  retain the request ID and submitted payload; refresh checks the durable server
+  receipt. Only opaque user-scoped request IDs enter tab session storage. Names,
+  credentials, drafts and ledger contents are never restored from browser storage.
+  Business selection remains server-authorized. Shared section spacing separates
+  independent setup/invitation sections by the section token, including the section
+  following Review defaults; heading-to-content gaps remain smaller.
 - `/invitations` routes new and existing members to the shared acceptance form,
   including after sign-in, without provisioning a second organization. The
   private credential is pasted after login and never included in a link.
@@ -650,7 +661,7 @@ edition.
   keyboard operation. This local implementation does not grant external-beta or
   security, hosted-provider and external-release acceptance.
 
-[Workspace lifecycle](docs/identity/WORKSPACES.md) owns setup recovery and deployment.
+[Business lifecycle](docs/identity/WORKSPACES.md) owns setup recovery and deployment.
 
 ## Page headers, workflow groups, and messages
 

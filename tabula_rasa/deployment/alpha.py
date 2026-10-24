@@ -256,7 +256,9 @@ def journey(context, peer, *, origin, entity, marker):
         page.goto('/journals')
         page.get_by_role('button', name='Edit 2026-10-01 · ' + marker + ' Reviewed journal', exact=True).click()
         page.get_by_role('button', name='Delete', exact=True).click()
-        page.get_by_role('button', name='Confirm delete', exact=True).click()
+        with page.expect_response(lambda response: response.request.method == 'DELETE' and response.url.startswith(origin + prefix + 'journals/')) as deleted:
+            page.get_by_role('button', name='Confirm delete', exact=True).click()
+        checked(deleted.value)
         expect(page.get_by_role('status').filter(has_text='Record deleted.')).to_be_visible()
     with operation('page_close'):
         page.close()

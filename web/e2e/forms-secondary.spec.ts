@@ -229,7 +229,7 @@ test('identity availability surfaces share controls without exposing private rou
     for (const mode of ['signed-out', 'unavailable', 'needs-setup'] as const) {
       state = mode;
       await page.goto('/accounts');
-      await expect(page.getByRole('heading', { name: mode === 'needs-setup' ? 'Workspace setup required' : 'Project Tabula Rasa', exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: mode === 'needs-setup' ? 'My Businesses' : 'Project Tabula Rasa', exact: true })).toBeVisible();
       await expect(page.getByRole('navigation', { name: 'Main navigation' })).toHaveCount(0);
       await expect(page.getByRole('region', { name: 'Accounts', exact: true })).toHaveCount(0);
       if (mode === 'signed-out') await expect(page.getByRole('link', { name: 'Sign in', exact: true })).toHaveAttribute('href', '/api/v1/auth/login');

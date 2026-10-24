@@ -45,7 +45,7 @@ def named_server(database, oidc):
     stores = {scope: FakeDocumentStore() for scope in ('alpha', 'beta')}
     runtime = PostgresRuntime(database, auth, identity=auth,
         service_factory=lambda context: create_postgres_services(database, context.entity_id,
-            document_store=stores[context.entity_id], document_store_kind='fake'))
+            document_store=stores.setdefault(context.entity_id, FakeDocumentStore()), document_store_kind='fake'))
     runtime.close = lambda: None  # Pool owned by disposable fixture.
     app = create_app(settings=settings, runtime_factory=lambda _: runtime,
                      static_dir=dist)
@@ -73,8 +73,11 @@ def configure_login(context, origin, claims):
         assert query['code_challenge_method'] == ['S256']
         assert query['prompt'] == ['login'] and query['max_age'] == ['0']
         claims['nonce'] = query['nonce'][0]
-        route.fulfill(status=302, headers={'location': origin + '/api/v1/auth/callback?' + urlencode(
-            {'state': query['state'][0], 'code': 'synthetic-code'})})
+        target = origin + '/api/v1/auth/callback?' + urlencode(
+            {'state': query['state'][0], 'code': 'synthetic-code'})
+        # WebKit on Windows cannot fulfill a routed redirect response.
+        route.fulfill(status=200, content_type='text/html',
+            body='<script>location.replace(' + json.dumps(target) + ')</script>')
     def login_redirect(route):
         # Playwright routing cannot fake the later external hop of a
         # redirect chain. Split only that test hop into a new navigation;
