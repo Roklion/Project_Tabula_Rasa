@@ -75,7 +75,8 @@ The shared HTTP runtime accepts deployment-wide environment settings:
 
 For an operator-bound migrated runtime, reuse its trusted application-wide
 `google_maps` table below, including `autocomplete_region_code`. Do not copy
-human Drive grants or quota-monitoring credentials into the HTTP environment.
+human Drive grants into Maps configuration. The optional dedicated monitoring
+configuration is described below and is separate from the mileage keys.
 Absent configuration preserves manual entry; equal browser/server keys suppress
 the browser key so a server credential cannot accidentally cross the API.
 
@@ -98,6 +99,68 @@ non-sensitive lookup and both route directions before rollout, then inspect usag
 and record sanitized evidence against the selected revision. Synthetic validation does
 not prove deployed restrictions or complete Maps key restrictions and live owner cutover
 acceptance. See [workflow ports](browser/IMPORTS_EXPORTS_AND_INTEGRATIONS.md).
+
+### Optional HTTP quota monitoring
+
+The authenticated sidebar's **Google Maps API usage** expander restores the
+internal edition's read-only view. Opening the expander checks setup only;
+**Load usage** contacts Google. **Refresh** bypasses only the monitoring cache.
+Successful display rows are cached for 120 seconds per API process. There is no
+automatic polling, focus refresh or quota request on an ordinary page load.
+An expired displayed report is labeled stale until the user refreshes. Missing
+or invalid monitoring configuration leaves lookup, routing, manual mileage and
+the rest of the app usable.
+
+For normal HTTP startup, including startup using migrated business bindings,
+the operator may configure these server-only variables:
+
+| Variable | Purpose |
+| --- | --- |
+| `TABULA_RASA_MAPS_QUOTA_PROJECT_NUMBER` | Numeric Maps project number |
+| `TABULA_RASA_MAPS_QUOTA_SERVICE_ACCOUNT_FILE` | Absolute path to a server-mounted JSON file for the dedicated read-only quota identity |
+| `TABULA_RASA_MAPS_QUOTA_TIMEOUT_SECONDS` | Per-request timeout, default 15 seconds; supported range 1–60 |
+
+The file must be readable by the runtime user, kept outside the repository and
+image, and managed through the host's secret-file facility. This configuration
+does not accept browser-supplied project numbers, paths, identities or human
+Google grants. No application-default credential fallback is used. Restart
+the runtime after changing configuration to replace its client and cache.
+
+The explicit operator-bound `open_migrated_runtime` factory instead reuses the
+trusted app-wide `google_maps.quota_monitoring` table documented below. It does
+not look inside `business_profiles`. Neither path changes migration bindings,
+receipt grants or the monitoring identity's IAM policy.
+
+Later production configuration and verification are separate operator steps:
+
+1. Select the deployment's numeric Maps project and a dedicated read-only quota
+   identity. Confirm Service Usage API and Cloud Monitoring API are enabled and
+   the identity has the read permissions and scopes documented below. Any IAM,
+   API enablement or credential provisioning change needs its own authorization.
+2. Through the approved server secret mechanism, mount that identity's JSON and
+   set the project number and file path above (or supply the trusted table to
+   the explicit migrated factory). Keep it separate from both Maps keys and all
+   businesses' human Google grants. Configuration transfer and deployment need
+   separate authorization; do not copy credentials through issue/PR evidence.
+3. After an authorized rollout, sign in to an authorized business. Expand the
+   panel, select **Load usage**, and verify separate Routes and Places rows or
+   safe API/status-specific guidance. Check **Refresh** independently of mileage
+   lookup/routing, then switch businesses and sign out to verify state resets.
+4. Allow Google's reporting delay before comparing sampled rates with Cloud
+   Monitoring. The query looks back 15 minutes and uses the latest sampled rate
+   in each quota's units; reporting can lag up to approximately 240 seconds
+   after sampling. Zero is shown only after a successful Monitoring response
+   without matching data. This is not a remaining-request or billing/spend meter.
+5. Retain sanitized revision-specific evidence in the owning issue/PR. Synthetic
+   tests and a local commercial image prove runtime separation and display
+   behavior; they cannot prove hosted secret mounting, IAM, API enablement,
+   actual quota availability, reporting delay or production monitoring access.
+
+`google_maps_quota_core.py` owns the shared read-only client, parsers, rate
+conversion and compact display projection. `google_maps_quota.py` retains the
+Streamlit facade; `http/maps_quota.py` owns HTTP configuration, lazy client
+lifecycle and its bounded display cache. Neither HTTP path imports Streamlit,
+gspread or legacy Sheets initialization.
 
 ## Internal-edition Streamlit Secrets
 

@@ -7,6 +7,7 @@ import { entryRoutes, isEntryRoute, isReferenceRoute, matchesRoute, mileageRoute
 import { WorkflowNav } from '../components/WorkflowNav';
 import { EntitySelector } from './EntitySelection';
 import { AuthContext } from './authContext';
+import { MapsUsagePanel } from '../features/mileage/MapsUsagePanel';
 
 export function Shell() {
   const session = useEntity();
@@ -48,6 +49,7 @@ export function Shell() {
       {!session.trusted_development && <Link to="/workspace">Workspace & members</Link>}
       <p className={styles.footer}>Bookkeeping with clarity.</p>
       {!session.trusted_development && <button onClick={auth.logout}>Sign out</button>}
+      <MapsUsagePanel />
     </aside>
     <div className={styles.content}>
       <header className={styles.topbar}><span>{workflowName ?? navigation.find(([path]) => matchesRoute(location.pathname, path))?.[1] ?? (['/workspace', '/workspace/'].includes(location.pathname) ? 'Workspace & members' : 'Tabula Rasa')}</span>

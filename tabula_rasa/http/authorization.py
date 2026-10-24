@@ -29,6 +29,8 @@ ROUTE_POLICIES = MappingProxyType({
     'unlock_accounting_period': RoutePolicy('POST', 'period_unlock'),
     'reverse_accounting_entry': RoutePolicy('POST', 'entry_correct'),
     'connection_status': RoutePolicy('GET', 'connections_manage'),
+    'maps_quota_status': RoutePolicy('GET', 'read'),
+    'load_maps_quota': RoutePolicy('POST', 'read'),
     'change_connection': RoutePolicy('POST', 'connections_manage'),
     **{name: RoutePolicy('GET', 'read') for name in (
         'list_accounts', 'list_categories', 'list_payees', 'list_tags',
