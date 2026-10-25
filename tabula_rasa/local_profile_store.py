@@ -42,10 +42,6 @@ LOCAL_PROFILE_STORE_PATH = (
     / "business_profiles.json"
 )
 STORE_VERSION = 2
-HOSTED_PROFILE_FIELDS = (
-    "name",
-    "spreadsheet_id",
-)
 PROFILE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,47}$")
 SPREADSHEET_URL_PATTERN = re.compile(
     r"https://docs\.google\.com/spreadsheets/d/([A-Za-z0-9_-]+)"
@@ -138,36 +134,6 @@ def suggest_profile_key(value: str) -> str:
     if not slug or not slug[0].isalpha():
         slug = f"business-{slug}" if slug else "business"
     return slug[:48].rstrip("-_") or "business"
-
-
-def project_hosted_profiles(
-    profiles: Mapping[str, Mapping[str, Any]],
-) -> dict[str, dict[str, Any]]:
-    """Return the explicit profile subset consumed by the hosted runtime."""
-    configured = load_business_profiles({"business_profiles": profiles})
-    projected: dict[str, dict[str, Any]] = {}
-    for profile in configured:
-        settings = profile.secrets
-        hosted = {
-            key: settings[key]
-            for key in HOSTED_PROFILE_FIELDS
-            if key in settings
-        }
-        hosted["name"] = profile.name
-        if not settings.get("spreadsheet_id") or "google_drive" not in settings:
-            raise LocalProfileStoreError("Connect Google and select a ledger for every profile before exporting.")
-        if "google_drive" in settings:
-            try:
-                hosted["google_drive"] = validate_drive_profile_settings(
-                    settings["google_drive"]
-                )
-            except GoogleDriveConfigurationError as exc:
-                raise GoogleDriveConfigurationError(
-                    f"Google Drive settings for profile '{profile.key}' are invalid: "
-                    f"{exc}"
-                ) from exc
-        projected[profile.key] = hosted
-    return projected
 
 
 def build_profile_settings(

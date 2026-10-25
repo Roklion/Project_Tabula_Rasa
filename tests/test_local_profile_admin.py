@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from tests.google_auth_fixtures import GOOGLE_OAUTH_CONFIG, google_grant
 
-from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
@@ -14,15 +13,12 @@ from tabula_rasa.local_profile_admin_readiness import (
     readiness_for_display,
 )
 from tabula_rasa.local_profile_admin_security import (
-    export_hosted_secrets_file,
     render_security_deployment_info,
 )
 from tabula_rasa.local_profile_admin_support import (
     initialize_candidate_storage,
 )
-from scripts.export_streamlit_secrets import SecretsExportError
 from tabula_rasa.profile_readiness import ProfileReadiness, profile_settings_fingerprint
-from tabula_rasa.local_profile_store import LocalProfileStoreError
 from tabula_rasa.storage import (
     StorageError,
     StorageValidationError,
@@ -185,92 +181,33 @@ def test_readiness_cache_is_ignored_after_profile_settings_change() -> None:
     )
 
 
-def test_hosted_export_reloads_and_includes_every_local_profile() -> None:
-    local_profiles = {
-        "north": {"name": "North", "spreadsheet_id": "north-sheet"},
-        "south": {"name": "South", "spreadsheet_id": "south-sheet"},
-    }
-    generated = "app_password_hash = \"hash\"\n"
-    destination = Path(".streamlit/tabula-rasa-streamlit-secrets-test.toml")
-    with patch(
-        "tabula_rasa.local_profile_admin_security.load_local_profiles",
-        return_value=local_profiles,
-    ) as load_profiles, patch(
-        "tabula_rasa.local_profile_admin_security.build_streamlit_secrets_toml",
-        return_value=generated,
-    ) as build_document, patch(
-        "tabula_rasa.local_profile_admin_security.write_secure_export",
-        return_value=destination,
-    ) as write_export:
-        result = export_hosted_secrets_file(
-            {"app_password_hash": "hash"},
-            store_path=Path("profile-store.json"),
-        )
-
-    assert result == destination
-    load_profiles.assert_called_once_with(Path("profile-store.json"))
-    build_document.assert_called_once_with(
-        {"app_password_hash": "hash"},
-        local_profiles,
-    )
-    write_export.assert_called_once_with(generated)
-
-
-def test_hosted_export_refuses_empty_included_profile_set() -> None:
-    with patch(
-        "tabula_rasa.local_profile_admin_security.load_local_profiles",
-        return_value={},
-    ), patch(
-        "tabula_rasa.local_profile_admin_security.build_streamlit_secrets_toml"
-    ) as build_document:
-        with pytest.raises(LocalProfileStoreError, match="local business profile"):
-            export_hosted_secrets_file({}, store_path=Path("profile-store.json"))
-
-    build_document.assert_not_called()
-
-
-def test_hosted_export_failure_ui_does_not_echo_secret_values() -> None:
-    secret = "-----BEGIN PRIVATE KEY-----do-not-display"
-    with patch.object(st, "subheader"), patch.object(st, "write"), patch.object(
-        st, "info"
-    ), patch.object(st, "markdown"), patch.object(
-        st, "button", return_value=True
-    ), patch.object(st, "error") as render_error, patch(
-        "tabula_rasa.local_profile_admin_security.export_hosted_secrets_file",
-        side_effect=SecretsExportError(secret),
-    ):
-        render_security_deployment_info({"app_password_hash": secret})
-
-    message = str(render_error.call_args.args[0])
-    assert "failed" in message.casefold()
-    assert secret not in message
-
-
-def test_hosted_export_success_ui_shows_only_path_and_complete_handoff() -> None:
-    secret = "refresh-token-do-not-display"
-    destination = Path(".streamlit/tabula-rasa-streamlit-secrets-safe.toml")
+def test_security_information_has_no_credential_export_action() -> None:
     with patch.object(st, "subheader"), patch.object(st, "write") as render_write, patch.object(
         st, "info"
-    ) as render_info, patch.object(st, "markdown"), patch.object(
-        st, "button", return_value=True
-    ), patch.object(st, "success") as render_success, patch(
-        "tabula_rasa.local_profile_admin_security.export_hosted_secrets_file",
-        return_value=destination,
-    ):
-        render_security_deployment_info({"refresh_token": secret})
+    ), patch.object(st, "markdown"), patch.object(st, "button") as button:
+        render_security_deployment_info()
 
-    rendered = " ".join(
-        str(call.args[0])
-        for mock in (render_write, render_info, render_success)
-        for call in mock.call_args_list
-        if call.args
-    )
-    assert str(destination) in rendered
-    assert "Streamlit App settings > Secrets" in rendered
-    assert "delete the generated local file" in rendered
-    assert "Re-run profile readiness" in rendered
-    assert "cannot verify hosted Secrets acceptance" in rendered
-    assert secret not in rendered
+    button.assert_not_called()
+    rendered = " ".join(str(call.args[0]) for call in render_write.call_args_list)
+    assert "separate encrypted server provisioning" in rendered
+    assert "export is retired" in rendered
+
+
+def test_ready_local_does_not_direct_operator_to_retired_hosted_export() -> None:
+    from tabula_rasa.local_profile_admin_readiness import render_profile_readiness
+
+    with patch(
+        "tabula_rasa.local_profile_admin_readiness.readiness_for_display",
+        return_value=ProfileReadiness(status="ready-local"),
+    ), patch.object(st, "container"), patch.object(st, "subheader"), patch.object(
+        st, "metric"
+    ), patch.object(st, "info") as info, patch.object(st, "button", return_value=False):
+        render_profile_readiness("north", SETTINGS, app_secrets={}, local_profiles={})
+
+    message = info.call_args.args[0]
+    assert "separate approved server provisioning" in message
+    assert "export_streamlit_secrets" not in message
+    assert "App settings > Secrets" not in message
 
 
 def test_security_deployment_info_links_use_canonical_guides() -> None:
@@ -279,7 +216,7 @@ def test_security_deployment_info_links_use_canonical_guides() -> None:
     ), patch.object(st, "markdown") as render_markdown, patch.object(
         st, "button", return_value=False
     ):
-        render_security_deployment_info({})
+        render_security_deployment_info()
 
     rendered = " ".join(
         str(call.args[0]) for call in render_markdown.call_args_list if call.args

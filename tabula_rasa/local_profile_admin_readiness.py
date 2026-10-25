@@ -123,13 +123,9 @@ def render_profile_readiness(
         st.error(error)
     if report.status == "ready-local":
         st.info(
-            "Local profile settings are ready. To publish them to Streamlit "
-            "Community Cloud, run `python scripts/export_streamlit_secrets.py` "
-            "from the repository root, paste the complete generated TOML into "
-            "Streamlit App settings > Secrets, and save it. This local page "
-            "cannot verify the separate hosted Secrets store; confirm the "
-            "deployed app after saving. Local backup and Synology changes do not "
-            "require a new export."
+            "Local Sheets and Drive settings are ready. Commercial provider "
+            "connections require separate approved server provisioning and "
+            "Owner confirmation; local readiness does not verify that deployment."
         )
     if st.button(
         "Run readiness check",

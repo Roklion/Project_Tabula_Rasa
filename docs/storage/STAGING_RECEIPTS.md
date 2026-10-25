@@ -34,8 +34,8 @@ loopback-only, password-reauthenticated local profile administrator:
    grant as part of staging teardown: that can invalidate other profile grants.
 
 The local administrator owns OAuth callbacks and persistence. The API has no
-Google login/Picker/admin route. Neither the Streamlit Secrets exporter nor a
-folder ID alone configures the API. Only the explicit file below is loaded; no
+Google login/Picker/admin route. Local Streamlit configuration and a folder ID
+alone do not configure the API. Only the explicit file below is loaded; no
 `.env.local`, local profile store, Streamlit Secrets or first-profile fallback is
 read by the HTTP runtime.
 

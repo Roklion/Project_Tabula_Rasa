@@ -146,39 +146,14 @@ Cloud Sync destination, schedule, and retention policy. The application does
 not configure or monitor DSM. Follow the [backup and recovery
 guide](BACKUP_RECOVERY.md) for the required download-only task and validation.
 
-## Hosted Streamlit Secrets
+## Commercial deployment configuration
 
-Local development uses split app and profile files. Hosted Streamlit uses one
-combined Secrets document containing:
-
-- app-wide `app_password_hash`, shared `google_drive_oauth`, and optional
-  `google_maps` configuration; and
-- one `business_profiles` entry per profile containing its name, spreadsheet ID,
-  validated Google OAuth authorization with its
-  storage root and Receipts and Ledger Backups children.
-
-Local backup paths, Synology metadata, and unknown local-only fields are
-excluded. In Account settings > Security & deployment information, choose
-Generate hosted Secrets file after all hosted fields are ready. The application
-reloads and validates the local profiles, writes a new randomly named ignored
-TOML file without overwriting an existing file, and displays only its path.
-It never displays or logs credentials.
-
-The command-line equivalent is:
-
-```powershell
-python scripts\export_streamlit_secrets.py
-```
-
-Paste the complete generated document into Streamlit App settings > Secrets,
-save it, delete the generated local file, and confirm the deployed application.
-The local administrator cannot inspect the hosted Secrets store or claim that
-Streamlit accepted the replacement.
-
-Repeat the export after a profile, spreadsheet, Google OAuth grant,
-storage root, receipt folder, backup folder, or Drive connection changes.
-Changes only to a local backup path, Synology destination, schedule, retention
-policy, or app-wide Synology defaults do not require a hosted export.
+Streamlit Cloud Secrets generation and export are retired. Local administration
+continues to use the protected split app/profile files. Local changes do not
+configure the React/FastAPI deployment. Use [external connections and claims](identity/CONNECTIONS_AND_CLAIMS.md)
+for approved encrypted grant staging and Owner activation, and [deployment](operations/DEPLOYMENT.md)
+for server configuration. Never paste provider grants into a browser form or
+bookkeeping export.
 
 ## Validate readiness
 
@@ -214,26 +189,19 @@ in the shared OAuth project, Editor access to the workbook, and explicit Picker
 selection. Do not make the workbook public. Confirm required tabs and headers;
 the app refuses to overwrite populated incompatible worksheets.
 
-### Hosted settings are stale
-
-Regenerate and replace the complete hosted Secrets document after a
-hosted-runtime field changes. Local readiness cannot verify hosted acceptance.
-
 ## Credential rotation
 
-Reconnect Google locally to replace a grant, then export and replace hosted
-Secrets and validate the deployed profile. To replace the application password:
+Reconnect Google locally to replace a local grant and validate the selected profile.
+For a commercial connection, follow the separate approved encrypted staging and
+Owner activation procedure in [connections](identity/CONNECTIONS_AND_CLAIMS.md). To replace the application password:
 
 ```powershell
 python scripts\set_app_password.py
 ```
 
-This changes the local hash only; it does not update a hosted deployment. After
-the command succeeds, follow the [hosted Streamlit Secrets handoff](#hosted-streamlit-secrets)
-to generate and replace the complete hosted Secrets document, save it, delete
-the generated local file, and confirm that the deployed application accepts the
-new password. If the hosted document is edited manually, replace only
-`app_password_hash` with the new hash and never copy the plaintext password.
+This changes the local application password only. Commercial named login and
+provider secrets use separate custody; local password rotation does not update
+them or grant business access.
 
 Keep OAuth configuration and refresh tokens in protected storage. Never place credentials in backups, issues, logs, screenshots, or
 documentation.
@@ -247,9 +215,9 @@ documentation.
 ## Existing deployment: single-step OAuth cutover
 
 There is no ledger data/schema migration for this authentication change. Normal
-runtime accepts only version 2 local profiles and OAuth-only hosted profiles.
-Follow [the migration runbook](OAUTH_MIGRATION.md) for preparation, downtime,
-coordinated code/Secrets replacement, validation, and key retirement.
+runtime accepts only version 2 local profiles.
+Follow [the migration runbook](OAUTH_MIGRATION.md) for protected local preparation,
+validation and key retirement. Commercial connection staging remains separate.
 
 ### Initial ledger provision
 

@@ -52,7 +52,7 @@ this repository.
    billing console offers an enforceable spend-cap budget for this project,
    review its current supported-services behavior before relying on it.
 9. Add the two deployment-specific keys to ignored Streamlit Secrets, restart
-   local Streamlit, and separately update the hosted Secrets store.
+   local Streamlit. Commercial API keys use the separate server deployment configuration.
 10. Before public deployment, review the checked-in [Terms of Use](TERMS_OF_USE.md)
     and [Privacy Policy](PRIVACY_POLICY.md). The application footer exposes both
     documents without requiring the application password. Confirm they still
@@ -198,17 +198,10 @@ service-account JSON's own `project_id` field unchanged.
 
 Omit `autocomplete_region_code` when the deployment has no clear country rule.
 Do not copy Maps keys or the quota-monitoring credential into a
-`business_profiles` entry. The local hosted-Secrets
-export preserves the app-wide `google_maps` table; regenerate the complete
-export with:
-
-```powershell
-python scripts\export_streamlit_secrets.py
-```
-
-Paste the generated document into Streamlit App settings > Secrets, save it,
-delete the generated file, and validate the deployed app. Local Secrets do not
-automatically update the hosted store.
+`business_profiles` entry. Streamlit Cloud Secrets export is retired. Configure
+commercial Maps credentials through the protected server environment described
+in [deployment](operations/DEPLOYMENT.md); local Streamlit configuration does not
+update that environment.
 
 The quota reader is an app-wide service account, separate from every profile's
 human Google OAuth grant used by Sheets and Drive. Grant it only the
