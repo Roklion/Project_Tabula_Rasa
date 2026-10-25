@@ -62,6 +62,15 @@ a failed shard can be rerun independently. Each uploads its own artifact with
 `native-browser-results.xml` and any native browser evidence. Accounting, isolation,
 migration and recovery remain required on each PR.
 
+Within each native shard, one session-scoped Playwright runtime lazily reuses
+one process per requested engine. Every test still owns fresh browser contexts,
+a disposable database and a loopback HTTP server. Context cleanup runs on
+success and failure; process reuse must not preserve private browser state.
+The alpha engine/viewport acceptance matrix retains the full journey, while
+its delayed-operation and injected-failure cases exercise extracted production
+steps with focused synthetic setup. See [native fixture and scenario
+ownership](../browser/TESTING.md#repeatable-local-and-ci-gate).
+
 ## Contract and browser ownership
 
 HTTP response and source-provenance checks run once in
@@ -118,11 +127,13 @@ Native commands/prerequisites are in [Browser quality](../browser/TESTING.md#rep
 They use explicitly configured disposable databases, never application credentials.
 Normal local validation stays scoped to affected behavior; CI is the full gate.
 
-Download metadata using read-only GitHub CLI access:
+Download metadata using read-only GitHub CLI access. Extract each native
+artifact into a directory matching its artifact name, then include both JUnit
+reports when summarizing the native partition:
 
 ```powershell
 gh api repos/Roklion/Project_Tabula_Rasa/actions/runs/RUN_ID/jobs?per_page=100 > jobs.json
-python scripts/summarize_ci_timings.py --jobs jobs.json --junit native-browser-results.xml
+python scripts/summarize_ci_timings.py --jobs jobs.json --junit native-browser-results-1/native-browser-results.xml native-browser-results-2/native-browser-results.xml
 ```
 
 Use all pages of one completed attempt (currently fewer than 100 jobs). For a

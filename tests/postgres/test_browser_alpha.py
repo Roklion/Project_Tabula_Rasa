@@ -3,7 +3,6 @@
 from uuid import uuid4
 from time import sleep
 
-from playwright.sync_api import sync_playwright
 import pytest
 
 from tabula_rasa.deployment.alpha import ENGINES, WIDTHS, journey
@@ -14,6 +13,7 @@ from tabula_rasa.infrastructure.postgres.documents import PostgresReceiptReposit
 from tabula_rasa.http.context import TrustedDevelopmentContext
 from tests.postgres.test_browser_baselines import commercial_server as commercial_server
 from tests.postgres.test_http_mileage_documents import commercial as commercial, document_store as document_store
+from tests.postgres.core_support import expense, journal_lines
 
 
 @pytest.fixture
@@ -23,20 +23,16 @@ def browser_resolver():
 
 @pytest.mark.parametrize('engine', ENGINES)
 @pytest.mark.parametrize('width', WIDTHS)
-def test_staging_journey_and_preserved_other_entity(commercial, commercial_server, document_store, engine, width):
+def test_staging_journey_and_preserved_other_entity(commercial, commercial_server, document_store, engine, width, native_browser):
     alpha, beta, _, _ = commercial
     before_alpha = alpha.transactions.list(fresh=True)
     before_journals = alpha.journals.list(fresh=True)
     before_beta = (beta.accounts.list(), beta.categories.list(), beta.payees.list(), beta.tags.list(), beta.transactions.list(fresh=True))
-    with sync_playwright() as playwright:
-        browser = getattr(playwright, engine).launch()
-        try:
-            options = dict(base_url=commercial_server, viewport={'width': width, 'height': 1000 if width == 1440 else 844})
-            with browser.new_context(**options) as context, browser.new_context(**options) as peer:
-                journey(context, peer, origin=commercial_server, entity='alpha', marker='Alpha-' + uuid4().hex)
-                assert context.request.get('/api/v1/entities/beta/documents').status == 403
-        finally:
-            browser.close()
+    with native_browser(engine) as browser:
+        options = dict(base_url=commercial_server, viewport={'width': width, 'height': 1000 if width == 1440 else 844})
+        with browser.new_context(**options) as context, browser.new_context(**options) as peer:
+            journey(context, peer, origin=commercial_server, entity='alpha', marker='Alpha-' + uuid4().hex)
+            assert context.request.get('/api/v1/entities/beta/documents').status == 403
     assert alpha.transactions.list(fresh=True) == before_alpha
     assert alpha.journals.list(fresh=True) == before_journals
     assert (beta.accounts.list(), beta.categories.list(), beta.payees.list(), beta.tags.list(), beta.transactions.list(fresh=True)) == before_beta
@@ -45,7 +41,7 @@ def test_staging_journey_and_preserved_other_entity(commercial, commercial_serve
 
 
 @pytest.mark.parametrize('slow_operation', ['upload', 'unlink', 'relink', 'journal_delete'])
-def test_journey_with_slow_mutation(commercial, commercial_server, document_store, monkeypatch, slow_operation):
+def test_journey_with_slow_mutation(commercial, commercial_server, document_store, monkeypatch, slow_operation, native_browser):
     if slow_operation == 'journal_delete':
         owner, method = JournalService, 'delete'
     elif slow_operation == 'upload':
@@ -63,20 +59,36 @@ def test_journey_with_slow_mutation(commercial, commercial_server, document_stor
         return original(*args, **kwargs)
 
     monkeypatch.setattr(owner, method, delayed)
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
-        try:
-            options = dict(base_url=commercial_server, viewport={'width': 1440, 'height': 1000})
-            with browser.new_context(**options) as context, browser.new_context(**options) as peer:
-                journey(context, peer, origin=commercial_server, entity='alpha', marker='Alpha-' + uuid4().hex)
-        finally:
-            browser.close()
-    assert document_store.upload_calls == 1 and document_store.delete_calls == 0
+    alpha, beta, _, _ = commercial
+    before_beta = beta.transactions.list(fresh=True)
+    marker = 'Alpha-' + uuid4().hex
+    with native_browser('chromium') as browser:
+        with browser.new_context(base_url=commercial_server, viewport={'width': 1440, 'height': 1000}) as context:
+            page = context.new_page()
+            if slow_operation == 'journal_delete':
+                alpha.journals.create(entry_id=uuid4().hex, txn_date='2026-10-01',
+                    description=marker + ' Reviewed journal', postings=journal_lines(prefix=uuid4().hex))
+                alpha_gate.delete_journal(page, origin=commercial_server, prefix='/api/v1/entities/alpha/',
+                    label='Edit 2026-10-01 · ' + marker + ' Reviewed journal')
+                assert not any(row['description'] == marker + ' Reviewed journal'
+                               for row in alpha.journals.list(fresh=True))
+            else:
+                row = alpha.transactions.create(transaction_id=uuid4().hex,
+                    **expense(amount='11.25', description=marker + ' Expense'))
+                alpha_gate.receipt_workflow(page, row['id'], marker)
+                response = context.request.get('/api/v1/entities/alpha/transactions/' + row['id'] + '/receipts')
+                assert response.status == 200 and response.json()['items'] == []
+                assert document_store.upload_calls == 1
+                assert all(profile == 'alpha' for profile, _ in document_store.files)
+                assert all(len(content) == 63 for content in document_store.contents.values())
+    assert calls >= (2 if slow_operation == 'relink' else 1)
+    assert document_store.delete_calls == 0
+    assert beta.transactions.list(fresh=True) == before_beta
 
 
 @pytest.mark.parametrize('failure', ['receipt_download', 'receipt_unlink', 'receipt_relink', 'receipt_bytes'])
 def test_receipt_failure_stops_with_safe_operation_and_retained_bytes(
-        commercial, commercial_server, document_store, monkeypatch, failure):
+        commercial, commercial_server, document_store, monkeypatch, failure, native_browser):
     alpha, beta, _, _ = commercial
     before_beta = beta.transactions.list(fresh=True)
     monkeypatch.setattr(alpha_gate, 'RECEIPT_TIMEOUT_MS', 1_000)
@@ -100,22 +112,20 @@ def test_receipt_failure_stops_with_safe_operation_and_retained_bytes(
 
         monkeypatch.setattr(PostgresReceiptRepository, method, mutate)
     marker = 'Alpha-' + uuid4().hex
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
-        try:
-            options = dict(base_url=commercial_server, viewport={'width': 1440, 'height': 1000})
-            with browser.new_context(**options) as context, browser.new_context(**options) as peer:
-                with pytest.raises(alpha_gate.AlphaError) as result:
-                    journey(context, peer, origin=commercial_server, entity='alpha', marker=marker)
-                assert result.value.operation == failure and 'PRIVATE' not in str(result.value)
-                rows = [row for row in alpha.transactions.list(fresh=True) if row['description'].startswith(marker)]
-                assert len(rows) == 1 and str(rows[0]['amount']) == '11.25'
-                response = context.request.get('/api/v1/entities/alpha/transactions/' + rows[0]['id'] + '/receipts')
-                assert response.status == 200
-                references = response.json()['items']
-                assert len(references) == (0 if failure == 'receipt_relink' else 1)
-        finally:
-            browser.close()
+    row = alpha.transactions.create(transaction_id=uuid4().hex,
+        **expense(amount='11.25', description=marker + ' Expense'))
+    with native_browser('chromium') as browser:
+        options = dict(base_url=commercial_server, viewport={'width': 1440, 'height': 1000})
+        with browser.new_context(**options) as context:
+            with pytest.raises(alpha_gate.AlphaError) as result:
+                alpha_gate.receipt_workflow(context.new_page(), row['id'], marker)
+            assert result.value.operation == failure and 'PRIVATE' not in str(result.value)
+            rows = [row for row in alpha.transactions.list(fresh=True) if row['description'].startswith(marker)]
+            assert len(rows) == 1 and str(rows[0]['amount']) == '11.25'
+            response = context.request.get('/api/v1/entities/alpha/transactions/' + rows[0]['id'] + '/receipts')
+            assert response.status == 200
+            references = response.json()['items']
+            assert len(references) == (0 if failure == 'receipt_relink' else 1)
     assert beta.transactions.list(fresh=True) == before_beta
     assert document_store.upload_calls == 1 and document_store.delete_calls == 0
     assert all(profile == 'alpha' for profile, _ in document_store.files)

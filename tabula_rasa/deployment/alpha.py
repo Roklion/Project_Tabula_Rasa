@@ -130,6 +130,50 @@ def open_transaction(page, row):
     expect(page.get_by_label('Description / memo', exact=True)).to_have_value(row['description'])
 
 
+def receipt_workflow(page, transaction_id, marker):
+    """Attach, verify and retain synthetic receipt bytes through the real UI."""
+    from playwright.sync_api import expect
+
+    with operation('receipt_open'):
+        page.goto('/transactions/' + transaction_id + '/receipts')
+        content = b'%PDF-1.4\n% Tabula Rasa synthetic technical-alpha receipt\n%%EOF\n'
+    with operation('receipt_attach'):
+        page.get_by_label('Receipt files').set_input_files({'name': marker + '.pdf', 'mimeType': 'application/pdf', 'buffer': content})
+        page.get_by_role('button', name='Attach selected receipts', exact=True).click()
+        expect(page.get_by_role('status').filter(has_text='1 receipt attached.')).to_be_visible(timeout=RECEIPT_TIMEOUT_MS)
+    with operation('receipt_download'):
+        with page.expect_download(timeout=RECEIPT_TIMEOUT_MS) as download:
+            page.get_by_role('link', name='Download ' + marker + '.pdf', exact=True).click()
+    with operation('receipt_bytes'):
+        if Path(download.value.path()).read_bytes() != content:
+            raise AlphaError('Receipt byte verification failed.')
+    with operation('receipt_unlink'):
+        page.get_by_role('button', name='Remove ' + marker + '.pdf', exact=True).click()
+        page.get_by_role('button', name='Confirm remove', exact=True).click()
+        expect(page.get_by_role('status').filter(has_text='Receipt reference removed. File retained.')).to_be_visible(timeout=RECEIPT_TIMEOUT_MS)
+    with operation('receipt_relink'):
+        page.get_by_role('button', name='Link ' + marker + '.pdf', exact=True).click()
+        expect(page.get_by_role('status').filter(has_text='Receipt linked.')).to_be_visible(timeout=RECEIPT_TIMEOUT_MS)
+    with operation('receipt_final_unlink'):
+        page.get_by_role('button', name='Remove ' + marker + '.pdf', exact=True).click()
+        page.get_by_role('button', name='Confirm remove', exact=True).click()
+        expect(page.get_by_role('button', name='Link ' + marker + '.pdf', exact=True)).to_be_visible(timeout=RECEIPT_TIMEOUT_MS)
+
+
+def delete_journal(page, *, origin, prefix, label):
+    """Confirm the journal deletion response before ending the browser step."""
+    from playwright.sync_api import expect
+
+    with operation('journal_delete'):
+        page.goto('/journals')
+        page.get_by_role('button', name=label, exact=True).click()
+        page.get_by_role('button', name='Delete', exact=True).click()
+        with page.expect_response(lambda response: response.request.method == 'DELETE' and response.url.startswith(origin + prefix + 'journals/')) as deleted:
+            page.get_by_role('button', name='Confirm delete', exact=True).click()
+        checked(deleted.value)
+        expect(page.get_by_role('status').filter(has_text='Record deleted.')).to_be_visible()
+
+
 def journey(context, peer, *, origin, entity, marker):
     """Supported core path; accounting/validation remain owned by services."""
     from playwright.sync_api import expect
@@ -175,31 +219,7 @@ def journey(context, peer, *, origin, entity, marker):
         other.get_by_role('button', name='Discard draft and reload', exact=True).click()
         expect(other.get_by_label('Amount', exact=True)).to_have_value('11.25')
         expect(other.get_by_label('Description / memo', exact=True)).to_have_value(current['description'])
-    with operation('receipt_open'):
-        # Required provider availability is checked before the first create above.
-        page.goto('/transactions/' + expense['id'] + '/receipts')
-        content = b'%PDF-1.4\n% Tabula Rasa synthetic technical-alpha receipt\n%%EOF\n'
-    with operation('receipt_attach'):
-        page.get_by_label('Receipt files').set_input_files({'name': marker + '.pdf', 'mimeType': 'application/pdf', 'buffer': content})
-        page.get_by_role('button', name='Attach selected receipts', exact=True).click()
-        expect(page.get_by_role('status').filter(has_text='1 receipt attached.')).to_be_visible(timeout=RECEIPT_TIMEOUT_MS)
-    with operation('receipt_download'):
-        with page.expect_download(timeout=RECEIPT_TIMEOUT_MS) as download:
-            page.get_by_role('link', name='Download ' + marker + '.pdf', exact=True).click()
-    with operation('receipt_bytes'):
-        if Path(download.value.path()).read_bytes() != content:
-            raise AlphaError('Receipt byte verification failed.')
-    with operation('receipt_unlink'):
-        page.get_by_role('button', name='Remove ' + marker + '.pdf', exact=True).click()
-        page.get_by_role('button', name='Confirm remove', exact=True).click()
-        expect(page.get_by_role('status').filter(has_text='Receipt reference removed. File retained.')).to_be_visible(timeout=RECEIPT_TIMEOUT_MS)
-    with operation('receipt_relink'):
-        page.get_by_role('button', name='Link ' + marker + '.pdf', exact=True).click()
-        expect(page.get_by_role('status').filter(has_text='Receipt linked.')).to_be_visible(timeout=RECEIPT_TIMEOUT_MS)
-    with operation('receipt_final_unlink'):
-        page.get_by_role('button', name='Remove ' + marker + '.pdf', exact=True).click()
-        page.get_by_role('button', name='Confirm remove', exact=True).click()
-        expect(page.get_by_role('button', name='Link ' + marker + '.pdf', exact=True)).to_be_visible(timeout=RECEIPT_TIMEOUT_MS)
+    receipt_workflow(page, expense['id'], marker)
     with operation('income_create'):
         income = create_transaction(page, marker, 'Income', '30.00', account, income_category)
     with operation('transfer_create'):
@@ -252,14 +272,7 @@ def journey(context, peer, *, origin, entity, marker):
             page.get_by_role('button', name='Delete', exact=True).click()
             page.get_by_role('button', name='Confirm delete', exact=True).click()
             expect(page.get_by_role('status').filter(has_text='Record deleted.')).to_be_visible()
-    with operation('journal_delete'):
-        page.goto('/journals')
-        page.get_by_role('button', name='Edit 2026-10-01 · ' + marker + ' Reviewed journal', exact=True).click()
-        page.get_by_role('button', name='Delete', exact=True).click()
-        with page.expect_response(lambda response: response.request.method == 'DELETE' and response.url.startswith(origin + prefix + 'journals/')) as deleted:
-            page.get_by_role('button', name='Confirm delete', exact=True).click()
-        checked(deleted.value)
-        expect(page.get_by_role('status').filter(has_text='Record deleted.')).to_be_visible()
+    delete_journal(page, origin=origin, prefix=prefix, label='Edit 2026-10-01 · ' + marker + ' Reviewed journal')
     with operation('page_close'):
         page.close()
         other.close()
