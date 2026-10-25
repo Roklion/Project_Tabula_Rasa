@@ -69,3 +69,21 @@ def test_missing_engine_fails_required_gate_and_skips_optional_runs(tmp_path, mo
             with pool.open():
                 pytest.fail('A missing engine must not run a test')
     launcher.launch.assert_not_called()
+
+
+def test_test_failure_remains_primary_when_context_cleanup_also_fails(engines):
+    playwright, (chromium, _) = engines
+    primary = AssertionError('synthetic test failure')
+    cleanup = RuntimeError('synthetic cleanup failure')
+    kept = Mock()
+    failed = Mock(close=Mock(side_effect=cleanup))
+    with NativeBrowsers(playwright) as pool:
+        with pytest.raises(AssertionError) as result:
+            with pool.open():
+                chromium.contexts = [kept, failed]
+                raise primary
+        assert result.value is primary
+        assert result.value.__cause__ is cleanup
+        kept.close.assert_called_once()
+        failed.close.assert_called_once()
+    chromium.close.assert_called_once()

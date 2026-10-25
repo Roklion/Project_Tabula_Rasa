@@ -31,11 +31,21 @@ class NativeBrowsers:
             self.cleanup.callback(browser.close)
             self.browsers[engine] = browser
         browser = self.browsers[engine]
+        primary_error = None
         try:
             yield browser
+        except BaseException as error:
+            primary_error = error
+            raise
         finally:
             # Context closure clears cookies, storage, routes, pages and downloads,
             # including when an assertion fails. Attempt every context's cleanup.
-            with ExitStack() as contexts:
-                for context in browser.contexts:
-                    contexts.callback(context.close)
+            try:
+                with ExitStack() as contexts:
+                    for context in browser.contexts:
+                        contexts.callback(context.close)
+            except Exception as cleanup_error:
+                if primary_error is None:
+                    raise
+                # Retain both tracebacks while reporting the test failure first.
+                raise primary_error from cleanup_error
