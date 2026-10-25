@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 from tests.app_support import authenticated_app, by_label, navigate_to
 from tests.fakes import FakeWorkbook
 from tabula_rasa.storage import GoogleSheetsStorage
@@ -9,11 +11,13 @@ def test_schedule_row_selection_controls_edit_target_and_future_template() -> No
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     account = storage.create_account("Checking", "Bank")
     category = storage.create_category("Office", "Expense")
+    # Keep the next monthly occurrence outside this template-editing scenario.
+    start_date = date.today().isoformat()
     for schedule_id, name in (("schedule-a", "Alpha"), ("schedule-b", "Beta")):
         storage.create_recurring_expense(
             schedule_id=schedule_id,
             name=name,
-            txn_date="2026-09-25",
+            txn_date=start_date,
             recurrence_unit="month",
             recurrence_interval=1,
             amount="10",

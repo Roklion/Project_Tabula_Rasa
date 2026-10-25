@@ -35,10 +35,15 @@ HEARTBEAT_ENV = 'TABULA_RASA_RECURRING_HEARTBEAT_URL'
 
 def load_config(path):
     data = json.loads(Path(path).read_text(encoding='utf-8-sig'))
-    if not isinstance(data, dict) or set(data) != {
+    required = {
         'database_sha256', 'database_role', 'entity_ids', 'business_time_zone',
-    }:
+    }
+    if (not isinstance(data, dict) or not required <= set(data)
+            or set(data) - required - {'max_age_minutes'}):
         raise ValueError('Invalid monitor configuration.')
+    max_age = data.get('max_age_minutes', 90)
+    if type(max_age) is not int or not 1 <= max_age <= 1440:
+        raise ValueError('Monitor freshness must be an integer from 1 to 1440 minutes.')
     if not re.fullmatch('[a-f0-9]{64}', str(data['database_sha256'])):
         raise ValueError('Invalid database identity.')
     if not re.fullmatch('[a-z_][a-z0-9_]{0,62}', str(data['database_role'])):
@@ -54,7 +59,7 @@ def load_config(path):
     return data
 
 
-def assess_entity(entity, selected, definition, jobs, *, expected_zone, now):
+def assess_entity(entity, selected, definition, jobs, *, expected_zone, now, max_age=MAX_AGE):
     """Classify operational observations without recreating occurrence logic."""
     codes = []
     if selected['authority'] != 'worker':
@@ -67,11 +72,11 @@ def assess_entity(entity, selected, definition, jobs, *, expected_zone, now):
     if jobs['dead']:
         codes.append('dead_jobs')
     last_dispatch = jobs['last_dispatch']
-    if last_dispatch is None or now - last_dispatch > MAX_AGE:
+    if last_dispatch is None or now - last_dispatch > max_age:
         codes.append('dispatcher_missing_or_stale')
-    if jobs['oldest_queued'] is not None and now - jobs['oldest_queued'] > MAX_AGE:
+    if jobs['oldest_queued'] is not None and now - jobs['oldest_queued'] > max_age:
         codes.append('queued_jobs_overdue')
-    if jobs['running'] and (jobs['oldest_lease'] is None or now - jobs['oldest_lease'] > MAX_AGE):
+    if jobs['running'] and (jobs['oldest_lease'] is None or now - jobs['oldest_lease'] > max_age):
         codes.append('running_jobs_unconfirmed')
     return {'entity_id': entity, 'healthy': not codes, 'codes': codes}
 
@@ -101,7 +106,8 @@ def inspect(database, config, *, now=None):
                     AND state='succeeded') AS last_dispatch
                 FROM jobs WHERE entity_id=:scope'''), {'scope': entity}).mappings().one()
         results.append(assess_entity(entity, selected, definition, jobs,
-            expected_zone=config['business_time_zone'], now=now))
+            expected_zone=config['business_time_zone'], now=now,
+            max_age=timedelta(minutes=config.get('max_age_minutes', 90))))
     return {'status': 'healthy' if all(row['healthy'] for row in results) else 'unhealthy',
             'checked_at_utc': now.isoformat(), 'entities': results}
 

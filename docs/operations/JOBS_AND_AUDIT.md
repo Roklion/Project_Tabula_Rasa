@@ -167,8 +167,10 @@ Supply a protected, metadata-only `recurring-monitor.json` with these fields:
 Use the restricted worker connection, not an operator/schema login. The adapter
 verifies the exact database identity and role before entity reads. It requires
 worker authority in the configured business zone, an enabled hourly dispatcher,
-no retained dead jobs, and a successful dispatcher within 90 minutes. Queued
-work or expired running leases older than 90 minutes require attention too.
+no retained dead jobs, and a successful dispatcher within the configured freshness
+window. The optional `max_age_minutes` field accepts an integer from 1 to 1440
+and defaults to 90 when omitted. Queued work or expired running leases older
+than that same window require attention too.
 Counts cover all retained jobs, rather than only a recent diagnostic sample.
 One unhealthy selected entity makes the overall signal fail; it does not prevent
 the existing runner from processing other entities. These are operational health
@@ -192,7 +194,13 @@ notification tests. A suitable hourly monitor expects a signal every hour with
 30 minutes of grace; missing-signal detection is approximately 90 minutes after
 the last successful signal, plus provider and delivery latency. Confirm the actual
 selected provider settings rather than claiming an alert-time guarantee. Keep
-database settings and heartbeat secrets owner-readable only; mount the non-secret
+the NAS polling cadence, freshness window and provider expectation aligned. For
+an every-two-hours NAS task with 30 minutes of grace, add
+`"max_age_minutes": 150` to the metadata and set the provider to two hours with
+30 minutes of grace. The durable dispatcher definition remains hourly: the
+existing queue catches up due work when the NAS next runs. This changes polling
+latency, without promising hour/minute scheduling or contacting the web service.
+Keep database settings and heartbeat secrets owner-readable only; mount the non-secret
 script/configuration read-only. No new identity, Google, session or schema grants
 are needed. The example retains the established NAS memory and non-root image
 boundaries and does not request unsupported CPU/PID kernel limits.

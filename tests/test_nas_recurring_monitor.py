@@ -54,6 +54,18 @@ def test_expired_execution_requires_attention_but_current_lease_does_not():
     assert assess(running=1, oldest_lease=NOW - timedelta(hours=2))['codes'] == ['running_jobs_unconfirmed']
 
 
+@pytest.mark.parametrize('age,healthy', [(120, True), (150, True), (151, False)])
+def test_two_hour_worker_freshness_applies_to_dispatch_queue_and_leases(age, healthy):
+    timestamp = NOW - timedelta(minutes=age)
+    result = monitor.assess_entity('alpha', POLICY, DEFINITION,
+        observations(last_dispatch=timestamp, oldest_queued=timestamp,
+                     running=1, oldest_lease=timestamp),
+        expected_zone='America/New_York', now=NOW, max_age=timedelta(minutes=150))
+    assert result['healthy'] is healthy
+    assert result['codes'] == ([] if healthy else [
+        'dispatcher_missing_or_stale', 'queued_jobs_overdue', 'running_jobs_unconfirmed'])
+
+
 def test_unenabled_authority_or_dispatcher_never_reports_healthy():
     result = monitor.assess_entity('alpha', {'authority': 'explicit', 'time_zone': 'UTC'}, None,
         observations(), expected_zone='America/New_York', now=NOW)
@@ -61,21 +73,28 @@ def test_unenabled_authority_or_dispatcher_never_reports_healthy():
     assert set(result['codes']) == {'worker_not_enabled', 'business_zone_mismatch', 'dispatcher_not_enabled'}
 
 
-def test_inspection_is_read_only_scoped_and_does_not_hide_another_entity_failure(monkeypatch):
+@pytest.mark.parametrize('max_age', [None, 150])
+def test_inspection_is_read_only_scoped_and_does_not_hide_another_entity_failure(monkeypatch, max_age):
     database = MagicMock()
     connection = database.transaction.return_value.__enter__.return_value
     connection.scalar.return_value = 'restricted_worker'
     monkeypatch.setattr(monitor, 'database_identity', lambda db: 'a' * 64)
     monkeypatch.setattr(monitor, 'policy', lambda db, scope: POLICY)
-    rows = [DEFINITION, observations(), DEFINITION, observations(dead=1)]
+    alpha = observations() if max_age is None else observations(last_dispatch=NOW - timedelta(hours=2))
+    beta = observations(dead=1) if max_age is None else observations(last_dispatch=NOW - timedelta(minutes=151))
+    rows = [DEFINITION, alpha, DEFINITION, beta]
     def execute(statement, parameters):
         row = rows.pop(0)
         return SimpleNamespace(mappings=lambda: SimpleNamespace(first=lambda: row, one=lambda: row))
     connection.execute.side_effect = execute
-    result = monitor.inspect(database, {'database_sha256': 'a' * 64, 'database_role': 'restricted_worker',
-        'entity_ids': ['alpha', 'beta'], 'business_time_zone': 'America/New_York'}, now=NOW)
+    config = {'database_sha256': 'a' * 64, 'database_role': 'restricted_worker',
+        'entity_ids': ['alpha', 'beta'], 'business_time_zone': 'America/New_York'}
+    if max_age is not None:
+        config['max_age_minutes'] = max_age
+    result = monitor.inspect(database, config, now=NOW)
     assert result['status'] == 'unhealthy'
     assert [row['healthy'] for row in result['entities']] == [True, False]
+    assert result['entities'][1]['codes'] == (['dead_jobs'] if max_age is None else ['dispatcher_missing_or_stale'])
     assert [call.args[1]['scope'] for call in connection.execute.call_args_list] == ['alpha', 'alpha', 'beta', 'beta']
     assert all(call.kwargs == {'read_only': True} for call in database.transaction.call_args_list)
     aggregate_sql = str(connection.execute.call_args_list[1].args[0])
@@ -168,9 +187,22 @@ def test_binding_configuration_requires_distinct_explicit_entities_and_no_creden
     path = tmp_path / 'monitor.json'
     path.write_text(json.dumps(config))
     assert monitor.load_config(path) == config
+    path.write_text(json.dumps({**config, 'max_age_minutes': 150}))
+    assert monitor.load_config(path)['max_age_minutes'] == 150
     for changed in ({**config, 'entity_ids': [config['entity_ids'][0]] * 2},
                     {**config, 'database_url': 'private-synthetic-value'},
                     {**config, 'entity_ids': []}):
         path.write_text(json.dumps(changed))
         with pytest.raises(ValueError):
             monitor.load_config(path)
+
+
+@pytest.mark.parametrize('max_age', [True, False, '150', 150.0, None, 0, -1, 1441])
+def test_invalid_freshness_configuration_is_refused(tmp_path, max_age):
+    config = {'database_sha256': 'a' * 64, 'database_role': 'restricted_worker',
+        'entity_ids': ['00000000-0000-4000-8000-000000000001'],
+        'business_time_zone': 'America/New_York', 'max_age_minutes': max_age}
+    path = tmp_path / 'monitor.json'
+    path.write_text(json.dumps(config))
+    with pytest.raises(ValueError):
+        monitor.load_config(path)
