@@ -43,10 +43,13 @@ assets or required browser engines fails the required gate; ordinary Python runs
 may still skip native browser tests when their environment is not installed.
 
 Repository CI separates **Frontend, contracts and runtime image**, two required
-**Browser UI** shards, and **Native browser (HTTP + PostgreSQL)**. Node UI and
-native jobs each install all three engines; native builds its own SPA and uses
-its own disposable database. **Full test suite** requires every partition on the
-current head/merge candidate. Failed runs retain per-shard Playwright JUnit,
+**Browser UI** shards, and two required **Native browser (HTTP + PostgreSQL)**
+shards. Browser jobs use pinned images with all three engines preinstalled;
+each native shard builds its own SPA and uses its own disposable PostgreSQL
+service. The native matrix partitions modules exactly once and preserves all
+engine/viewport cases; fail-fast is disabled and each shard retains its own
+`native-browser-results-1` or `native-browser-results-2` artifact. **Full test suite**
+requires every partition on the current head/merge candidate. Failed runs retain per-shard Playwright JUnit,
 traces/screenshots and native JUnit results. The commercial release-image
 workflow consumes successful Repository CI on `main`. No external customer data,
 ledger files or customer credentials are required.

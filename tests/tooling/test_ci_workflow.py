@@ -73,7 +73,9 @@ def test_ci_preserves_complete_python_and_windows_coverage() -> None:
         "python -m pytest tests/tooling/test_codex_environment_setup.py "
     ) for step in windows["steps"])
 
-    native_job = jobs["native-browser"]
+
+def test_native_browser_shards_preserve_complete_disjoint_coverage() -> None:
+    native_job = workflow()["jobs"]["native-browser"]
     assert "if" not in native_job
     assert "postgres" in native_job["services"]
     assert native_job["env"]["TABULA_RASA_TEST_DATABASE_URL"].startswith("postgresql+psycopg://")
@@ -83,13 +85,33 @@ def test_ci_preserves_complete_python_and_windows_coverage() -> None:
     assert native_lines[0] == 'git config --global --add safe.directory "$GITHUB_WORKSPACE"'
     command = shlex.split(native_lines[1])
     assert command[:3] == ["python", "-m", "pytest"]
-    # Detect newly added native suites instead of silently skipping them in the
-    # complete Python job (which deliberately has no compiled SPA).
-    assert command[3:-3] == sorted(
+    assert command[3:] == ["$NATIVE_TEST_FILES", "-ra", "--durations=20",
+                           "--junitxml=native-browser-results.xml"]
+    assert native["env"]["NATIVE_TEST_FILES"] == "${{ matrix.tests }}"
+    strategy = native_job["strategy"]
+    assert strategy["fail-fast"] == "false"
+    assert set(strategy["matrix"]) == {"include"}
+    shards = strategy["matrix"]["include"]
+    assert [shard["shard"] for shard in shards] == ["1", "2"]
+    assert "matrix.shard" in native_job["name"]
+    selected = []
+    for shard in shards:
+        files = shlex.split(shard["tests"])
+        assert files, "Every native shard must execute tests"
+        selected.extend(files)
+    # Exact inventory comparison rejects omissions, duplicates and extra pytest
+    # arguments that could filter cases. Newly added modules must get an owner.
+    assert sorted(selected) == sorted(
         path.relative_to(PROJECT_ROOT).as_posix()
         for path in (PROJECT_ROOT / "tests/postgres").glob("test*browser*.py")
     )
-    assert command[-3:] == ["-ra", "--durations=20", "--junitxml=native-browser-results.xml"]
+    assert native_job["timeout-minutes"] == "20"
+    artifact = next(step for step in native_job["steps"]
+                    if step.get("uses", "").startswith("actions/upload-artifact@"))
+    assert artifact["with"]["name"] == "native-browser-results-${{ matrix.shard }}"
+    assert artifact["if"] == "${{ always() }}"
+    assert "native-browser-results.xml" in artifact["with"]["path"].splitlines()
+    assert "web/test-results/" in artifact["with"]["path"].splitlines()
     assert native["env"]["TABULA_RASA_REQUIRE_BROWSER_TESTS"] == "1"
     commands = [step.get("run", "") for step in native_job["steps"]]
     assert "npm --prefix web run build" in commands
