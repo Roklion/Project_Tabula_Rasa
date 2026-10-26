@@ -4,6 +4,7 @@ from uuid import uuid4
 from time import sleep
 
 import pytest
+from playwright.sync_api import expect
 
 from tabula_rasa.deployment.alpha import ENGINES, WIDTHS, journey
 from tabula_rasa.deployment import alpha as alpha_gate
@@ -130,3 +131,30 @@ def test_receipt_failure_stops_with_safe_operation_and_retained_bytes(
     assert document_store.upload_calls == 1 and document_store.delete_calls == 0
     assert all(profile == 'alpha' for profile, _ in document_store.files)
     assert all(len(content) == 63 for content in document_store.contents.values())
+
+
+def test_reference_create_waits_for_ui_to_process_confirmed_response(commercial, commercial_server, native_browser):
+    alpha, beta, _, _ = commercial
+    before_beta = beta.accounts.list()
+    name = 'Alpha-' + uuid4().hex
+    with native_browser('webkit') as browser:
+        with browser.new_context(base_url=commercial_server, viewport={'width': 390, 'height': 844}) as context:
+            # The network response can arrive before the app consumes it and
+            # resets its dirty form. Keep that supported interval observable.
+            context.add_init_script("""
+                const originalFetch = window.fetch.bind(window);
+                window.fetch = async (...args) => {
+                    const response = await originalFetch(...args);
+                    if ((args[1]?.method ?? args[0]?.method) === 'POST' && response.url.endsWith('/accounts')) {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+                    return response;
+                };
+            """)
+            page = context.new_page()
+            identity = alpha_gate.create_reference(page, 'accounts', name)
+            assert page.get_by_role('status').filter(has_text='Record created.').is_visible()
+            page.goto('/accounts')
+            expect(page.get_by_role('button', name='Edit ' + name, exact=True)).to_be_visible()
+    assert any(row['id'] == identity and row['name'] == name for row in alpha.accounts.list())
+    assert beta.accounts.list() == before_beta

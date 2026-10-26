@@ -92,6 +92,8 @@ def preflight(context, expected_entity, origin):
 
 
 def create_reference(page, resource, name, *, kind=None):
+    from playwright.sync_api import expect
+
     page.goto('/' + resource + '/new')
     page.get_by_label('Account name' if resource == 'accounts' else 'Category name' if resource == 'categories' else 'Name', exact=True).fill(name)
     if kind:
@@ -100,6 +102,8 @@ def create_reference(page, resource, name, *, kind=None):
     with page.expect_response(lambda response: response.request.method == 'POST' and response.url.endswith('/' + resource)) as created:
         page.get_by_role('button', name='Create ' + noun, exact=True).click()
     row = checked(created.value, 201).json()
+    # A response event precedes the app's form reset and dirty-guard cleanup.
+    expect(page.get_by_role('status').filter(has_text='Record created.')).to_be_visible()
     return row['id']
 
 

@@ -257,3 +257,13 @@ def test_gate_selects_approved_ancestor_and_stops_on_checkout_failure(tmp_path, 
     assert (result.returncode == 0) == release_exists
     assert git('rev-parse', 'HEAD') == (release if release_exists else newer_main)
     assert (tmp_path / 'journey.txt').read_text() == ('selected' if release_exists else 'newer-main')
+
+
+def test_reference_create_rejects_failed_response_before_accepting_success_ui(monkeypatch):
+    page = MagicMock()
+    page.expect_response.return_value.__enter__.return_value.value = SimpleNamespace(status=422)
+    success = Mock()
+    monkeypatch.setattr('playwright.sync_api.expect', success)
+    with pytest.raises(alpha.AlphaError):
+        alpha.create_reference(page, 'accounts', 'Synthetic account')
+    success.assert_not_called()

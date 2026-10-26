@@ -57,7 +57,11 @@ owns its own Playwright runtime and is tested in a subprocess, avoiding a
 nested synchronous Playwright event loop in the shared pytest process.
 
 The alpha acceptance matrix still runs the complete journey on every existing
-engine/viewport pair. Delayed-operation and receipt-failure regressions seed
+engine/viewport pair. Reference creation requires both the successful HTTP
+response and the form's `Record created.` status before the next navigation.
+The response event alone does not prove the form consumed the result and
+cleared its unsaved-changes guard. Delayed-operation and receipt-failure
+regressions seed
 only their prerequisite synthetic record through the existing services, then
 call the same `receipt_workflow` or `delete_journal` step used by the full
 journey. These focused cases retain real browser/HTTP/PostgreSQL mutations,
