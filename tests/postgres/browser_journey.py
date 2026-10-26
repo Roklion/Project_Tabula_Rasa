@@ -1,27 +1,15 @@
-"""Opt-in browser release validation on retained, synthetic staging only.
+"""Shared browser/HTTP/PostgreSQL journey for disposable synthetic test fixtures."""
 
-No database/admin credentials, remote fault injection, traces or byte deletion.
-The same journey is exercised against disposable PostgreSQL in repository CI.
-"""
-
-import argparse
 from contextlib import contextmanager
 from decimal import Decimal
-import json
-import os
 from pathlib import Path
-import re
-from urllib.parse import urlsplit
-from uuid import uuid4
 
-from .smoke import smoke
 
 ENGINES = ('chromium', 'firefox', 'webkit')
 WIDTHS = (1440, 390)
 RECEIPT_TIMEOUT_MS = 30_000
 OPERATIONS = frozenset({
-    'configuration', 'initial_smoke', 'browser_start', 'browser_launch', 'context_open',
-    'browser_close', 'final_smoke', 'preflight', 'reference_setup', 'expense_create',
+    'preflight', 'reference_setup', 'expense_create',
     'expense_edit', 'stale_edit', 'stale_delete', 'missing_baseline', 'reload',
     'receipt_open', 'receipt_attach', 'receipt_download', 'receipt_bytes',
     'receipt_unlink', 'receipt_relink', 'receipt_final_unlink', 'income_create',
@@ -30,8 +18,8 @@ OPERATIONS = frozenset({
 })
 
 
-class AlphaError(Exception):
-    """Bounded operator guidance; never provider responses or draft values."""
+class JourneyError(Exception):
+    """Bounded test diagnostics; never provider responses or draft values."""
 
     def __init__(self, message, *, operation=None):
         super().__init__(message)
@@ -42,52 +30,38 @@ class AlphaError(Exception):
 def operation(name):
     """Label a gate step and suppress browser/provider exception details."""
     if name not in OPERATIONS:
-        raise AlphaError('Unknown alpha operation.')
+        raise JourneyError('Unknown browser journey operation.')
     failed_operation = name
     try:
         yield
     except Exception as error:
-        if isinstance(error, AlphaError) and error.operation is not None:
+        if isinstance(error, JourneyError) and error.operation is not None:
             failed_operation = error.operation
     else:
         return
-    raise AlphaError('Alpha operation failed. Inspect the synthetic run in staging; do not retry blindly.',
+    raise JourneyError('Browser journey operation failed; inspect the disposable fixture.',
                      operation=failed_operation) from None
-
-
-def configuration(environ, release, allow_writes):
-    origin = environ.get('TABULA_RASA_PUBLIC_ORIGIN', '')
-    parsed = urlsplit(origin)
-    if (environ.get('TABULA_RASA_ENVIRONMENT') != 'staging' or not allow_writes
-            or environ.get('TABULA_RASA_ACCESS_MODE') != 'restricted_alpha'
-            or parsed.scheme != 'https' or not parsed.hostname
-            or parsed.hostname in {'localhost', '127.0.0.1', '::1', 'testserver'}
-            or parsed.netloc != parsed.hostname or parsed.path or parsed.query or parsed.fragment
-            or not re.fullmatch('[0-9a-f]{40}', release)
-            or not environ.get('TABULA_RASA_ALPHA_USERNAME') or not environ.get('TABULA_RASA_ALPHA_PASSWORD')):
-        raise AlphaError('Select canonical HTTPS staging, an exact release and explicit synthetic-write consent.')
-    return origin, environ['TABULA_RASA_ALPHA_USERNAME'], environ['TABULA_RASA_ALPHA_PASSWORD']
 
 
 def checked(response, status=200):
     if response.status != status:
-        raise AlphaError('A required alpha operation failed. Inspect staging using the run marker; do not retry blindly.')
+        raise JourneyError('A required browser journey operation failed; inspect the disposable fixture.')
     return response
 
 
 def rejected(response, status, code):
     if checked(response, status).json().get('error', {}).get('code') != code:
-        raise AlphaError('The protected mutation returned the wrong failure contract.')
+        raise JourneyError('The protected mutation returned the wrong failure contract.')
 
 
 def preflight(context, expected_entity, origin):
     session = checked(context.request.get('/api/v1/session')).json()
     if (session.get('entity', {}).get('id') != expected_entity or not session.get('trusted_development')
             or not {'bookkeeping:read', 'bookkeeping:write'}.issubset(session.get('capabilities', []))):
-        raise AlphaError('The gate requires the fixed, writable synthetic context.')
+        raise JourneyError('The gate requires the fixed, writable synthetic context.')
     prefix = '/api/v1/entities/' + expected_entity + '/'
     if context.request.get(prefix + 'documents').status != 200:
-        raise AlphaError('Essential receipt storage is unavailable. Bind the authorized staging DocumentStore before acceptance.')
+        raise JourneyError('Essential receipt storage is unavailable. Configure the synthetic fixture DocumentStore.')
     return prefix, {'Origin': origin, 'X-CSRF-Token': session['csrf_token']}
 
 
@@ -150,7 +124,7 @@ def receipt_workflow(page, transaction_id, marker):
             page.get_by_role('link', name='Download ' + marker + '.pdf', exact=True).click()
     with operation('receipt_bytes'):
         if Path(download.value.path()).read_bytes() != content:
-            raise AlphaError('Receipt byte verification failed.')
+            raise JourneyError('Receipt byte verification failed.')
     with operation('receipt_unlink'):
         page.get_by_role('button', name='Remove ' + marker + '.pdf', exact=True).click()
         page.get_by_role('button', name='Confirm remove', exact=True).click()
@@ -254,19 +228,19 @@ def journey(context, peer, *, origin, entity, marker):
         expect(page.get_by_role('status').filter(has_text='4 matching entries')).to_be_visible()
         expect(page.get_by_role('rowheader', name='↳ Posting', exact=True)).to_have_count(2)
         if page.evaluate('document.documentElement.scrollWidth > window.innerWidth'):
-            raise AlphaError('Core ledger overflows the viewport.')
+            raise JourneyError('Core ledger overflows the viewport.')
     with operation('reports'):
         page.goto('/reports')
         expect(page.get_by_role('heading', name='Balance sheet', exact=True)).to_be_visible()
         after = checked(context.request.get(prefix + 'reports/summary')).json()
         for field, delta in (('income', '30.00'), ('expenses', '13.25'), ('net', '16.75')):
             if Decimal(after['profit_loss'][field]) - Decimal(before['profit_loss'][field]) != Decimal(delta):
-                raise AlphaError('Core report accounting verification failed; inspect the synthetic run.')
+                raise JourneyError('Core report accounting verification failed; inspect the synthetic run.')
         metrics = page.locator('dl.metrics').first.get_by_role('definition')
         for index, field in enumerate(('income', 'expenses', 'net')):
             expect(metrics.nth(index)).to_have_text(after['profit_loss'][field])
         if after['balance_sheet']['difference'] != '0.00':
-            raise AlphaError('The accounting equation failed.')
+            raise JourneyError('The accounting equation failed.')
         expect(page.get_by_role('status').filter(has_text='Assets = Liabilities + Equity.')).to_be_visible()
     with operation('transaction_delete'):
         # Only this run's known records are removed through freshly loaded forms.
@@ -280,88 +254,3 @@ def journey(context, peer, *, origin, entity, marker):
     with operation('page_close'):
         page.close()
         other.close()
-
-
-def run(environ, release, *, allow_writes=False):
-    run_id = uuid4().hex
-    engine = width = height = None
-    try:
-        with operation('configuration'):
-            origin, username, password = configuration(environ, release, allow_writes)
-        print(json.dumps({'run': run_id, 'release': release, 'status': 'started'}), flush=True)
-        # Reuse deployment smoke for anonymous restrictions, identity, routing and DB reads.
-        with operation('initial_smoke'):
-            smoke(origin, username, password, release)
-        with operation('browser_start'):
-            from playwright.sync_api import sync_playwright
-            with sync_playwright() as playwright:
-                for engine in ENGINES:
-                    width = height = None
-                    with operation('browser_launch'):
-                        browser = getattr(playwright, engine).launch()
-                    failed = False
-                    try:
-                        for width in WIDTHS:
-                            height = 1000 if width == 1440 else 844
-                            options = dict(base_url=origin, http_credentials={'username': username, 'password': password},
-                                           viewport={'width': width, 'height': height})
-                            with operation('context_open'):
-                                # Context exits can raise while unwinding a labeled failure.
-                                journey_error = None
-                                try:
-                                    with browser.new_context(**options) as context, browser.new_context(**options) as peer:
-                                        try:
-                                            journey(context, peer, origin=origin, entity='alpha-synthetic', marker=f'Alpha-{run_id}-{engine}-{width}')
-                                        except AlphaError as error:
-                                            journey_error = error
-                                            raise
-                                except Exception:
-                                    if journey_error is not None:
-                                        raise journey_error from None
-                                    raise
-                            print(json.dumps({'run': run_id, 'engine': engine, 'width': width, 'height': height, 'status': 'passed'}), flush=True)
-                    except Exception:
-                        failed = True
-                        raise
-                    finally:
-                        if failed:
-                            # Teardown must not replace the failing journey step.
-                            try:
-                                browser.close()
-                            except Exception:
-                                pass
-                        else:
-                            with operation('browser_close'):
-                                browser.close()
-        engine = width = height = None
-        # A changed release during a local/manual invocation cannot pass the gate.
-        with operation('final_smoke'):
-            smoke(origin, username, password, release)
-    except AlphaError as error:
-        print(json.dumps({'run': run_id, 'release': release if re.fullmatch('[0-9a-f]{40}', release) else None,
-                          'engine': engine, 'width': width, 'height': height,
-                          'operation': error.operation, 'status': 'failed'}), flush=True)
-        failed_operation = error.operation
-    else:
-        return {'run': run_id, 'release': release, 'status': 'alpha_browser_passed'}
-    raise AlphaError('Alpha browser gate failed. Inspect the synthetic run in staging; do not retry blindly.',
-                     operation=failed_operation) from None
-
-
-def main(argv=None):
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--release', required=True)
-    parser.add_argument('--allow-synthetic-writes', action='store_true')
-    args = parser.parse_args(argv)
-    try:
-        result = run(dict(os.environ), args.release, allow_writes=args.allow_synthetic_writes)
-    except Exception:
-        message = 'Alpha browser gate failed. Inspect the synthetic run in staging; do not retry blindly.'
-    else:
-        print(json.dumps(result, sort_keys=True))
-        return
-    raise SystemExit(message) from None
-
-
-if __name__ == '__main__':
-    main()

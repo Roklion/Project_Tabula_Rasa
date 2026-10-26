@@ -56,7 +56,8 @@ it before browser-context cleanup. The standalone deployment-smoke entry point
 owns its own Playwright runtime and is tested in a subprocess, avoiding a
 nested synchronous Playwright event loop in the shared pytest process.
 
-The alpha acceptance matrix still runs the complete journey on every existing
+The native core matrix in `test_browser_journey.py` runs the shared
+`browser_journey.py` journey on every existing
 engine/viewport pair. Reference creation requires both the successful HTTP
 response and the form's `Record created.` status before the next navigation.
 The response event alone does not prove the form consumed the result and
@@ -112,9 +113,10 @@ protected baselines remain owned by the existing form/service implementations.
 
 The repeatable automated gate above uses disposable databases and synthetic providers.
 It does not certify a deployed service or actual-device behavior. [Technical
-alpha](RELEASE_VALIDATION.md) defines the retained-staging workflow, receipt and
-rollback procedure; [technical-alpha validation](RELEASE_VALIDATION.md) records its
-completed bounded acceptance and approved screen-reader exclusion. Recurring/mixed-use,
+alpha](RELEASE_VALIDATION.md) defines the retained core workflow matrix and links its
+completed historical acceptance and approved screen-reader exclusion. The hosted
+synthetic runner is retired; [named-user hosted rollout](../identity/HOSTED_ROLLOUT.md)
+retains real-provider, rollback and manual browser/accessibility acceptance. Recurring/mixed-use,
 assets and mileage have their own supported workflow guides; Existing-workflow ports are
 documented in [Workflow ports](IMPORTS_EXPORTS_AND_INTEGRATIONS.md).
 

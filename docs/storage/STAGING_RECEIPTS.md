@@ -1,11 +1,14 @@
-# Hosted staging receipt storage
+# Hosted synthetic receipt storage
 
 This runbook binds the Google Drive byte adapter to the default HTTP runtime.
 PostgreSQL remains ledger and receipt-metadata authority. It reuses the document
 service and shared `create_app`/`open_runtime` composition. Grant installation and
 hosted operations require explicit approval; this procedure does not activate a
 migrated profile or configure commercial identity.
-[Release validation](../browser/RELEASE_VALIDATION.md) defines the staging gate.
+This explicit binding remains supported for restricted synthetic development/staging;
+named-user storage and acceptance follow [hosted rollout](../identity/HOSTED_ROLLOUT.md).
+[Release validation](../browser/RELEASE_VALIDATION.md) distinguishes automated journeys
+from hosted evidence; the hosted synthetic acceptance runner is retired.
 
 ## Provision the independent staging grant
 
@@ -149,7 +152,7 @@ metadata; it uploads, deletes, links, seeds and migrates nothing. Preflight is n
 proof of write permission, exact-byte persistence or final alpha acceptance.
 
 After promotion, verify gated receipt availability, then perform the authorized
-real-provider upload/attach/download/unlink/relink checks and six-case alpha gate.
+real-provider upload/attach/download/unlink/relink checks for the selected scope.
 Record restart persistence and retained bytes. Unlink removes only PostgreSQL
 relationships, never Drive bytes. Stable upload IDs and bounded uncertainty remain
 owned by ReceiptService/Drive; do not add blind retries after failed alpha writes.
@@ -172,11 +175,12 @@ links, not the bytes. Drive folder existence and these tests do not establish do
 recovery, retention or full-service RTO; platform operations and commercial recovery
 agreement own those agreements and evidence. Do not claim planned NAS protection is
 active. Application rollback keeps the secret binding and files; select a compatible
-prior image and re-promote/retest the candidate under the technical-alpha drill.
+prior image and re-promote/retest the candidate under the selected hosted rollout
+procedure.
 
 Remaining operator evidence: independent grant/folder custody, selected release's main
-CI/image promotion, real-provider receipt/persistence checks, staging suite, compatible
-rollback/re-promotion, manual devices/accessibility, actual provider limits and
+CI/image promotion, real-provider receipt/persistence checks, selected hosted workflow
+checks, compatible rollback/re-promotion, manual devices/accessibility, actual provider limits and
 sanitized acceptance handoff to live owner cutover. This implementation supplies no
 hosted evidence, live owner migration or customer activation.
 

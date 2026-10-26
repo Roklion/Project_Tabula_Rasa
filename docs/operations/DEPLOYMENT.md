@@ -376,13 +376,16 @@ acceptance stay with platform operations and commercial recovery agreement.
 After operator setup and explicitly authorized publishing/deployment, record safe
 dev/staging origins, target fingerprint references, image digest/SHA/head, successful
 ordered migration and browser smoke runs, repeated promotion, and a controlled
-compatible application rollback under technical-alpha validation. Verify runtime DML
-versus migration-role privilege separation and actual provider ingress/gate behavior.
+compatible application rollback under the selected hosted rollout procedure. Verify
+runtime DML versus migration-role privilege separation and actual provider ingress/gate behavior.
 Keep target credentials and private evidence private. Free-tier limits must be part of
 that record. deployment's reachable dev/staging, retained PostgreSQL and hosted smoke
-acceptance are recorded in its closed issue. Refresh the selected alpha candidate's
-evidence and use [Release validation](../browser/RELEASE_VALIDATION.md) for the complete
-workflow suite, real document binding, rollback rehearsal and manual acceptance.
+acceptance are recorded in its closed issue. Use
+[Release validation](../browser/RELEASE_VALIDATION.md) for the preserved workflow matrix and automated journey boundaries, and [named-user hosted
+rollout](../identity/HOSTED_ROLLOUT.md) for current provider, rollback and manual
+acceptance. The synthetic hosted acceptance runner is retired; development promotion,
+authenticated read-only smoke, target binding, migrations and image verification remain
+supported.
 deployment's completion does not complete technical-alpha validation, retire Streamlit
 or activate commercial production.
 

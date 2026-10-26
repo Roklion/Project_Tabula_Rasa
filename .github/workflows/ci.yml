@@ -170,7 +170,7 @@ jobs:
         include:
           - shard: 1
             tests: >-
-              tests/postgres/test_browser_alpha.py
+              tests/postgres/test_browser_journey.py
               tests/postgres/test_browser_quality.py
               tests/postgres/test_workspace_browser.py
           - shard: 2

@@ -53,7 +53,7 @@ artifacts, time budgets and the aggregate success requirement remain unchanged.
 The Python job has no compiled SPA. Native browser scenarios retain prerequisite
 skips there and run once across the two required native shards with
 `TABULA_RASA_REQUIRE_BROWSER_TESTS=1`. The workflow matrix owns the explicit
-module inventory: shard 1 runs alpha journeys, browser quality and workspace;
+module inventory: shard 1 runs core journeys, browser quality and workspace;
 shard 2 runs the remaining native modules. Group modules by observed duration,
 not case count; keep fixture lifetimes and all engine/viewport cases intact.
 CI policy checks that every `tests/postgres/test*browser*.py` module appears
@@ -66,8 +66,8 @@ Within each native shard, one session-scoped Playwright runtime lazily reuses
 one process per requested engine. Every test still owns fresh browser contexts,
 a disposable database and a loopback HTTP server. Context cleanup runs on
 success and failure; process reuse must not preserve private browser state.
-The alpha engine/viewport acceptance matrix retains the full journey, while
-its delayed-operation and injected-failure cases exercise extracted production
+The native core engine/viewport matrix retains the full journey, while
+its delayed-operation and injected-failure cases exercise shared journey
 steps with focused synthetic setup. See [native fixture and scenario
 ownership](../browser/TESTING.md#repeatable-local-and-ci-gate).
 

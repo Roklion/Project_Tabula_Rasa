@@ -1,4 +1,4 @@
-"""The hosted alpha journey uses the actual compiled browser/HTTP/PostgreSQL path."""
+"""The core journey uses the actual compiled browser/HTTP/PostgreSQL test path."""
 
 from uuid import uuid4
 from time import sleep
@@ -6,8 +6,8 @@ from time import sleep
 import pytest
 from playwright.sync_api import expect
 
-from tabula_rasa.deployment.alpha import ENGINES, WIDTHS, journey
-from tabula_rasa.deployment import alpha as alpha_gate
+from tests.postgres.browser_journey import ENGINES, WIDTHS, journey
+from tests.postgres import browser_journey as journey_support
 from tabula_rasa.application.documents import DocumentError
 from tabula_rasa.application.journals import JournalService
 from tabula_rasa.infrastructure.postgres.documents import PostgresReceiptRepository
@@ -69,14 +69,14 @@ def test_journey_with_slow_mutation(commercial, commercial_server, document_stor
             if slow_operation == 'journal_delete':
                 alpha.journals.create(entry_id=uuid4().hex, txn_date='2026-10-01',
                     description=marker + ' Reviewed journal', postings=journal_lines(prefix=uuid4().hex))
-                alpha_gate.delete_journal(page, origin=commercial_server, prefix='/api/v1/entities/alpha/',
+                journey_support.delete_journal(page, origin=commercial_server, prefix='/api/v1/entities/alpha/',
                     label='Edit 2026-10-01 · ' + marker + ' Reviewed journal')
                 assert not any(row['description'] == marker + ' Reviewed journal'
                                for row in alpha.journals.list(fresh=True))
             else:
                 row = alpha.transactions.create(transaction_id=uuid4().hex,
                     **expense(amount='11.25', description=marker + ' Expense'))
-                alpha_gate.receipt_workflow(page, row['id'], marker)
+                journey_support.receipt_workflow(page, row['id'], marker)
                 response = context.request.get('/api/v1/entities/alpha/transactions/' + row['id'] + '/receipts')
                 assert response.status == 200 and response.json()['items'] == []
                 assert document_store.upload_calls == 1
@@ -92,7 +92,7 @@ def test_receipt_failure_stops_with_safe_operation_and_retained_bytes(
         commercial, commercial_server, document_store, monkeypatch, failure, native_browser):
     alpha, beta, _, _ = commercial
     before_beta = beta.transactions.list(fresh=True)
-    monkeypatch.setattr(alpha_gate, 'RECEIPT_TIMEOUT_MS', 1_000)
+    monkeypatch.setattr(journey_support, 'RECEIPT_TIMEOUT_MS', 1_000)
     if failure in {'receipt_download', 'receipt_bytes'}:
         def fetch(*args, **kwargs):
             if failure == 'receipt_bytes':
@@ -118,8 +118,8 @@ def test_receipt_failure_stops_with_safe_operation_and_retained_bytes(
     with native_browser('chromium') as browser:
         options = dict(base_url=commercial_server, viewport={'width': 1440, 'height': 1000})
         with browser.new_context(**options) as context:
-            with pytest.raises(alpha_gate.AlphaError) as result:
-                alpha_gate.receipt_workflow(context.new_page(), row['id'], marker)
+            with pytest.raises(journey_support.JourneyError) as result:
+                journey_support.receipt_workflow(context.new_page(), row['id'], marker)
             assert result.value.operation == failure and 'PRIVATE' not in str(result.value)
             rows = [row for row in alpha.transactions.list(fresh=True) if row['description'].startswith(marker)]
             assert len(rows) == 1 and str(rows[0]['amount']) == '11.25'
@@ -152,7 +152,7 @@ def test_reference_create_waits_for_ui_to_process_confirmed_response(commercial,
                 };
             """)
             page = context.new_page()
-            identity = alpha_gate.create_reference(page, 'accounts', name)
+            identity = journey_support.create_reference(page, 'accounts', name)
             assert page.get_by_role('status').filter(has_text='Record created.').is_visible()
             page.goto('/accounts')
             expect(page.get_by_role('button', name='Edit ' + name, exact=True)).to_be_visible()
