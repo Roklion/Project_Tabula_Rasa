@@ -122,11 +122,6 @@ def test_workflow_selects_mode_before_migration_and_keeps_alpha_secrets_out_of_n
     for step in (named, alpha):
         assert step['env']['TABULA_RASA_ACCESS_MODE'] == '${{ vars.TABULA_RASA_ACCESS_MODE }}'
     assert not any('ALPHA' in key for key in named['env'] | job['env'])
-    alpha_job = load('commercial-alpha.yml')['jobs']['alpha']
-    # Environment vars are not available for job-level selection. Refuse on
-    # the runner before importing an older release's alpha tooling instead.
-    assert 'TABULA_RASA_ACCESS_MODE' not in alpha_job['if']
-    assert alpha_job['steps'][0]['run'] == 'test "$TABULA_RASA_ACCESS_MODE" = restricted_alpha'
 
 
 def test_verify_rejects_missing_mode_before_image_work(monkeypatch):

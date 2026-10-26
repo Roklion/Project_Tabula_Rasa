@@ -1,29 +1,30 @@
 # Release validation and Streamlit transition
 
-Trusted operators exercise synthetic data on the selected Render browser/API
-service and retained Neon staging database. Application services own bookkeeping,
-PostgreSQL owns ledger authority and DocumentStore owns bytes. Alpha workflows
-must not redirect to Streamlit or use its session/rerun state.
+Automated browser journeys exercise synthetic fixtures through the compiled browser,
+HTTP application services and disposable PostgreSQL. PostgreSQL owns ledger authority
+and DocumentStore owns bytes; workflows must not depend on Streamlit session/rerun state.
 
-Technical alpha, lasting owner use and external release are separate milestones.
-Owner use follows [controlled cutover](../accounting/CUTOVER.md); named-user
-deployment follows [hosted rollout](../identity/HOSTED_ROLLOUT.md). The matrix below
-defines the bounded alpha scope, rather than every available application route.
-Synthetic alpha requires neither paid provider features nor NAS automation;
-owner cutover and external release retain their separate evidence requirements.
+Named-user hosted acceptance follows [hosted rollout](../identity/HOSTED_ROLLOUT.md),
+including real-provider, rollback and manual browser/accessibility evidence. Owner use
+follows [controlled cutover](../accounting/CUTOVER.md). These are separate from automated
+regression coverage and the completed historical technical-alpha acceptance.
 
 ## Exact default workflow matrix
 
+Automated cases use a fixed synthetic identity and byte adapter. Hosted acceptance
+applies these workflows to authorized named fixtures and the real configured provider
+under hosted rollout; synthetic context or bytes cannot supply that hosted evidence.
+
 | Required workflow | New-stack surface and owner | Release evidence |
 | --- | --- | --- |
-| Resolve business/reference setup | Server-scoped entity context; Accounts, Categories, Payees, Tags (entity and reference workflows) | Fixed hosted Alpha context and rejected foreign entity; create two bank accounts, expense/income categories, payee and tag. Local/native two-business switching and isolation remain in browser testing. |
+| Resolve business/reference setup | Server-scoped entity context; Accounts, Categories, Payees, Tags (entity and reference workflows) | Fixed synthetic test context and rejected foreign entity; create two bank accounts, expense/income categories, payee and tag. Local/native two-business switching and isolation remain in browser testing. |
 | Ordinary transaction lifecycle | Transactions (core bookkeeping workflows and protected browser mutations) | Expense/income/transfer create, loaded edit, fresh confirmed delete; reference/tag selections; transfer excluded from income/expenses. |
 | Journal lifecycle | Add journal/Journals (core bookkeeping workflows and protected browser mutations) | Unbalanced save disabled; balanced posting create, edit, grouped ledger read and confirmed delete. |
 | Protected mutations | Existing loaded-baseline forms (protected browser mutations) | Two independently loaded browsers; stale edit and delete rejected, draft preserved, missing edit/delete baseline rejected, explicit latest-record reload. The broader reference/merge matrix remains in browser testing CI. |
 | Ledger/core reports | Transactions, Dashboard/Reports (core bookkeeping workflows) | Four complete entries visible; report deltas include journal expense and exclude transfer; Assets = Liabilities + Equity; mobile ledger fits its scroll region. |
-| Essential document flow | Saved transaction receipts (receipt workflows) | Real configured staging DocumentStore: upload/attach, exact-byte download, reference-only unlink, retained-file relink and final unlink. browser testing CI retains controlled partial-link/uncertain-upload/failure tests. |
+| Essential document flow | Saved transaction receipts (receipt workflows) | Synthetic fixture DocumentStore: upload/attach, exact-byte download, reference-only unlink, retained-file relink and final unlink. browser testing CI retains controlled partial-link/uncertain-upload/failure tests. |
 | Runtime/release | Version, readiness, deployment (deployment) | Exact release SHA, anonymous restrictions, routing, real DB-backed account read; ordered schema step and compatible application rollback evidence. |
-| Browser quality | Bounded browser testing suite plus staging journey | Chromium/Firefox/WebKit, 1440x1000 and 390x844; current-candidate CI, staging results and manual device record. |
+| Browser quality | Bounded browser testing suite plus selected hosted acceptance | Chromium/Firefox/WebKit, 1440x1000 and 390x844; current-candidate CI plus separate hosted results and manual device record. |
 
 Mileage (mileage workflows) is available as an additional manual log, but is not
 promoted into the default alpha gate. Recurring/mixed-use (recurring and mixed-use
@@ -31,86 +32,32 @@ workflows) and assets/depreciation (asset workflows) remain outside that gate. I
 release or live owner cutover owner matrix needs them, name the additional workflows and
 require the corresponding completed slice and evidence.
 
-## Repeatable retained-staging gate
+## Automated journey and supported deployment boundaries
 
-This gate requires explicit `TABULA_RASA_ACCESS_MODE=restricted_alpha` in the
-GitHub staging environment and runner; it refuses named staging before release
-checkout. After
-the approved transition, use [authenticated rollout](../identity/HOSTED_ROLLOUT.md)
-to overlay named identity checks on the existing matrix. Keep this gate and
-its synthetic context separate; do not restore Basic access to run it on a
-named owner/external deployment.
+The hosted synthetic staging CLI and **Technical alpha staging gate** dispatch workflow
+are retired. Do not restore Basic access on named staging to run historical tooling.
+Historical exact-candidate acceptance, provider limitations, receipt persistence and
+rollback evidence remain in the [owning technical-alpha
+discussion](https://github.com/Roklion/Project_Tabula_Rasa/issues/288#issuecomment-6117319756).
+That acceptance is unchanged and does not certify a new release.
 
-Reuse [deployment](../operations/DEPLOYMENT.md) for target binding, explicit migration,
-immutable-image integrity, ingress and temporary alpha credentials. The read-only
-deployment smoke proves connectivity; it is not the complete alpha journey.
-`.github/workflows/commercial-alpha.yml` adds an explicitly dispatched **Technical alpha
-staging gate**. It shares `commercial-deploy-staging` with promotion, has read-only
-GitHub permissions and receives only staging origin and alpha gate credentials. It has
-no database, migration or Render admin credential. It does not deploy, migrate or run
-ordinary pytest against retained staging. After validating the selected main release's
-CI, the workflow checks out that exact SHA and verifies `HEAD` before importing or
-running its alpha journey. Newer `main` journey code cannot establish evidence for an
-older deployed release.
+The reusable journey lives in `tests/postgres/browser_journey.py` and is exercised by
+`tests/postgres/test_browser_journey.py` against disposable real PostgreSQL, the compiled
+browser, actual HTTP/services, a synthetic byte adapter and a second entity. Required CI
+preserves Chromium/Firefox/WebKit at 1440x1000 and 390x844, bookkeeping and accounting
+assertions, stale/missing-baseline mutations, receipt retention, delayed mutations,
+failure handling and entity isolation. Helper guards remain covered separately. See
+[browser testing](TESTING.md) for local setup and CI ownership. There is no hosted write
+entry point in test support. Automated success does not establish real-provider,
+retained-data, rollback, physical-device or manual accessibility acceptance.
 
-Before dispatch:
-
-1. Promote the selected current-CI-approved immutable main image through deployment.
-   Record image index/runtime-manifest digests, exact release SHA, schema revision,
-   migration/promotion run and private target-binding reference.
-2. Configure the default runtime's durable Google Drive binding using
-   [Hosted synthetic receipt storage](../storage/STAGING_RECEIPTS.md). It loads only
-   the explicitly supplied `TABULA_RASA_ALPHA_DOCUMENTS_FILE`, validates the exact
-   environment/origin/entity and independent synthetic profile/folders, and
-   composes the existing document storage, document metadata repository and receipt workflows services. Without that file, receipts
-   remain unavailable; the availability screen cannot satisfy this gate. Do not
-   inject production grants or substitute an in-memory provider. Run the same
-   binding's read-only preflight and retain private setup evidence. Document-byte
-   recovery/versioning remains platform operations, with customer retention/lifecycle under external release and customer lifecycle.
-3. Confirm this is restricted synthetic staging, pause manual promotions/writers,
-   record accepted provider limits and authorize the bounded creates/removals.
-   Dispatch on `main` with the exact deployed SHA and `allow_synthetic_writes=true`.
-
-For an authorized manual invocation, privately export the same staging origin,
-username/password and `TABULA_RASA_ENVIRONMENT=staging`, then run from the root
-of a clean checkout at that exact release SHA. Verify `git rev-parse HEAD` matches
-the selected release; the checkout must include this alpha gate:
-
-```powershell
-python -m pip install playwright==1.62.0
-python -m playwright install chromium firefox webkit
-python -m tabula_rasa.deployment.alpha --release EXACT_40_CHARACTER_MAIN_SHA --allow-synthetic-writes
-```
-
-The runner reuses deployment's gate/routing/version/connectivity smoke before and after
-the six engine/viewport journeys. Each journey checks fixed writable synthetic context
-and receipt availability before any create. It uses unique `Alpha-<run>` names and the
-browser's stable create identities; it never retries a failed write. Successful journeys
-remove only their own financial entries through fresh loaded forms. They retain
-reference records and an unlinked synthetic receipt in Unreferenced receipts. A failed
-journey may retain its own financial entries; inspect that run before another attempt.
-There is no broad cleanup, database reset, byte deletion, simulated rollback or
-private-data capture. platform operations owns disposition of retained synthetic
-artifacts.
-
-Output contains only random run marker, release, engine, viewport, fixed operation label
-and status. A failed case records its engine, width/height and operation (for example,
-`receipt_download`, `receipt_bytes`, `receipt_unlink` or `receipt_relink`).
-Configuration and shared smoke failures have no journey engine/viewport and use their
-own operation labels. Receipt completion assertions and download initiation wait at most
-30 seconds, matching the browser action budget rather than the five-second default
-assertion budget. A timeout still stops the gate without retrying; inspect the retained
-run before another attempt. Browser/provider exceptions are suppressed into bounded
-guidance. No screenshots, traces, response bodies, credentials, ledger data or receipts
-enter Actions artifacts/logs. A failed case fails the gate. `alpha_browser_passed`
-establishes the bounded staging suite only; it is not complete technical-alpha
-validation acceptance.
-
-The exact same journey runs in `tests/postgres/test_browser_alpha.py` against disposable
-real PostgreSQL through the compiled browser and actual HTTP/services, with a synthetic
-byte adapter and a second entity. CI requires it alongside browser testing's
-failure/accessibility/concurrency suites. This local/CI evidence cannot establish real
-provider integration, retained staging, rollback rehearsal or real devices.
+[Development promotion](../operations/DEPLOYMENT.md) remains supported with restricted-alpha
+authentication, its fixed synthetic identity and authenticated read-only smoke checks.
+Target binding, explicit migrations and immutable-image verification retain their
+existing owners. [Synthetic receipt storage](../storage/STAGING_RECEIPTS.md) remains
+explicitly configured per environment with independent grant/profile/folder custody and
+isolation/security checks. Native fixtures continue to use `TrustedDevelopmentContext`.
+These consumers do not require the retired hosted acceptance runner.
 
 ## Compatible application rollback rehearsal
 
@@ -120,9 +67,9 @@ verified retained prior digest with the same schema head and passing main CI, an
 authorize a controlled staging maintenance window. Record current and prior
 digests/release IDs, then dispatch the normal staging promotion to the prior compatible
 digest. Its ordered migration check, registry/Render integrity, readiness and browser
-smoke must pass. Promote the selected alpha candidate again, verify the same evidence,
-and run its complete alpha gate. Retain both workflow links and operator observations
-proving the retained DB/receipt data survived. A real rollback deployment is required;
+smoke must pass. Promote the selected candidate again, verify the same evidence, and
+repeat the selected named-user hosted acceptance checks. Retain both workflow links
+and operator observations proving the retained DB/receipt data survived. A real rollback deployment is required;
 mocks or a repeated current-image promotion do not rehearse rollback.
 
 Do not introduce a bad bookkeeping write or destructive schema failure just to test
@@ -195,14 +142,15 @@ owner-cutover prerequisite.
 
 ## Restricted-alpha support and retirement
 
-Named staging acceptance does not retire independently supported synthetic paths.
+Retiring hosted synthetic acceptance does not retire independently supported
+development and test paths.
 Provider recovery and wider security/operational acceptance remain separate.
 
 | Capability | Current callers and retention condition |
 | --- | --- |
 | `http/alpha.py`, `alpha_documents.py` | `http/app.py` gates restricted hosted requests; `http/composition.py` loads the synthetic document binding. Retain focused HTTP/native document tests until the affected environments and document consumers have an explicit replacement or retirement decision. |
 | `TrustedDevelopmentContext` | Composition supports loopback development and gated hosted synthetic scope; native API/browser fixtures reuse it. Retain development and isolation coverage until a supported replacement or explicit retirement. |
-| `deployment/alpha.py`, `commercial-alpha.yml` and focused fixtures/tests | The restricted-alpha journey remains repeatable and refuses named staging before checkout. Retain useful synthetic journeys; never switch named staging back to Basic access to run them. |
+| `tests/postgres/browser_journey.py` and its native/helper tests | Reusable disposable-fixture journey; preserve all native cases and CI partitions. Hosted synthetic orchestration and dispatch are retired. |
 
 The [single-use staging schema bridge](../operations/DEPLOYMENT.md#retired-staging-bridge-0012-to-0014)
 has retired separately. Actual multi-profile authority and legacy writer retirement
@@ -222,8 +170,8 @@ Do not carry those results forward as acceptance of a different release or stage
 | Deployment | Exact approved environment/binding reference, promotion/smoke links and observed version/readiness |
 | Drive custody | Independent staging grant and managed folders, protected installation and preflight; private bindings stay private |
 | Receipt journey | Authorized upload/attach, exact-byte download, reference-only unlink, retained-file relink and restart persistence |
-| Six-case suite | Exact deployed checkout, explicit synthetic-write consent, retained marker, workflow URL and every engine/viewport result |
-| Compatible rollback | Prior/candidate compatible image/schema, maintenance window, both smoke links, retained-data observations and candidate suite rerun |
+| Browser coverage | Current-head native CI for every engine/viewport; separate authorized named-user hosted workflow results under hosted rollout |
+| Compatible rollback | Prior/candidate compatible image/schema, maintenance window, both smoke links, retained-data observations and candidate hosted checks repeated |
 | Manual quality | Tester/date, actual browser/device versions, touch/keyboard, zoom/reflow, focus and the accepted accessibility scope; record exclusions explicitly rather than inventing observations |
 | Provider/recovery limits | Actual plan/region/capacity/quota/access, DB/byte protection, observed limitations, accepted gaps and responsible owner |
 | Routing | Every required workflow has a verified implementation/selected-runtime path or an explicit approved exclusion with an issue owner |

@@ -14,8 +14,8 @@ reusable procedure does not carry a second checklist of live setup status.
 
 `http/config.py` owns mode validation; `deployment/release.py` owns immutable
 promotion, bounded provider uncertainty and schema compatibility. Anonymous named
-smoke and the restricted-alpha journey share that promotion lifecycle while
-retaining their distinct authentication boundaries.
+smoke and authenticated read-only development smoke share that promotion lifecycle
+while retaining their distinct authentication boundaries.
 
 For retained-provider-browser login failures, follow [named-user triage and
 retained/clean
@@ -158,16 +158,14 @@ longer a rollback candidate; the first named release has no prior named-image
 rollback until a compatible second named release is retained. Record that
 limitation; do not conceal it with a schema downgrade or synthetic access.
 
-The old **Technical alpha staging gate** is restricted to `restricted_alpha` by
-a runner preflight before release checkout and by runner configuration. The
-environment-specific variable is checked after the job starts, following
-[GitHub's environment-variable availability rules](https://docs.github.com/en/actions/reference/workflows-and-actions/variables#configuration-variable-precedence).
-Do not feed it named cookies,
-remove that guard or re-enable Basic just to obtain a green run. Reuse its
-[six-case accounting/document workflow matrix](../browser/RELEASE_VALIDATION.md#exact-default-workflow-matrix)
-as the workflow evidence checklist on named fixtures; add the identity cases
-below. The existing native identity/workspace/security suites own regression
-coverage; this handoff does not introduce a second accounting matrix.
+The hosted synthetic **Technical alpha staging gate** and its CLI runner are retired.
+Do not re-enable Basic access or use synthetic test contexts on named staging. Reuse the
+[core accounting/document workflow matrix](../browser/RELEASE_VALIDATION.md#exact-default-workflow-matrix)
+as the workflow evidence checklist on named fixtures; add the identity cases below.
+The reusable six-case engine/viewport journey remains automated against disposable
+PostgreSQL in native CI. It does not replace named-user acceptance, real-provider
+verification, compatible rollback or manual browser/accessibility evidence. The existing
+native identity/workspace/security suites retain their regression coverage.
 
 ## Hosted rehearsal and expected results
 
@@ -256,7 +254,7 @@ this guide or passing deployment smoke authorizes none of the remaining live ope
 Run from the repository root in its declared Python 3.12 development environment:
 
 ```text
-python -m pytest tests/http tests/test_oidc.py tests/tooling/test_named_rollout.py tests/tooling/test_commercial_deployment.py tests/tooling/test_technical_alpha.py tests/tooling/test_release_images.py tests/tooling/test_ci_workflow.py -q
+python -m pytest tests/http tests/test_oidc.py tests/tooling/test_named_rollout.py tests/tooling/test_commercial_deployment.py tests/tooling/test_browser_journey_support.py tests/tooling/test_release_images.py tests/tooling/test_ci_workflow.py -q
 python -m pytest tests/postgres/test_identity_http.py tests/postgres/test_authorization_http.py tests/postgres/test_security_acceptance.py tests/postgres/test_identity_browser.py tests/postgres/test_workspace_browser.py -q
 python -m ruff check .
 python -m pip check
