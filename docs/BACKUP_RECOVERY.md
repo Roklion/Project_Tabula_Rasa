@@ -53,7 +53,11 @@ historical associations from Drive metadata. If preparation or validation is
 incomplete, no backup is created.
 
 For a supported format-13 workbook with blank receipt-reference cells, recover
-old Drive-only associations once before normal operation when needed:
+old Drive-only associations once before normal operation when needed. First follow
+[explicit source preparation](accounting/SHEETS_MIGRATION.md#explicit-source-preparation-tools):
+obtain exact-source approval before conversion and before the final migration
+freeze. Never use this command to modify an accepted frozen source or repair an
+active PostgreSQL ledger:
 
 ```powershell
 python scripts\migrate_receipt_associations.py --secrets .streamlit\secrets.toml --profile PROFILE_KEY
@@ -406,8 +410,9 @@ ledger data, full account addresses, or identifiers in GitHub or the repository.
 Application credentials and configuration are not in backup archives. Rebuild
 after a deployment loss by restoring protected app and profile configuration,
 validating each workbook, reconnecting unavailable Drive grants, confirming
-storage roots and children, exporting hosted Secrets, and validating a current
-backup.
+storage roots and children, and validating a current backup. Commercial grants
+require separate approved encrypted provisioning; Streamlit Cloud Secrets export
+is retired.
 
 ## Troubleshooting
 
@@ -424,8 +429,9 @@ inventory already exists in the current local ISO week.
 
 ### Cloud authorization cannot refresh
 
-Reconnect the profile in local Account settings, confirm folders, export
-hosted Secrets, and retry.
+Reconnect the profile in local Account settings, confirm folders, and retry.
+For commercial grants, follow [connection staging](identity/CONNECTIONS_AND_CLAIMS.md)
+and Owner confirmation separately.
 
 ### Restore refuses the target
 

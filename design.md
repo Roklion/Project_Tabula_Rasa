@@ -1609,14 +1609,13 @@ selected business and legacy local administration do not grant support authority
 #### Purpose and availability
 
 Account settings is the local administration home for business profiles,
-credentials, Drive storage, recovery metadata, and hosted Secrets handoff. It
-requires loopback-only availability and application-password reauthentication.
+credentials, Drive storage, and recovery metadata. It requires loopback-only availability and application-password reauthentication.
 It is unavailable for writable administration in hosted environments.
 
 Organize the surface as Business profiles, Google setup, Recovery, and
-Security & deployment information. The last section is informational except
-for Generate hosted Secrets file, which creates a local handoff but cannot
-write to or verify hosted Streamlit Secrets.
+Security & deployment information. The last section is informational.
+Streamlit Cloud Secrets generation/export is retired; commercial deployment uses
+separate server secret provisioning and authorized connection activation.
 
 #### Business profiles
 
@@ -1679,7 +1678,7 @@ protection. Enabled records use layout profile-root automatically. Saving
 these local metadata fields must not access Drive or verify DSM, and equivalent,
 shared, or nested normalized NAS destinations are rejected.
 
-Changing only local backup or Synology metadata does not change hosted Secrets.
+Local backup and Synology metadata remain local configuration.
 Changing a Drive root while recovery is enabled is blocked until the recovery
 record is disabled and saved.
 
@@ -1687,17 +1686,16 @@ record is disabled and saved.
 
 State that the application password grants access to every configured profile,
 profile keys are configuration identifiers rather than users, local profile
-storage is plaintext protected by the operating system, and hosted changes
-require the documented export and replacement process. Generate hosted Secrets
-reloads and validates profiles, uses an explicit allowlist, writes a new
-ignored owner-only file without overwriting an existing one, and reports only
-its path.
+storage is plaintext protected by the operating system, and commercial provider
+grants require separately approved encrypted server provisioning. Do not provide
+credential export controls or direct users to paste local configuration into
+Streamlit Cloud Secrets.
 
 #### Acceptance criteria
 
-All existing profile, credential, Drive, storage, recovery, readiness, and
-hosted-export functions remain discoverable. The page does not imply
-per-profile permissions, DSM monitoring, or in-app restore.
+Retained profile, credential, Drive, storage, recovery and readiness functions
+remain discoverable. Security information exposes no credential export action.
+The page does not imply per-profile permissions, DSM monitoring, or in-app restore.
 
 ## Component contracts
 

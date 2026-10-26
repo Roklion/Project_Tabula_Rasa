@@ -279,9 +279,10 @@ without changing ledger data:
 python scripts\validate_app_google.py
 ```
 
-This checks both split local secrets plus business_profiles.json and the
-combined hosted Secrets projection. Validate one workbook, its required headers,
-and its managed Payees records with:
+This checks the local split app secrets and business_profiles.json configuration.
+Commercial runtime verification follows the separate hosted identity and
+deployment procedures. Validate one workbook, its required headers, and its
+managed Payees records with:
 
 ```powershell
 python scripts\validate_google_sheets.py --profile PROFILE_KEY

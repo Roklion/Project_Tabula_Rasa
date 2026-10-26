@@ -9,8 +9,9 @@ same profile OAuth grant authorizes both APIs. See
 The HTTP technical-alpha runtime uses the same Drive client with a separately
 authorized synthetic profile and storage root. Follow
 [Hosted synthetic receipt storage](storage/STAGING_RECEIPTS.md) for its explicit
-server secret-file loader and read-only preflight. Streamlit Secrets export does
-not configure the Render API runtime.
+server secret-file loader and read-only preflight. Named commercial connections
+use [encrypted operator provisioning](identity/CONNECTIONS_AND_CLAIMS.md); local
+configuration never configures the Render API runtime automatically.
 
 ## Configuration model
 
@@ -169,15 +170,11 @@ powershell -ExecutionPolicy Bypass -File scripts\run_local_profile_admin.ps1
 7. Select Provision storage folders. The app creates or reuses the Receipts
    and Ledger Backups children.
 8. Repeat for each profile.
-9. Export and replace hosted Streamlit Secrets:
 
-   ```powershell
-   python scripts\export_streamlit_secrets.py
-   ```
-
-The hosted app cannot safely write profile changes back to Streamlit Secrets.
-Perform connection, reconnection, folder selection, and disconnection locally,
-then export the complete hosted projection. Disconnection removes only this
+Streamlit Cloud Secrets export is retired. Local connection, reconnection,
+folder selection and disconnection affect local configuration only. Commercial
+grants require the separately approved staging/activation procedure. Local
+disconnection removes only this
 profile's local grant and folder settings, disabling Sheets and Drive. It does
 not delete files or revoke Google's shared account/application grant, which
 could invalidate other profiles using the same account. To revoke the whole
@@ -194,8 +191,8 @@ After publishing:
 
 1. Reconnect every affected profile.
 2. Confirm or reselect its storage root and managed children.
-3. Export the local profiles again.
-4. Replace the hosted Secrets document.
+3. For commercial use, stage the approved replacement grant and confirm it as
+   the business Owner through the connection procedure.
 
 This replaces refresh tokens issued under Testing. The drive.file scope is
 non-sensitive, though brand verification may still be required for public
@@ -220,12 +217,12 @@ application branding.
 ### Grant revoked or refresh fails
 
 Reconnect that profile in local Account settings. Both Sheets and Drive depend
-on this connection. Validate its ledger and configured folders, then export.
+on this connection. Validate its ledger and configured folders. Restage commercial grants separately.
 
 ### Drive-owning account changes
 
 Disconnect the old grant, reconnect with the intended account, confirm or
-provision destinations, and export hosted Secrets. Existing folder selections
+provision destinations. Restage commercial grants separately. Existing folder selections
 remain only when the new account can validate them; otherwise select new
 destinations.
 
@@ -241,7 +238,7 @@ files.
 1. Update local app-wide secrets.
 2. Confirm existing grants can refresh.
 3. Reconnect profiles whose grants were invalidated.
-4. Export and replace hosted Secrets.
+4. Restage affected commercial grants through approved encrypted provisioning.
 5. Retire the old secret only after validation succeeds.
 
 ## Security requirements
@@ -281,17 +278,18 @@ operations.
 ### The grant expires every seven days
 
 The project or original grant is still in Testing. Publish it to production,
-reconnect the profile, and export hosted Secrets.
+reconnect the profile, and restage affected commercial grants separately.
 
 ### A selected folder cannot be validated
 
 Use a regular folder owned by the authorized account. Do not use a Shared with
 me item, shortcut, Computers location, or Workspace Shared Drive.
 
-### Hosted folders or tokens are stale
+### Commercial folders or tokens are stale
 
-Run the exporter after the local change and replace the complete hosted Secrets
-document. Hosted Streamlit cannot update these values itself.
+Follow [connection staging and reconnect](identity/CONNECTIONS_AND_CLAIMS.md).
+Local profile changes alone do not replace an encrypted commercial grant or
+change its accepted document scope.
 
 ## Implementation map
 
@@ -301,7 +299,6 @@ document. Hosted Streamlit cannot update these values itself.
 | Callback and per-profile administration | tabula_rasa/google_drive_admin.py |
 | Browser Picker | tabula_rasa/google_drive_picker.py |
 | Local credential persistence | tabula_rasa/local_profile_store.py |
-| Hosted Secrets export | scripts/export_streamlit_secrets.py |
 
 ## Official references
 

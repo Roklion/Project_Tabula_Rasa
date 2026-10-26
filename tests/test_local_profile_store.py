@@ -3,12 +3,10 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
 from tabula_rasa.business_profiles import load_business_profiles
-from tabula_rasa.google_drive import GoogleDriveConfigurationError
 from tabula_rasa.local_profile_store import (
     LOCAL_PROFILE_ADMIN_ENV,
     LocalProfileStoreError,
@@ -17,7 +15,6 @@ from tabula_rasa.local_profile_store import (
     local_profile_admin_available,
     local_profile_admin_enabled,
     merged_profile_secrets,
-    project_hosted_profiles,
     save_local_profile,
     suggest_profile_key,
     update_local_profile,
@@ -40,26 +37,6 @@ def settings(
 
 
 class TestLocalProfileStore:
-    def test_hosted_projection_preserves_invalid_drive_profile_key_context(self) -> None:
-        profiles = {
-            "north": {
-                "name": "North Shop",
-                "spreadsheet_id": "north-sheet",
-
-                "google_drive": {},
-            }
-        }
-
-        with patch(
-            "tabula_rasa.local_profile_store.validate_drive_profile_settings",
-            side_effect=GoogleDriveConfigurationError("missing storage root"),
-        ):
-            with pytest.raises(
-                GoogleDriveConfigurationError,
-                match="profile 'north'.*missing storage root",
-            ):
-                project_hosted_profiles(profiles)
-
     @pytest.mark.parametrize(
         ("business_name", "expected"),
         (

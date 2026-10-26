@@ -59,6 +59,62 @@ staging, integrate required schema changes and inspect the exact head. After a r
 deployment, the baseline is immutable. Do not regenerate it to absorb later repository
 work.
 
+## Explicit source preparation tools
+
+Profile/OAuth and receipt-association conversions are separate, explicit operator
+commands. They do not convert historical workbook/archive schemas and must never
+run in startup, ordinary reads, backup creation or restore. Current runtime and
+migration still accept only the frozen format-13 workbook/backup contract.
+
+| Script and supported consumer | Disposition and remaining owner |
+| --- | --- |
+| `scripts/migrate_profile_oauth.py`: an operator holding a version-1 local profile document who still needs the OAuth-only internal configuration | **Retain, retirement deferred.** Converts a protected copy to the current profile document, removing obsolete Sheets service-account fields while preserving profile keys, grants, workbook IDs and destinations. Normal runtime rejects version 1. [OAuth migration](../OAUTH_MIGRATION.md) owns preparation and validation; identity/connection maintainers own credential custody. This is not named-user onboarding, an entity claim or a ledger migration. |
+| `scripts/migrate_receipt_associations.py`: an operator preparing a supported current-format Sheets source with blank receipt-reference cells and old Drive-only associations | **Retain, retirement deferred.** Writes associations into blank cells and may backfill missing Drive integrity metadata. Explicit empty lists remain unlinked; mixed-use attachments belong to their source/projection pair. [Sheets recovery](../BACKUP_RECOVERY.md) owns preparation; migration/cutover owners must accept the final source before extraction. This does not update already-migrated PostgreSQL records. |
+
+The [accepted cleanup handoff](https://github.com/Roklion/Project_Tabula_Rasa/issues/377)
+reports no additional legacy manual-tool/recovery consumers. That inventory does
+not by itself authorize changing a frozen source or prove either tool obsolete
+for retained source preparation. [Identity coordination](https://github.com/Roklion/Project_Tabula_Rasa/issues/222),
+[database migration](https://github.com/Roklion/Project_Tabula_Rasa/issues/220)
+and [live owner cutover](https://github.com/Roklion/Project_Tabula_Rasa/issues/303)
+retain the per-script decision: confirm no remaining approved source/operator
+need, or approve targeted retirement with preparation instructions. Until then,
+keep both entry points, focused regressions and their current-format-only
+runtime boundary. No new conversion engine or automatic compatibility path is
+required.
+
+Before using either tool:
+
+1. Confirm the exact profile, workbook, human Google grant, receipt folder and
+   current authority from protected operator configuration. CLI profile selection
+   is a selector, not authorization. Use an explicit `--profile` for receipt
+   conversion even for a single configured profile.
+2. Preserve protected configuration/source and receipt metadata needed for
+   recovery. Stop relevant writers. Work on a protected copy for profile-file
+   conversion; never print or publish grants or private source records.
+3. For receipt conversion, obtain approval for both Sheets association writes and
+   any Drive checksum metadata backfill. Do this **before** freezing/extracting
+   the final migration source. Do not run it against an accepted frozen source
+   as routine cleanup, or use it to repair an active PostgreSQL ledger.
+4. If source preparation is still required after acceptance, stop and obtain a
+   separately reviewed plan. Any changed source needs fresh extraction/load and
+   acceptance where still permitted by the cutover procedure. After PostgreSQL
+   divergence, never reload the frozen source or reactivate Sheets; use the
+   PostgreSQL/document recovery or correction procedures.
+5. Validate the converted copy and intended profile bindings before installation.
+   For associations, inspect expected links and preserved explicit unlinks, then
+   use current-format validation and whole-profile acceptance. Conversion success
+   alone neither authorizes cutover nor proves complete document recovery.
+6. Keep the other business's configuration, grants and sources unchanged. Retain
+   source workbooks, receipt bytes, backups and deployed schema history; script
+   retirement never authorizes deleting these artifacts.
+
+`tests/test_sheets_oauth.py` verifies conversion preservation, runtime rejection
+of old configuration and two-profile grant/workbook isolation.
+`tests/migrations/test_receipt_associations.py` verifies blank-cell conversion,
+explicit-unlink preservation, mixed-use ownership, integrity backfill and stale
+write refusal. These synthetic checks do not attest to operator completion.
+
 ## Operator procedure
 
 Install the development/PostgreSQL dependencies. Use the existing approved

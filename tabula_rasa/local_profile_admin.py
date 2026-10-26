@@ -200,7 +200,4 @@ def render_local_profile_admin(
         )
 
     with security_tab:
-        render_security_deployment_info(
-            base_secrets,
-            store_path=store_path,
-        )
+        render_security_deployment_info()
