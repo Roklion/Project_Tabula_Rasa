@@ -155,12 +155,13 @@ API workflows](RUNTIME.md) retains implementation ownership and approved exclusi
 Local implementation and synthetic checks do not establish deployment, real-provider
 verification or live-cutover approval.
 
-Choose one authoritative backend per entity through the existing cutover contract. An
-unmigrated Sheets entity keeps its authorized internal runtime. A PostgreSQL entity uses
-supported new-stack surfaces; unavailable workflows remain unavailable until migrated.
-Do not send it to stale Sheets to finish an action, dual-write, or re-enable Sheets
-after PostgreSQL divergence. live owner cutover owns private live execution; synthetic
-alpha performs no authority activation.
+PostgreSQL bookkeeping uses the supported browser/API surfaces and the existing
+cutover authority contract. Retained Sheets tooling supports authorized format-13
+source migration, archive recovery and local administration; it does not provide a
+bookkeeping runtime. Unavailable workflows remain unavailable until implemented.
+Do not route bookkeeping back to stale Sheets to finish an action, dual-write, or
+re-enable Sheets after PostgreSQL divergence. Live owner cutover owns private live
+execution; synthetic alpha performs no authority activation.
 
 ## Streamlit retirement criterion
 
