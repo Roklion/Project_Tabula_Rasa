@@ -8,8 +8,8 @@ and rollback for the shared browser/API runtime. It extends
 
 [Existing entity claims](../identity/CONNECTIONS_AND_CLAIMS.md) map named ownership
 without reimporting books; live execution and authority activation still require
-explicit approval. Streamlit remains the internal Sheets edition and has no
-backend picker.
+explicit approval. Streamlit now serves local operator administration only;
+bookkeeping uses PostgreSQL and has no Sheets fallback.
 
 ## Reuse and ownership
 
@@ -112,13 +112,13 @@ uses the canonical entity ID; the document adapter continues using the original
 profile key for Google OAuth, receipt appProperties, inventory and provider
 caches. Existing files are not retagged or moved.
 
-The legacy `create_sheets_application` still defaults to Sheets for existing internal
-profiles without an authority entry, and refuses a configured maintenance/PostgreSQL
-profile before workbook initialization. Existing cached Sheets graphs do not consult
-PostgreSQL on each Google write: stop/drain those processes and jobs before final
-extraction and restart them with the new trusted configuration. Backend selection is an
-operational composition decision, not tenant authentication or membership. identity and
-tenancy owns commercial authorization.
+Sheets application composition and bookkeeping writers are retired. Trusted composition
+rejects Sheets/maintenance selections; it never falls back from PostgreSQL. The local
+Streamlit entry point retains only operator Google/recovery administration and performs
+no startup initialization or recurring generation. Explicit format-13 source and
+recovery CLI commands remain available, but must not modify an accepted frozen source
+or reactivate it after committed PostgreSQL divergence. Backend selection is an
+operational composition decision; named identity and tenancy own authorization.
 
 ## Activation evidence and operator decision points
 

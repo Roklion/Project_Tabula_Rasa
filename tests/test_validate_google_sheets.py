@@ -10,6 +10,7 @@ import pytest
 from scripts.validate_google_sheets import validate
 from tabula_rasa.storage import GoogleSheetsStorage, StorageValidationError
 from tests.fakes import FakeWorkbook
+from tests.sheets_fixtures import account as fixture_account, category as fixture_category, payee as fixture_payee, tag as fixture_tag, transaction as fixture_transaction, mileage as fixture_mileage
 
 
 PROFILE_DOCUMENT = {
@@ -26,11 +27,11 @@ PROFILE_DOCUMENT = {
 def populated_workbook() -> FakeWorkbook:
     workbook = FakeWorkbook()
     storage = GoogleSheetsStorage(workbook, sleeper=lambda _: None)
-    account = storage.create_account("Checking", "Bank")
-    category = storage.create_category("Software", "Expense")
-    payee = storage.create_payee("Vendor")
-    tag = storage.create_tag("Client work")
-    storage.create_transaction(
+    account = fixture_account(storage, "Checking", "Bank")
+    category = fixture_category(storage, "Software", "Expense")
+    payee = fixture_payee(storage, "Vendor")
+    tag = fixture_tag(storage, "Client work")
+    fixture_transaction(storage,
         txn_date="2026-07-29",
         kind="Expense",
         amount="12.50",
@@ -39,7 +40,7 @@ def populated_workbook() -> FakeWorkbook:
         payee_id=payee["id"],
         tag_ids=[tag["id"]],
     )
-    storage.create_mileage_trip(
+    fixture_mileage(storage,
         trip_date="2026-07-29",
         miles="5",
         start_location="Office",

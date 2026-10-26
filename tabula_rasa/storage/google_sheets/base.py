@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
-from functools import wraps
 from threading import Lock, RLock
-from typing import Any, TypeVar
+from typing import Any
 import weakref
 
 @dataclass(frozen=True)
@@ -14,8 +12,6 @@ class _WorkbookLockBundle:
     """Process-local mutation locks for one configured workbook."""
 
     ledger: RLock
-    payee: RLock
-    tag: RLock
 
 
 _WORKBOOK_LOCK_REGISTRY_LOCK = Lock()
@@ -52,7 +48,7 @@ def _workbook_lock_bundle(
         bundle = _WORKBOOK_LOCK_REGISTRY.get(identity)
         if bundle is None:
             bundle = _WorkbookLockBundle(
-                ledger=RLock(), payee=RLock(), tag=RLock()
+                ledger=RLock()
             )
             _WORKBOOK_LOCK_REGISTRY[identity] = bundle
         return bundle
@@ -64,21 +60,4 @@ class _StoredRow:
     values: dict[str, str]
 
 
-T = TypeVar("T")
-
-
-def _workbook_mutation_lock(operation: Callable[..., T]) -> Callable[..., T]:
-    """Serialize mutations that coordinate row or reference state in a workbook."""
-
-    @wraps(operation)
-    def locked(self: Any, *args: Any, **kwargs: Any) -> T:
-        with self._workbook_locks.ledger:
-            return operation(self, *args, **kwargs)
-
-    return locked
-
-
-__all__ = [
-    "_StoredRow",
-    "_workbook_mutation_lock",
-]
+__all__ = ["_StoredRow"]

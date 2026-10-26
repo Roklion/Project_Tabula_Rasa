@@ -15,7 +15,7 @@ from tabula_rasa.http.app import create_app
 from tabula_rasa.http.config import HttpSettings
 from tabula_rasa.http.context import DenyContext, RequestContext
 from tests.test_financial_csv import csv_rows, financial_snapshot
-from tests.test_journal_exports import JOURNAL_COLUMNS, TRANSACTION_COLUMNS
+from tests.financial_csv_support import JOURNAL_COLUMNS, TRANSACTION_COLUMNS
 
 
 PREFIX = "/api/v1/entities/alpha/"

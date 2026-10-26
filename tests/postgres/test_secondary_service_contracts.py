@@ -1,40 +1,19 @@
-"""Independent expected workflows execute through the same services on both adapters."""
+"""Independent expected workflows execute through the supported PostgreSQL services."""
 
 from datetime import date
 from decimal import Decimal
 
 import pytest
 
-from tabula_rasa.application.services import assemble_application_services
 from tabula_rasa.errors import StorageConflictError, StorageError
-from tabula_rasa.infrastructure.google_sheets import (
-    GoogleSheetsLedgerSetupRepository, GoogleSheetsAccountRepository, GoogleSheetsCategoryRepository,
-    GoogleSheetsPayeeRepository, GoogleSheetsTagRepository, GoogleSheetsTransactionRepository, GoogleSheetsJournalRepository,
-)
-from tabula_rasa.infrastructure.google_sheets_assets import GoogleSheetsAssetRepository
-from tabula_rasa.infrastructure.google_sheets_mixed_use import GoogleSheetsMixedUseRepository
-from tabula_rasa.infrastructure.google_sheets_recurring import GoogleSheetsRecurringRepository
 from tabula_rasa.infrastructure.postgres.composition import create_postgres_services
 from tabula_rasa.infrastructure.postgres.reference_data import PostgresLedgerSetupRepository
-from tabula_rasa.storage import GoogleSheetsStorage
-from tests.fakes import FakeWorkbook
 
 
-@pytest.fixture(params=['sheets', 'postgres'])
-def secondary_services(request):
-    if request.param == 'postgres':
-        database = request.getfixturevalue('database')
-        PostgresLedgerSetupRepository.create_entity(database, 'synthetic', 'Synthetic')
-        return create_postgres_services(database, 'synthetic')
-    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
-    return assemble_application_services(
-        'synthetic', ledger_repository=GoogleSheetsLedgerSetupRepository(storage),
-        account_repository=GoogleSheetsAccountRepository(storage), category_repository=GoogleSheetsCategoryRepository(storage),
-        payee_repository=GoogleSheetsPayeeRepository(storage), tag_repository=GoogleSheetsTagRepository(storage),
-        transaction_repository=GoogleSheetsTransactionRepository(storage), journal_repository=GoogleSheetsJournalRepository(storage),
-        asset_repository=GoogleSheetsAssetRepository(storage), mixed_use_repository=GoogleSheetsMixedUseRepository(storage),
-        recurring_repository=GoogleSheetsRecurringRepository(storage),
-    )
+@pytest.fixture
+def secondary_services(database):
+    PostgresLedgerSetupRepository.create_entity(database, 'synthetic', 'Synthetic')
+    return create_postgres_services(database, 'synthetic')
 
 
 def test_recurring_conversion_repetition_month_end_and_mixed_allocation_parity(secondary_services):

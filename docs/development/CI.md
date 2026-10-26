@@ -10,7 +10,7 @@ methodology; dated measurements and review progress belong in GitHub discussions
 
 | Family | Owner and isolation | Budget |
 | --- | --- | --- |
-| Python unit/application, supported Sheets/Streamlit/OAuth/profile/backup/recovery contracts, NAS client/TLS/encryption/isolated-restore smoke, tooling and Python lint | `python-suite`: complete discovery without filters; synthetic providers/temporary files | 30 min |
+| Python unit/application, retained operator/OAuth/profile/format-13 backup/recovery contracts, NAS client/TLS/encryption/isolated-restore smoke, tooling and Python lint | `python-suite`: complete discovery without filters; synthetic providers/temporary files | 30 min |
 | PostgreSQL accounting/repository/API, authorization/session/entity isolation, concurrency/idempotency and migration contracts | Same Python job; disposable PostgreSQL 18.6 and per-test databases | Included above |
 | Windows environment bootstrap | `windows-tooling`: PowerShell/Python 3.12 | 15 min |
 | Frontend unit/fast checks, OpenAPI/client drift, TypeScript/build, HTTP/Git preview contracts and deployment-image inspection | `frontend-contract`: Node 24/Python 3.12; no database/browser installation | 15 min |

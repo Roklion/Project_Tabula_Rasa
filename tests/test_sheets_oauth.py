@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.sheets_fixtures import account as fixture_account
 
 import json
 from unittest.mock import Mock, patch
@@ -6,7 +7,6 @@ from unittest.mock import Mock, patch
 import pytest
 from google.auth.exceptions import RefreshError
 
-from scripts.migrate_profile_oauth import convert_profile_document
 from tabula_rasa.business_profiles import load_business_profiles, select_profile_secrets
 from tabula_rasa.google_drive.errors import GoogleDriveConfigurationError
 from tabula_rasa.google_drive.oauth import profile_google_credentials
@@ -199,21 +199,6 @@ def test_failed_picker_selection_keeps_previous_profile(tmp_path, failure):
     assert path.read_bytes() == before
 
 
-def test_one_time_conversion_removes_keys_preserves_grants_and_destinations():
-    settings = profile()
-    settings.pop("google_drive_oauth")
-    settings["google_drive"]["storage_root"] = {"id": "root123456", "name": "Storage"}
-    settings["gcp_service_account"] = {"private_key": "private-material"}
-    document = {"version": 1, "business_profiles": {"north": settings}}
-    converted = convert_profile_document(document)
-    assert converted["version"] == 2
-    result = converted["business_profiles"]["north"]
-    assert result["google_drive"] == settings["google_drive"]
-    assert result["spreadsheet_id"] == settings["spreadsheet_id"]
-    assert "private-material" not in json.dumps(converted)
-    assert "gcp_service_account" in settings
-
-
 def test_runtime_refuses_old_profile_format(tmp_path):
     path = tmp_path / "profiles.json"
     path.write_text(
@@ -221,7 +206,7 @@ def test_runtime_refuses_old_profile_format(tmp_path):
     )
     with pytest.raises(LocalProfileStoreError):
         load_local_profiles(path)
-    with pytest.raises(ValueError, match="converted"):
+    with pytest.raises(ValueError, match="unsupported"):
         load_business_profiles(
             {"business_profiles": {"north": {**profile(), "gcp_service_account": {}}}}
         )
@@ -476,7 +461,7 @@ def test_oauth_open_read_write_keep_two_profiles_isolated(same_account):
         south_storage = GoogleSheetsStorage.from_secrets_read_only(
             select_profile_secrets(document, "south")
         )
-    north_storage.create_account("North checking", "Bank")
+    fixture_account(north_storage, "North checking", "Bank")
     assert authorized_tokens == ["north-token", "south-token"]
     assert len(north_storage.list_accounts()) == 1
     assert south_storage.list_accounts() == []

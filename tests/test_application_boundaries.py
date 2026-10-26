@@ -1,8 +1,6 @@
 """Keep provider implementation access at documented infrastructure seams."""
 
 import ast
-from dataclasses import fields
-from importlib import import_module
 from pathlib import Path
 
 import pytest
@@ -14,14 +12,11 @@ PACKAGE = ROOT / "tabula_rasa"
 # Keep this list aligned with docs/ARCHITECTURE.md. New exceptions require an
 # ownership decision, rather than adding storage access to another UI module.
 SHEETS_EXCEPTIONS = {
-    "composition.py",
     "google_drive_admin.py",
     "local_profile_admin_readiness.py",
     "local_profile_admin_support.py",
     "receipt_backfill.py",
     "receipt_recovery.py",
-    "page_renderers/data_backup/context.py",
-    "page_renderers/data_backup/cloud_recovery.py",
 }
 
 
@@ -53,7 +48,7 @@ def test_only_documented_infrastructure_and_admin_import_sheets() -> None:
             name for name in imports
             if name == "tabula_rasa.storage" or name.startswith("tabula_rasa.storage.")
         }
-        if relative.startswith(("application/", "page_renderers/")):
+        if relative.startswith(("application/",)):
             forbidden.update(
                 name for name in imports
                 if name == "tabula_rasa.infrastructure" or name.startswith("tabula_rasa.infrastructure.")
@@ -74,20 +69,3 @@ def test_guard_recognizes_provider_and_facade_imports(source, module) -> None:
         name == "tabula_rasa.storage" or name.startswith("tabula_rasa.storage.")
         for name in imported_modules(source, module)
     )
-
-
-@pytest.mark.parametrize("module,context", [
-    ("accounts", "AccountsContext"),
-    ("assets", "AssetsContext"),
-    ("categories", "CategoriesContext"),
-    ("dashboard", "DashboardContext"),
-    ("mileage", "MileageContext"),
-    ("reports", "ReportsContext"),
-    ("transactions.context", "TransactionsContext"),
-    ("transactions.payees_tags", "PayeesTagsContext"),
-])
-def test_ordinary_page_contexts_require_services_without_storage(module, context) -> None:
-    cls = getattr(import_module(f"tabula_rasa.page_renderers.{module}"), context)
-    names = {field.name for field in fields(cls)}
-    assert "services" in names
-    assert not names.intersection({"storage", "legacy_storage", "workbook_admin"})

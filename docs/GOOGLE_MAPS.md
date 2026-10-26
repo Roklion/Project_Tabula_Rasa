@@ -21,17 +21,16 @@ this repository.
 4. Create a browser API key for address autocomplete:
    - Application restriction: **Websites**.
    - Hosted referrer: the exact deployed origin, for example
-     `https://tabula-rasa.streamlit.app/*`.
+     `https://books.example.test/*`.
    - Local referrers, on a separate development key where practical:
-     `http://localhost:8501/*` and `http://127.0.0.1:8501/*`. Add another exact
-     port only when local Streamlit uses it.
+     `http://localhost:5173/*` for a configured Vite development server. Add only
+     exact origins used by the approved deployment.
    - API restrictions: **Maps JavaScript API** and **Places API (New)** only.
 5. Create a different server API key for route calculation:
    - API restriction: **Routes API** only.
    - Add an IP-address application restriction when the deployment has a
      documented stable outbound IP.
-   - Streamlit Community Cloud does not document a stable application egress
-     address. If the actual host cannot guarantee one, use the Routes-only API
+   - If the actual API host cannot guarantee a stable egress address, use the Routes-only API
      restriction, a dedicated key/project, conservative quotas, and monitoring.
      A deployment policy that requires an IP-restricted server key needs a host
      or proxy with stable egress before rollout.
@@ -51,8 +50,8 @@ this repository.
    can be delayed. The lowered API quotas are the operational guardrail. If the
    billing console offers an enforceable spend-cap budget for this project,
    review its current supported-services behavior before relying on it.
-9. Add the two deployment-specific keys to ignored Streamlit Secrets, restart
-   local Streamlit. Commercial API keys use the separate server deployment configuration.
+9. Configure deployment-specific keys through the protected API server configuration
+   below and restart the selected runtime.
 10. Before public deployment, review the checked-in [Terms of Use](TERMS_OF_USE.md)
     and [Privacy Policy](PRIVACY_POLICY.md). The application footer exposes both
     documents without requiring the application password. Confirm they still
@@ -82,7 +81,7 @@ the browser key so a server credential cannot accidentally cross the API.
 
 Before enabling lookup, add the exact commercial website origins to the browser key's
 website restrictions. Local Vite and same-origin API deployments need their actual
-ports/origins, rather than the Streamlit examples above. Restrict that key to Maps
+ports/origins, matching the actual browser deployment. Restrict that key to Maps
 JavaScript API and Places API (New). Keep Routes excluded from it. The separate Routes
 key stays on the API server and is restricted to Routes API. Inspect the selected host's
 documented egress; use an IP-restricted key where stable egress is available. If
@@ -103,7 +102,7 @@ acceptance. See [workflow ports](browser/IMPORTS_EXPORTS_AND_INTEGRATIONS.md).
 ### Optional HTTP quota monitoring
 
 The authenticated sidebar's **Google Maps API usage** expander restores the
-internal edition's read-only view. Opening the expander checks setup only;
+read-only monitoring view. Opening the expander checks setup only;
 **Load usage** contacts Google. **Refresh** bypasses only the monitoring cache.
 Successful display rows are cached for 120 seconds per API process. There is no
 automatic polling, focus refresh or quota request on an ordinary page load.
@@ -157,14 +156,15 @@ Later production configuration and verification are separate operator steps:
    actual quota availability, reporting delay or production monitoring access.
 
 `google_maps_quota_core.py` owns the shared read-only client, parsers, rate
-conversion and compact display projection. `google_maps_quota.py` retains the
-Streamlit facade; `http/maps_quota.py` owns HTTP configuration, lazy client
+conversion and compact display projection. The former Streamlit facade is
+retired; `http/maps_quota.py` owns HTTP configuration, lazy client
 lifecycle and its bounded display cache. Neither HTTP path imports Streamlit,
 gspread or legacy Sheets initialization.
 
-## Internal-edition Streamlit Secrets
+## Trusted migrated-runtime factory configuration
 
-Add this application-wide table to ignored `.streamlit/secrets.toml`:
+For the explicit migrated-runtime factory, supply this trusted application-wide
+configuration table through protected server configuration:
 
 ```toml
 [google_maps]
@@ -255,7 +255,7 @@ Automated tests always mock Google and must never use either live key.
 - The application requests only the primary driving route's distance in meters,
   converts using `meters / 1609.344`, and rounds the editable suggestion to one
   decimal place.
-- Calculate/Recalculate is explicit. Ordinary Streamlit reruns do not make a
+- Calculate/Recalculate is explicit. Ordinary page loads do not make a
   route request.
 - The autocomplete widget manages its own prediction session. The application
   does not create a second session-token system.
@@ -263,7 +263,7 @@ Automated tests always mock Google and must never use either live key.
   mileage fields. It does not store autocomplete display content, complete
   Places or Routes responses, route polylines, or a durable round-trip link.
 - Browser keys are visible to browsers by design and therefore depend on
-  website plus API restrictions. Server keys remain in Streamlit Secrets and
+  website plus API restrictions. Server keys remain in protected server configuration and
   are never sent to the browser.
 - Monitor usage after deployment. Unexpected API/key traffic is a credential
   incident: restrict or disable the affected key, investigate, then rotate it
@@ -329,4 +329,3 @@ before relying on them.
 - [Google Maps Platform EEA Terms of Service](https://cloud.google.com/terms/maps-platform/eea)
 - [EEA customer FAQ](https://developers.google.com/maps/comms/eea/faq)
 - [Cloud Billing budgets and alerts](https://cloud.google.com/billing/docs/how-to/budgets)
-- [Streamlit Community Cloud Secrets](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/secrets-management)

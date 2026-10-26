@@ -46,25 +46,18 @@ The archive includes a profile-scoped receipt metadata inventory; receipt bytes
 remain in the document store or its recovery copy, outside the ledger ZIP.
 
 Current-format backups require the selected profile's configured Drive receipt
-folder. Immediately before creation, the app and command-line tools refresh
+folder. Immediately before creation, the command-line tools refresh
 Sheets and Drive, backfill missing receipt integrity metadata, and reconcile
 only references already present in the current workbook. They do not infer
 historical associations from Drive metadata. If preparation or validation is
 incomplete, no backup is created.
 
-For a supported format-13 workbook with blank receipt-reference cells, recover
-old Drive-only associations once before normal operation when needed. First follow
-[explicit source preparation](accounting/SHEETS_MIGRATION.md#explicit-source-preparation-tools):
-obtain exact-source approval before conversion and before the final migration
-freeze. Never use this command to modify an accepted frozen source or repair an
-active PostgreSQL ledger:
+The old Drive-only receipt-association converter is retired. Current backups preserve
+explicit workbook receipt relationships and intentional unlinks. They do not infer
+missing relationships from Drive properties. Use an approved source correction before
+freeze/acceptance if required; live PostgreSQL corrections and document recovery use
+their supported owners. Preserve all existing source and recovery artifacts.
 
-```powershell
-python scripts\migrate_receipt_associations.py --secrets .streamlit\secrets.toml --profile PROFILE_KEY
-```
-
-The command considers only blank legacy cells; an explicit empty list remains
-intentionally unlinked. It is safe to rerun after an interrupted migration.
 
 The application validator and restore path accept **only format 13**. Every other
 archive format is rejected before target initialization or writes. Historical converters
@@ -77,23 +70,18 @@ Mixed-use source/projection, recurring occurrence, depreciation, journal, and
 receipt relationships are validated under the shared source contract. Restore
 retains their existing identities and complete supported bookkeeping history.
 
-## Create a backup in the application
+## Backup operating modes
 
-Open **Data & backup** for the selected profile. The page shows Cloud backup,
-Recovery status, Exports, and Imports in that order.
+The Streamlit Data & backup page is retired. Browser Data & backup provides the
+supported financial CSV and canonical PostgreSQL export workflows; operational
+PostgreSQL/database and document-byte backups follow [NAS backup](operations/NAS_BACKUP.md)
+and [receipt recovery](storage/RECEIPT_RECOVERY.md).
 
-- **Upload fresh backup now** prepares, validates, and uploads an archive to
-  the selected profile's Drive backup folder.
-- **Verify latest cloud backup** downloads the selected app-managed archive
-  into the running application and validates its manifest, checksums, and
-  stored Drive hash. It does not read or modify the live workbook.
-- **Prepare downloadable exports** prepares profile-scoped transaction and
-  mileage CSVs and a complete backup when receipt preparation succeeds.
+The explicit Sheets CLI commands below remain available for approved format-13
+source/archive preservation and recovery. They do not reactivate Sheets bookkeeping
+or change the frozen-source/divergence boundary. Local Account settings retains
+recovery configuration and Google target authorization.
 
-If a complete backup cannot be prepared, the transaction and mileage CSV
-downloads remain available. Prepared exports are tied to the selected profile,
-configuration revision, and confirmed workbook data revision; a confirmed
-ledger write makes an older prepared snapshot ineligible.
 
 ## Command-line backup
 

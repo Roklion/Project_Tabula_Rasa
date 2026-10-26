@@ -9,14 +9,11 @@ import pytest
 
 from tabula_rasa.application.documents import DocumentError, DocumentUpload, ReceiptService, validate_receipt_upload
 from tabula_rasa.infrastructure.google_drive_documents import (
-    GoogleDriveDocumentStore, document_from_receipt_reference, document_to_receipt_reference,
+    GoogleDriveDocumentStore, document_to_receipt_reference,
 )
-from tabula_rasa.infrastructure.google_sheets_receipts import GoogleSheetsReceiptRepository
 from tabula_rasa.application.receipt_context import MixedUseReceiptRepository, receipt_service_for_context
 from tabula_rasa.receipt_manifest import receipt_reference_from_drive_file
-from tabula_rasa.storage import GoogleSheetsStorage, StorageValidationError
 from tests.drive_fixtures import receipt_drive_file
-from tests.fakes import FakeWorkbook
 from tests.test_application_documents import FakeDocumentStore, FakeReceiptRepository
 
 
@@ -109,26 +106,6 @@ def test_drive_inventory_rejects_cross_profile_responses_and_retains_integrity_w
     assert inventory.documents == ()
     assert inventory.needing_integrity == 1
     assert inventory.unverified_storage_keys == ("receiptfile12345",)
-
-
-def test_sheets_adapter_roundtrips_current_integrity_format_and_unlink_preserves_store():
-    storage = GoogleSheetsStorage(FakeWorkbook())
-    account = storage.create_account("Checking", "Bank")
-    category = storage.create_category("Sales", "Income")
-    transaction = storage.create_transaction(txn_date="2026-10-03", kind="Income", amount=10, account_id=account["id"], category_id=category["id"])
-    repository = GoogleSheetsReceiptRepository("north", storage)
-    document = document_from_receipt_reference("north", receipt_reference_from_drive_file(drive_file()))
-    repository.link("north", transaction["id"], document)
-    assert repository.references("north", transaction["id"], fresh=True) == (document,)
-    association, = repository.associations("north", fresh=True)
-    assert association.transaction_id == transaction["id"]
-    assert association.document == document
-    repository.link("north", transaction["id"], document)
-    assert len(repository.references("north", transaction["id"])) == 1
-    with pytest.raises(StorageValidationError, match="different business profile"):
-        repository.unlink("south", transaction["id"], document.storage_key)
-    repository.unlink("north", transaction["id"], document.storage_key)
-    assert repository.references("north", transaction["id"]) == ()
 
 
 def test_context_service_preserves_non_google_adapters_and_rejects_mismatched_profile_before_io():

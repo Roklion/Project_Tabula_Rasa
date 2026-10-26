@@ -1,48 +1,23 @@
-"""The same supported application workflows run on Sheets and PostgreSQL."""
+"""Supported application workflows retain their domain outcomes on PostgreSQL."""
 
 from copy import deepcopy
 from decimal import Decimal
 
 import pytest
 
-from tabula_rasa.application.services import assemble_application_services
 from tabula_rasa.errors import StorageConflictError, StorageValidationError
 from tabula_rasa.reference_data import normalize_tag_ids
-from tabula_rasa.infrastructure.google_sheets import (
-    GoogleSheetsAccountRepository, GoogleSheetsCategoryRepository,
-    GoogleSheetsLedgerSetupRepository, GoogleSheetsPayeeRepository, GoogleSheetsTagRepository,
-    GoogleSheetsTransactionRepository, GoogleSheetsJournalRepository,
-)
 from tabula_rasa.infrastructure.postgres.composition import create_postgres_services
 from tabula_rasa.infrastructure.postgres.reference_data import PostgresLedgerSetupRepository
-from tabula_rasa.infrastructure.google_sheets_mileage import GoogleSheetsMileageRepository
-from tabula_rasa.infrastructure.google_sheets_imports import GoogleSheetsTransactionImportRepository
-from tabula_rasa.infrastructure.google_sheets_reporting import GoogleSheetsLedgerQueryRepository
-from tabula_rasa.storage import GoogleSheetsStorage
-from tests.fakes import FakeWorkbook
 
 
-@pytest.fixture(params=['sheets', 'postgres'])
-def services(request):
-    if request.param == 'postgres':
-        database = request.getfixturevalue('database')
-        PostgresLedgerSetupRepository.create_entity(database, 'synthetic', 'Synthetic')
-        return create_postgres_services(database, 'synthetic')
-    storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
-    return assemble_application_services(
-        'synthetic', ledger_repository=GoogleSheetsLedgerSetupRepository(storage),
-        account_repository=GoogleSheetsAccountRepository(storage),
-        category_repository=GoogleSheetsCategoryRepository(storage),
-        payee_repository=GoogleSheetsPayeeRepository(storage), tag_repository=GoogleSheetsTagRepository(storage),
-        transaction_repository=GoogleSheetsTransactionRepository(storage),
-        journal_repository=GoogleSheetsJournalRepository(storage),
-        mileage_repository=GoogleSheetsMileageRepository(storage),
-        import_repository=GoogleSheetsTransactionImportRepository(storage),
-        reporting_repository=GoogleSheetsLedgerQueryRepository(storage),
-    )
+@pytest.fixture
+def services(database):
+    PostgresLedgerSetupRepository.create_entity(database, 'synthetic', 'Synthetic')
+    return create_postgres_services(database, 'synthetic')
 
 
-def test_mileage_workflow_has_the_same_domain_outcome_on_both_adapters(services):
+def test_mileage_workflow_preserves_domain_outcome(services):
     trips = services.mileage.create_round_trip(
         trip_date='2026-10-05', miles='12.34', start_location='Office',
         destination='Client', business_purpose='Meeting', new_tag_name='Job',
@@ -58,7 +33,7 @@ def test_mileage_workflow_has_the_same_domain_outcome_on_both_adapters(services)
     assert services.transactions.list() == []
 
 
-def test_import_workflow_has_the_same_accounting_outcome_on_both_adapters(services):
+def test_import_workflow_preserves_accounting_outcome(services):
     services.accounts.create('Checking', 'Bank', '0')
     services.accounts.create('Savings', 'Bank', '0')
     services.categories.create('Office', 'Expense')

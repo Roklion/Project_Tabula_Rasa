@@ -5,10 +5,6 @@ from copy import deepcopy
 import pytest
 
 from tabula_rasa.ledger_records import search_ledger_entries
-from tabula_rasa.page_renderers.transactions.ledger_filters import (
-    transaction_is_source_driven,
-    transaction_type_label,
-)
 
 
 SEARCH_FIELDS = (
@@ -119,21 +115,3 @@ def test_search_matches_any_displayed_tag() -> None:
     assert [row["id"] for row in _search_rows(rows, "client")] == [
         "one"
     ]
-
-
-def test_ledger_type_label_shows_both_recurring_indicators() -> None:
-    transaction = {
-        "source_type": "mixed_use_expense",
-        "source_id": "source-1",
-        "recurring_schedule_id": "schedule-1",
-    }
-    assert transaction_type_label("Expense", transaction) == (
-        "Expense · Mixed-use · Recurring"
-    )
-
-
-def test_depreciation_source_protection_normalizes_external_source_type() -> None:
-    transaction = {"source_type": "  DEPRECIATION  ", "source_id": "asset-1"}
-
-    assert transaction_is_source_driven(transaction)
-    assert transaction_type_label("Expense", transaction) == "Expense · Depreciation"

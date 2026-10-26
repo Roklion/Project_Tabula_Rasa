@@ -467,18 +467,6 @@ class _GoogleSheetsStorageClient:
     def _rows(self, title: str, *, force_refresh: bool = False) -> list[_StoredRow]:
         return self._snapshot([title], force_refresh=force_refresh)[title]
 
-    def prefetch_worksheets(
-        self,
-        *titles: str,
-        force_refresh: bool = False,
-    ) -> None:
-        """Warm several worksheet caches through one multi-range values request."""
-        unknown = sorted(set(titles) - set(WORKSHEET_HEADERS))
-        if unknown:
-            raise StorageValidationError(
-                "Unknown worksheets requested: " + ", ".join(unknown)
-            )
-        self._snapshot(titles, force_refresh=force_refresh)
 
     def _invalidate(self, title: str) -> None:
         with self._cache_lock:
@@ -571,34 +559,6 @@ class _GoogleSheetsStorageClient:
                     self._invalidate(title)
                 return
 
-    def _append(self, title: str, record: Mapping[str, Any]) -> None:
-        headers = self._headers(title)
-        values = [str(record.get(header, "")) for header in headers]
-        worksheet = self._worksheet(title)
-        record_id = _clean_text(record.get("id"), "ID", required=True)
-
-        def state() -> str:
-            rows = self._rows(title, force_refresh=True)
-            matches = [
-                row for row in rows
-                if _clean_text(row.values.get("id"), "ID") == record_id
-            ]
-            if not matches:
-                return "unchanged"
-            if len(matches) != 1:
-                return "ambiguous"
-            expected = {header: str(record.get(header, "")) for header in headers}
-            return "applied" if matches[0].values == expected else "ambiguous"
-
-        self._write_with_uncertain_readback(
-            f"{title} append",
-            lambda: self._api(
-                lambda: worksheet.append_row(values, value_input_option="RAW"),
-                retry_safe=False,
-            ),
-            state,
-            invalidate=(title,),
-        )
 
     def _append_many(self, title: str, records: Iterable[Mapping[str, Any]]) -> None:
         records = list(records)
@@ -682,145 +642,6 @@ class _GoogleSheetsStorageClient:
             f"{title} update", write, state, before_retry=refresh, invalidate=(title,)
         )
 
-    def _replace_rows(
-        self,
-        title: str,
-        updates: Sequence[tuple[_StoredRow, Mapping[str, Any]]],
-        *,
-        before_retry: Callable[[], None] | None = None,
-    ) -> None:
-        if not updates:
-            return
-        headers = self._headers(title)
-        worksheet = self._worksheet(title)
-        current_updates = list(updates)
-        originals = {
-            _clean_text(record.get("id"), "ID", required=True): dict(row.values)
-            for row, record in updates
-        }
-        if len(originals) != len(updates):
-            raise StorageValidationError(f"Duplicate ID detected in {title}")
-        updates_by_id = {
-            _clean_text(record.get("id"), "ID", required=True): record
-            for _, record in updates
-        }
-
-        def write() -> None:
-            batch = [
-                {
-                    "range": f"A{row.row_number}",
-                    "values": [[str(record.get(header, "")) for header in headers]],
-                }
-                for row, record in current_updates
-            ]
-            self._api(
-                lambda: worksheet.batch_update(batch, raw=True),
-                retry_safe=False,
-            )
-
-        intended_by_id = {
-            _clean_text(record.get("id"), "ID", required=True): {
-                header: str(record.get(header, "")) for header in headers
-            }
-            for _, record in updates
-        }
-        if len(intended_by_id) != len(updates):
-            raise StorageValidationError(f"Duplicate ID detected in {title}")
-
-        def state() -> str:
-            current_rows = self._rows(title, force_refresh=True)
-            current_by_id: dict[str, _StoredRow] = {}
-            for item in current_rows:
-                row_id = _clean_text(item.values.get("id"), "ID", required=True)
-                if row_id in current_by_id:
-                    return "ambiguous"
-                current_by_id[row_id] = item
-            if all(
-                current_by_id.get(record_id, _StoredRow(0, {})).values == intended
-                for record_id, intended in intended_by_id.items()
-            ):
-                return "applied"
-            if all(
-                current_by_id.get(record_id, _StoredRow(0, {})).values
-                == originals[record_id]
-                for record_id in originals
-            ):
-                return "unchanged"
-            return "ambiguous"
-
-        def refresh() -> None:
-            nonlocal current_updates
-            if before_retry is not None:
-                before_retry()
-            retry_rows = self._rows(title, force_refresh=True)
-            retry_by_id: dict[str, _StoredRow] = {}
-            for item in retry_rows:
-                row_id = _clean_text(item.values.get("id"), "ID", required=True)
-                if row_id in retry_by_id:
-                    raise StorageValidationError(f"Duplicate ID detected in {title}")
-                retry_by_id[row_id] = item
-            if any(
-                retry_by_id.get(record_id, _StoredRow(0, {})).values
-                != originals[record_id]
-                for record_id in originals
-            ):
-                raise StorageConflictError(
-                    f"A row in {title} changed unexpectedly during a write retry."
-                )
-            current_updates = [
-                (retry_by_id[record_id], updates_by_id[record_id])
-                for record_id in originals
-            ]
-
-        self._write_with_uncertain_readback(
-            f"{title} batch update",
-            write,
-            state,
-            before_retry=refresh,
-            invalidate=(title,),
-        )
-
-    def _replace_rows_atomically(
-        self,
-        updates: Sequence[tuple[str, _StoredRow, Mapping[str, Any]]],
-    ) -> None:
-        """Replace rows across worksheets in one spreadsheet-level batch."""
-        if not updates:
-            return
-        requests: list[dict[str, Any]] = []
-        titles: set[str] = set()
-        for title, row, record in updates:
-            headers = self._headers(title)
-            titles.add(title)
-            requests.append(
-                {
-                    "updateCells": {
-                        "range": {
-                            "sheetId": self._sheet_id(title),
-                            "startRowIndex": row.row_number - 1,
-                            "endRowIndex": row.row_number,
-                            "startColumnIndex": 0,
-                            "endColumnIndex": len(headers),
-                        },
-                        "rows": [
-                            {
-                                "values": [
-                                    {
-                                        "userEnteredValue": {
-                                            "stringValue": str(record.get(header, ""))
-                                        }
-                                    }
-                                    for header in headers
-                                ]
-                            }
-                        ],
-                        "fields": "userEnteredValue",
-                    }
-                }
-            )
-        self._batch_update_spreadsheet(requests)
-        for title in titles:
-            self._invalidate(title)
 
     def _batch_update_spreadsheet(self, requests: Sequence[Mapping[str, Any]]) -> None:
         if not requests:

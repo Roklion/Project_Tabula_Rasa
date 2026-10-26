@@ -23,7 +23,10 @@ from .validation import (
 )
 from .base import _StoredRow
 
-class ReceiptsMixin:
+from .managed import _ManagedMixin
+
+
+class ReceiptsMixin(_ManagedMixin):
     """Mixin for the receipts storage boundary."""
 
     def _replace_receipt_references(
@@ -163,45 +166,10 @@ class ReceiptsMixin:
         updated["receipt_references"] = encoded_references
         return updated
 
-    def set_transaction_receipt_references(
-        self,
-        transaction_id: str,
-        references: Any,
-        *,
-        expected_transaction: Mapping[str, Any] | None = None,
-    ) -> dict[str, str]:
-        """Replace the Drive receipt references attached to one transaction."""
-        with self._workbook_locks.ledger:
-            transaction_id = _clean_text(transaction_id, "ID", required=True)
-            transaction_rows = self._managed_rows_by_id(
-                self._rows("Transactions", force_refresh=True),
-                "Transactions",
-            )
-            current = transaction_rows.get(transaction_id)
-            if current is None:
-                raise StorageNotFoundError("Transaction no longer exists")
-            self._reject_mixed_use_projection(current.values)
-            encoded_references = _encode_receipt_references(references)
-            self._reject_receipt_ownership_conflict(
-                encoded_references,
-                transaction_id=transaction_id,
-                transactions=(row.values for row in transaction_rows.values()),
-            )
-            if expected_transaction is not None and not self._mixed_use_record_matches(
-                "Transactions", current.values, expected_transaction
-            ):
-                raise StorageConflictError(
-                    "The transaction changed; refresh before changing receipts."
-                )
-            return self._replace_receipt_references(
-                current, encoded_references
-            )
 
     def _mixed_use_receipt_pair(
         self,
         source_id: str,
-        *,
-        expected_source: Mapping[str, Any] | None = None,
     ) -> tuple[_StoredRow, _StoredRow]:
         """Freshly resolve a source/projection pair for receipt orchestration."""
         source_id = _clean_text(source_id, "Mixed-use source ID", required=True)
@@ -218,12 +186,6 @@ class ReceiptsMixin:
             raise StorageValidationError(
                 "Mixed-use source and projection IDs do not match"
             )
-        if expected_source is not None and not self._mixed_use_source_matches(
-            source.values, expected_source, transaction.values
-        ):
-            raise StorageConflictError(
-                "The mixed-use expense changed; refresh before changing receipts."
-            )
         if str(source.values.get("receipt_references") or "") != str(
             transaction.values.get("receipt_references") or ""
         ):
@@ -232,97 +194,6 @@ class ReceiptsMixin:
             )
         return source, transaction
 
-    def set_mixed_use_receipt_references(
-        self,
-        source_id: str,
-        references: Any,
-        *,
-        expected_source: Mapping[str, Any] | None = None,
-    ) -> dict[str, str]:
-        """Replace paired receipt references through a source-aware path."""
-        with self._workbook_locks.ledger:
-            _source, transaction = self._mixed_use_receipt_pair(
-                source_id, expected_source=expected_source
-            )
-            encoded = _encode_receipt_references(references)
-            self._reject_receipt_ownership_conflict(
-                encoded, transaction_id=transaction.values["id"]
-            )
-            return self._replace_receipt_references(transaction, encoded)
-
-    def link_transaction_receipt(
-        self,
-        transaction_id: str,
-        *,
-        file_id: str = "",
-        name: str = "",
-        reference: Mapping[str, Any] | None = None,
-    ) -> dict[str, str]:
-        """Attach or refresh one Drive file reference on a transaction."""
-        with self._workbook_locks.ledger:
-            current = self._find_row("Transactions", transaction_id)
-            self._reject_mixed_use_projection(current.values)
-            try:
-                normalized_reference = validate_receipt_reference(
-                    reference if reference is not None else {"id": file_id, "name": name}
-                )
-            except ReceiptManifestError as exc:
-                raise StorageValidationError(str(exc)) from exc
-            for transaction in self.list_transactions(_force_refresh=True):
-                if transaction["id"] == transaction_id:
-                    continue
-                if any(
-                    item["id"] == normalized_reference["id"]
-                    for item in decode_receipt_references(
-                        transaction.get("receipt_references", "")
-                    )
-                ):
-                    raise StorageConflictError(
-                        "That receipt is already linked to another transaction"
-                    )
-            references = decode_receipt_references(
-                current.values.get("receipt_references", "")
-            )
-            references = [
-                item
-                for item in references
-                if item["id"] != normalized_reference["id"]
-            ]
-            references.append(normalized_reference)
-            return self._replace_receipt_references(
-                current, _encode_receipt_references(references)
-            )
-
-    def link_mixed_use_receipt(
-        self,
-        source_id: str,
-        *,
-        reference: Mapping[str, Any],
-        expected_source: Mapping[str, Any] | None = None,
-    ) -> dict[str, str]:
-        """Link one receipt while authorizing the mixed-use source pair."""
-        with self._workbook_locks.ledger:
-            try:
-                normalized = validate_receipt_reference(reference)
-            except ReceiptManifestError as exc:
-                raise StorageValidationError(str(exc)) from exc
-            _source, transaction = self._mixed_use_receipt_pair(
-                source_id, expected_source=expected_source
-            )
-            self._reject_receipt_ownership_conflict(
-                _encode_receipt_references([normalized]),
-                transaction_id=transaction.values["id"],
-            )
-            references = decode_receipt_references(
-                transaction.values.get("receipt_references", "")
-            )
-            references = [
-                item for item in references if item["id"] != normalized["id"]
-            ]
-            references.append(normalized)
-            return self._replace_receipt_references(
-                transaction, _encode_receipt_references(references)
-            )
 
     def remap_transaction_receipt(
         self,
@@ -399,7 +270,6 @@ class ReceiptsMixin:
         *,
         old_file_id: str,
         reference: Mapping[str, Any],
-        expected_source: Mapping[str, Any] | None = None,
     ) -> dict[str, str]:
         """Replace a recovered receipt through the source-aware path."""
         with self._workbook_locks.ledger:
@@ -410,7 +280,7 @@ class ReceiptsMixin:
             except ReceiptManifestError as exc:
                 raise StorageValidationError(str(exc)) from exc
             _source, transaction = self._mixed_use_receipt_pair(
-                source_id, expected_source=expected_source
+                source_id
             )
             self._reject_receipt_ownership_conflict(
                 _encode_receipt_references([normalized]),
@@ -799,52 +669,5 @@ class ReceiptsMixin:
             self._invalidate("MixedUseExpenses")
         return True, current_transactions
 
-    def unlink_transaction_receipt(
-        self,
-        transaction_id: str,
-        *,
-        file_id: str,
-    ) -> dict[str, str]:
-        """Remove one Drive reference without modifying the Drive file."""
-        with self._workbook_locks.ledger:
-            current = self._find_row("Transactions", transaction_id)
-            self._reject_mixed_use_projection(current.values)
-            references = decode_receipt_references(
-                current.values.get("receipt_references", "")
-            )
-            retained = [
-                item for item in references if item["id"] != str(file_id)
-            ]
-            if retained == references:
-                if _clean_text(current.values.get("source_type"), "Transaction source type"):
-                    return self._replace_receipt_references(
-                        current, _encode_receipt_references(references)
-                    )
-                return dict(current.values)
-            return self._replace_receipt_references(
-                current, _encode_receipt_references(retained)
-            )
-
-    def unlink_mixed_use_receipt(
-        self,
-        source_id: str,
-        *,
-        file_id: str,
-        expected_source: Mapping[str, Any] | None = None,
-    ) -> dict[str, str]:
-        """Remove one receipt reference through the source-aware path."""
-        with self._workbook_locks.ledger:
-            _source, transaction = self._mixed_use_receipt_pair(
-                source_id, expected_source=expected_source
-            )
-            references = decode_receipt_references(
-                transaction.values.get("receipt_references", "")
-            )
-            retained = [
-                item for item in references if item["id"] != str(file_id)
-            ]
-            return self._replace_receipt_references(
-                transaction, _encode_receipt_references(retained)
-            )
 
 __all__ = ["ReceiptsMixin"]

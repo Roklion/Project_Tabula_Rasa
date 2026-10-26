@@ -1,4 +1,5 @@
 """Supported format-13 source and recovery boundary, without historical converters."""
+from tests.sheets_fixtures import account as fixture_account, category as fixture_category, transaction as fixture_transaction
 
 from copy import deepcopy
 import io
@@ -56,7 +57,7 @@ def profile_config():
 @pytest.fixture
 def current_backup():
     storage = GoogleSheetsStorage(FakeWorkbook())
-    storage.create_account("Checking", "Bank", opening_balance="123.45")
+    fixture_account(storage, "Checking", "Bank", opening_balance="123.45")
     return storage.export_backup_zip(build_receipt_manifest("north", [], []))
 
 
@@ -232,9 +233,9 @@ def test_format13_reordered_columns_round_trip_history_and_opening_balances():
         title: tuple(reversed(fields)) for title, fields in WORKSHEET_HEADERS.items()
     }
     source = GoogleSheetsStorage(FakeWorkbook(headers))
-    account = source.create_account("Checking", "Bank", opening_balance="123.45")
-    category = source.create_category("Sales", "Income")
-    transaction = source.create_transaction(
+    account = fixture_account(source, "Checking", "Bank", opening_balance="123.45")
+    category = fixture_category(source, "Sales", "Income")
+    transaction = fixture_transaction(source,
         txn_date="2026-01-01",
         kind="Income",
         amount="9.87",
@@ -259,7 +260,7 @@ def test_selected_profile_rejection_does_not_fall_back_to_another_workbook():
     north = FakeWorkbook({"Transactions": ("id", "payee")})
     south = FakeWorkbook()
     south_storage = GoogleSheetsStorage(south)
-    south_account = south_storage.create_account("South Checking", "Bank")
+    south_account = fixture_account(south_storage, "South Checking", "Bank")
     workbooks = {"north-sheet": north, "south-sheet": south}
     before = deepcopy(
         {

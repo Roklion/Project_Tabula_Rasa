@@ -95,20 +95,6 @@ def _encode_receipt_references(value: Any) -> str:
     references = decode_receipt_references(value)
     return json.dumps(references, separators=(",", ":"), ensure_ascii=False)
 
-def _raw_tag_ids_may_contain(value: Any, candidates: Iterable[str]) -> bool:
-    """Use a cheap substring check before parsing a stored tag-ID JSON cell."""
-    raw_value = "" if value is None else str(value)
-    return any(candidate in raw_value for candidate in candidates)
-
-def _managed_comparison_text(value: Any) -> str:
-    """Preserve falsy expected values while normalizing comparison text."""
-    if value is None:
-        return ""
-    if isinstance(value, bool):
-        return "TRUE" if value else "FALSE"
-    text = str(value).strip()
-    return text.upper() if text.upper() in {"TRUE", "FALSE"} else text
-
 
 def _validate_tag_records(records: Iterable[Mapping[str, Any]]) -> None:
     seen_ids: set[str] = set()
@@ -122,10 +108,6 @@ def _validate_tag_records(records: Iterable[Mapping[str, Any]]) -> None:
             raise StorageValidationError("Tag IDs and names must be unique")
         seen_ids.add(tag_id)
         seen_names.add(name_key)
-
-
-
-
 
 
 def _validate_journal_tables(
@@ -588,7 +570,7 @@ def validate_source_tables(tables) -> None:
             asset.get("updated_at"), "Asset updated time", required=True
         )
         asset.update(normalized_asset)
-    from .depreciation_posting import validate_depreciation_accounts, validate_depreciation_history
+    from tabula_rasa.depreciation_posting import validate_depreciation_accounts, validate_depreciation_history
     backup_accounts = {row["id"]: row for row in tables["Accounts"][1]}
     for asset in tables["Assets"][1]:
         validate_depreciation_accounts(asset, backup_accounts, category_records)
@@ -680,8 +662,6 @@ __all__ = [
     "_decimal_values_match",
     "_encode_receipt_references",
     "_normalize_tag_ids",
-    "_raw_tag_ids_may_contain",
-    "_managed_comparison_text",
     "_encode_tag_ids",
     "_validate_tag_records",
     "_positive_amount",

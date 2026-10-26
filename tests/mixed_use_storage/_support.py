@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.sheets_fixtures import payee as fixture_payee
 
 from tabula_rasa.storage import GoogleSheetsStorage
 
@@ -14,7 +15,7 @@ def expense_inputs(storage: GoogleSheetsStorage) -> dict[str, str]:
         for category in storage.list_categories()
         if category["name"] == "Office"
     )
-    payee = storage.create_payee("Office vendor")
+    payee = fixture_payee(storage, "Office vendor")
     return {
         "txn_date": "2026-09-01",
         "account_id": account["id"],

@@ -1,10 +1,11 @@
 # Setup
 
-This guide creates a Google Sheets-backed business profile and prepares a
-local or hosted deployment. Repeat the profile steps for each business.
-Google OAuth authorization is required for every ledger. Drive folder setup
-is optional for ledger-only use; for receipts or cloud backups, follow [Google Drive](GOOGLE_DRIVE.md). Recovery
-procedures belong in [Backup and recovery](BACKUP_RECOVERY.md).
+Bookkeeping uses the [browser/API runtime](browser/RUNTIME.md) and PostgreSQL.
+Create new businesses in the application; native bootstrap creates the ledger.
+[Deployment](operations/DEPLOYMENT.md) owns server setup. This guide covers the
+retained local operator interface for Google grants, folders, source/recovery
+workbooks and protected local configuration. It does not create PostgreSQL entities
+or provide customer self-service Google consent.
 
 ## Prerequisites and configuration
 
@@ -42,10 +43,10 @@ At minimum, the file contains an app-wide password hash. Add the shared Drive
 OAuth settings described in [Google Drive](GOOGLE_DRIVE.md). Start the application with:
 
 ```powershell
-streamlit run tabula_rasa/app.py
+powershell -ExecutionPolicy Bypass -File scripts/run_local_profile_admin.ps1
 ```
 
-## Create the Google Sheets profile
+## Configure a source or recovery profile
 
 ### Shared Google Cloud / OAuth application
 
@@ -71,17 +72,11 @@ or additional ledger fields are rejected. Select a supported format-13 workbook
 or restore a validated format-13 backup into a new blank workbook. Historical
 ledger and archive converters are retired; preserve unsupported source files.
 
-For a supported format-13 workbook whose receipt-reference cells remain blank,
-the separate receipt-association tool is still available:
+Earlier profile and receipt-association preparation converters are retired. Use only
+current local configuration and explicit format-13 receipt relationships. No startup,
+backup or migration path infers associations from old Drive metadata. Preserve
+unsupported sources and use a validated format-13 generation for recovery.
 
-```text
-python scripts/migrate_receipt_associations.py --secrets .streamlit/secrets.toml --profile PROFILE_KEY
-```
-
-This tool changes receipt associations, not the ledger schema. It considers
-only blank cells carrying old Drive-only associations; an explicit empty
-receipt list remains unlinked. Normal startup and backup creation do not infer
-these associations. Profile/OAuth migration remains supported separately.
 
 ## Local profile administration
 
@@ -124,8 +119,9 @@ are never displayed by setup. Disconnect removes only the selected profile's
 local authorization; it disables both Sheets and Drive for that profile. It does
 not revoke the shared account's Google application grant or delete files.
 
-All storage clients, workbook initialization, caches, prepared exports, and
-duplicate-submission protection are scoped to the selected profile.
+All operator storage clients, workbook initialization, caches and recovery settings
+are scoped to the selected profile. Opening administration does not initialize any
+workbook or run recurring generation.
 
 ## Optional Google Drive, Maps, and recovery settings
 
@@ -177,8 +173,8 @@ worksheet. For a recovery workbook, use a read-only spreadsheet override:
 python scripts\validate_google_sheets.py --profile PROFILE_KEY --spreadsheet-id RECOVERY_WORKBOOK_ID
 ```
 
-The override cannot be combined with `--write-test`. After validation, start the
-application, sign in, select the business, and confirm its workbook title.
+The override cannot be combined with `--write-test`. Confirm the intended profile
+and workbook privately before any recovery mutation.
 
 ## Troubleshooting
 
@@ -212,17 +208,18 @@ documentation.
 - [Google Sheets authorization scopes](https://developers.google.com/workspace/sheets/api/scopes)
 - [Google Drive sharing permissions](https://support.google.com/drive/answer/2494822)
 
-## Existing deployment: single-step OAuth cutover
+## Existing deployment configuration
 
-There is no ledger data/schema migration for this authentication change. Normal
-runtime accepts only version 2 local profiles.
-Follow [the migration runbook](OAUTH_MIGRATION.md) for protected local preparation,
-validation and key retirement. Commercial connection staging remains separate.
+Runtime accepts only version-2 local profiles. Older profile conversion is retired;
+use [Google authorization and configuration recovery](OAUTH_MIGRATION.md) for current
+setup and preservation guidance. Commercial connection staging remains separate.
 
-### Initial ledger provision
+
+### Initial recovery workbook provision
 
 In Account settings > Google setup, a connected profile with no ledger can use
-Create ledger spreadsheet instead of selecting an existing file. The app creates
+Create ledger spreadsheet instead of selecting an existing file for an approved
+source/recovery operation. New PostgreSQL businesses use in-app creation. The app creates
 `Business name Ledger` in that Google account's My Drive, saves its ID, and
 initializes the existing required worksheets and default accounts/categories.
 This does not require a separate Picker grant because the app creates the file.

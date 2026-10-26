@@ -128,7 +128,7 @@ def container_factory(database, config, tmp_path, monkeypatch):
 def test_owner_authority_survives_production_restart_writes_reports_and_complete_export(database, monkeypatch,
                                                                                      tmp_path, deployment):
     plans, controller, config = activated_profiles(database)
-    monkeypatch.setattr("tabula_rasa.composition.GoogleSheetsStorage.from_secrets",
+    monkeypatch.setattr("tabula_rasa.storage.GoogleSheetsStorage.from_secrets",
                         lambda _: pytest.fail("Migrated production must not initialize Sheets."))
     assert smoke_application("alpha", config, database, plans["alpha"])["passed"]
     before = create_postgres_export_service(database, "alpha").export()

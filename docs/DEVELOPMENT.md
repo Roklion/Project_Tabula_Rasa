@@ -62,8 +62,8 @@ retirement](operations/RESOURCE_RETIREMENT.md) requires a fresh private inventor
 exact-target approval; preserve frozen sources, indefinite NAS retention and recovery
 obligations.
 
-Preserve independent adapter and transport coverage while both runtimes remain
-supported. [CI ownership](development/CI.md) defines required execution; the [capability
+Preserve PostgreSQL adapter/transport coverage and independent retained operator,
+migration and recovery coverage. [CI ownership](development/CI.md) defines required execution; the [capability
 retirement record](https://github.com/Roklion/Project_Tabula_Rasa/issues/377) retains
 historical caller/evidence decisions.
 
@@ -137,8 +137,7 @@ and commercial-foundation workflows. Its stable merge-gate check name is
   Native tests execute once across these required shards. Python lint and
   non-browser integration contracts remain owned by the Python job.
 
-The explicitly invoked Streamlit viewport scripts below remain optional developer
-checks; supported legacy unit/integration coverage remains required in Python CI.
+Retained operator, source-validation and recovery coverage remains required in Python CI.
 See [CI execution evidence and suite selection](development/CI.md) for the cost
 baseline, coverage rationale, bounded budgets, focused commands and comparison
 procedure. No path-based or scheduled-only selection is introduced.
@@ -234,66 +233,20 @@ application credentials, service-account keys, or OAuth tokens.
 
 ## Browser smoke test
 
-The checked-in .smoke_local fixture runs the real Streamlit entry point with a
-fake profile, fake credentials, and fake workbook. It is an explicitly
-invoked developer check rather than a CI gate:
+Use the React Playwright and native HTTP/PostgreSQL browser checks described in
+[CI ownership](development/CI.md). The Streamlit bookkeeping viewport fixtures and
+smoke scripts are retired. Retained local administration uses focused AppTest
+coverage for login, reauthentication, loopback denial, Google setup and profile
+isolation; it never runs bookkeeping generation on startup.
 
-```powershell
-python scripts\smoke_transactions.py
-```
-
-The journal browser check uses the same synthetic fixture and four viewports.
-It checks unsaved entry-mode switching, explicit line controls, and grouped
-ledger header behavior:
-
-```powershell
-python scripts\smoke_journals.py
-```
-
-It signs in and checks the Transactions > Add transaction renderer at
-1440x1000, 1200x900, 900x900, and 390x844, including the optional receipt
-control and page-level horizontal overflow. The requested loopback port must
-be unused. Optional diagnostic screenshots can be retained with:
-
-```powershell
-python scripts\smoke_transactions.py --screenshots-dir .smoke_local\artifacts
-```
-
-Install its dependencies and managed Chromium once:
-
-```powershell
-python -m pip install -r requirements-dev.txt
-python -m playwright install chromium
-```
-
-The fixture's credential-shaped values and password are synthetic,
-test-only, intentionally public, and must never be replaced with real values
-or reused for deployment access. See [.smoke_local/README.md](../.smoke_local/README.md).
 
 ## Live read-only validation
 
-After the automated suite passes, validate the configured Google deployment
-without changing ledger data:
-
-```powershell
-python scripts\validate_app_google.py
-```
-
-This checks the local split app secrets and business_profiles.json configuration.
-Commercial runtime verification follows the separate hosted identity and
-deployment procedures. Validate one workbook, its required headers, and its
-managed Payees records with:
-
-```powershell
-python scripts\validate_google_sheets.py --profile PROFILE_KEY
-```
-
-Add --write-test only for an intentional reversible permission check. It
-creates, reads, updates, and deletes a disposable worksheet, not ledger rows:
-
-```powershell
-python scripts\validate_google_sheets.py --profile PROFILE_KEY --write-test
-```
+Synthetic tests require no live Google credentials or ledgers. Separately authorized
+operator source/recovery validation may use `scripts/validate_google_sheets.py --profile
+PROFILE_KEY`; it does not run a dashboard. A selected current source must satisfy the
+[frozen format-13 contract](SHEETS_SOURCE_CONTRACT.md). Never use production data to
+validate this source cleanup.
 
 ## Test architecture
 
@@ -302,30 +255,28 @@ every module:
 
 - normal pytest unit and integration tests cover domain logic, storage,
   authentication, imports, recovery, and page behavior;
-- executable Streamlit AppTest scenarios cover end-to-end UI workflows;
-- tests/app_support.py provides shared AppTest authentication, profile and
-  storage bootstrap, semantic UI interactions, and lookup/navigation helpers;
+- focused Streamlit AppTest scenarios cover retained local administration;
+- tests/sheets_fixtures.py seeds synthetic format-13 rows directly for retained
+  backup/receipt recovery and read-only validation checks;
 - tests/conftest.py provides reusable pytest fixtures for shared concepts;
 - tests/drive_fixtures.py provides reusable semantic Google Drive builders;
-- tests/_app_*_scenario.py contains executable scenario layers used by the UI
-  tests;
 - tests/tooling/ contains repository-policy, environment-bootstrap, and Git-hook
   checks; these remain part of the full suite and can be run with
   `python -m pytest tests/tooling`;
 - Drive, receipt, backup, storage, and profile tests exercise their respective
   failure, retry, and isolation boundaries; and
-- scripts/smoke_transactions.py provides the browser-level viewport check.
+- Browser viewport checks use React Playwright and native HTTP/PostgreSQL scenarios.
 
 Do not duplicate shared scenario setup in individual test documentation.
 Behavior-sensitive changes need success and relevant failure coverage, and
 profile-sensitive changes need a two-profile isolation check.
 
 `tests/test_application_boundaries.py` enforces the service boundary: ordinary
-page contexts require services, and UI/application modules cannot import the
-Sheets facade or infrastructure adapters. Provider-specific exceptions and
+application modules cannot import the Sheets facade or infrastructure adapters.
+Retained local operator exceptions are explicit. Provider-specific exceptions and
 remaining migration boundaries are listed in [Architecture](ARCHITECTURE.md).
 Add a new service/repository capability for bookkeeping behavior rather than
-passing workbook administration into a normal page.
+passing workbook administration into a browser request.
 
 ## Pull requests and review
 

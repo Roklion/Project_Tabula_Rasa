@@ -47,7 +47,7 @@ def load_business_profiles(secrets: Mapping[str, Any]) -> list[BusinessProfile]:
             )
         if "gcp_service_account" in raw_settings:
             raise BusinessProfileConfigurationError(
-                "Service-account profiles must be converted with scripts/migrate_profile_oauth.py."
+                "Service-account profiles are unsupported. Configure this profile through local Google setup."
             )
         if "spreadsheet_id" not in raw_settings:
             raise BusinessProfileConfigurationError(
