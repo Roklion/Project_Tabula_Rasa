@@ -7,8 +7,6 @@ from decimal import Decimal, getcontext, localcontext
 from pathlib import Path
 import subprocess
 import sys
-from types import SimpleNamespace
-from unittest.mock import MagicMock, Mock
 
 import pytest
 
@@ -208,95 +206,3 @@ assert service.period_report(service.read_ledger()).totals['net'] == 0
                             cwd=Path(__file__).resolve().parents[1],
                             capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
-
-
-def test_adapter_normalizes_values_without_leaking_worksheet_metadata() -> None:
-    from tabula_rasa.infrastructure.google_sheets_reporting import GoogleSheetsLedgerQueryRepository
-
-    storage = Mock()
-    storage.list_accounts.return_value = [{
-        "id": "bank", "name": "Checking", "type": "Bank", "classification": "Asset",
-        "opening_balance": 10.5, "active": False, "worksheet_row": 4,
-    }]
-    storage.list_categories.return_value = [{"id": "office", "name": "Office", "kind": "Expense"}]
-    storage.list_transactions.return_value = [{
-        "id": "expense", "txn_date": "2026-07-01", "kind": "Expense", "amount": "3.25",
-        "account_id": "bank", "category_id": "office", "tag_ids": ["client"],
-        "tags": ["Client"], "receipt_references": "[]", "worksheet_row": 7,
-    }]
-    storage.list_journal_entries.return_value = [{
-        "id": "split", "txn_date": "2026-07-02", "postings": [{
-            "id": "debit", "target_type": "category", "target_id": "office", "side": "Debit",
-            "position": "1", "amount": "1.50", "worksheet_row": 9,
-        }],
-    }]
-    adapter = GoogleSheetsLedgerQueryRepository(storage)
-    snapshot = adapter.read_ledger(force_refresh=True)
-    assert snapshot.accounts[0].opening_balance == Decimal("10.5")
-    assert snapshot.accounts[0].active is False
-    assert snapshot.transactions[0].date == date(2026, 7, 1)
-    assert snapshot.transactions[0].amount == Decimal("3.25")
-    assert snapshot.transactions[0].tag_ids == ("client",)
-    assert snapshot.transactions[0].receipt_count == 0
-    assert snapshot.journals[0].postings[0].position == 1
-    assert not hasattr(snapshot.transactions[0], "worksheet_row")
-    storage.prefetch_worksheets.assert_not_called()
-    storage.list_accounts.assert_called_once_with(active_only=False, _force_refresh=True)
-    storage.list_transactions.assert_called_once_with(_force_refresh=True)
-    storage.list_journal_entries.assert_called_once_with(_force_refresh=True)
-
-    failure = RuntimeError("Synthetic adapter read failure")
-    storage.list_transactions.side_effect = failure
-    with pytest.raises(RuntimeError) as raised:
-        adapter.read_ledger()
-    assert raised.value is failure
-    assert storage.list_transactions.call_count == 2
-
-
-@pytest.mark.parametrize("page", ["dashboard", "reports"])
-def test_report_pages_use_application_queries_without_legacy_reads(ledger, monkeypatch, page) -> None:
-    from tabula_rasa.page_renderers import dashboard, reports
-
-    module = dashboard if page == "dashboard" else reports
-    ui = MagicMock()
-
-    def columns(spec, **kwargs):
-        result = [MagicMock() for _ in range(spec if isinstance(spec, int) else len(spec))]
-        for column in result:
-            column.date_input.side_effect = lambda label, value, **kwargs: value
-        return result
-
-    ui.columns.side_effect = columns
-    ui.date_input.return_value = date(2026, 7, 3)
-    monkeypatch.setattr(module, "st", ui)
-    monkeypatch.setattr(module, "render_page_header", Mock())
-    monkeypatch.setattr(module, "render_global_footer", Mock())
-    repository = FakeLedgerQueryRepository(ledger)
-    services = SimpleNamespace(profile_key="north", reporting=ReportingService(repository))
-    if page == "dashboard":
-        context = dashboard.DashboardContext("north", services)
-        dashboard.render_dashboard(context)
-        activity = ui.dataframe.call_args_list[0].args[0]
-        assert list(activity["Type"]) == ["Journal", "Transfer", "Expense", "Income"]
-        assert list(activity["Amount"]) == [15.0, 30.0, -20.0, 50.0]
-    else:
-        context = reports.ReportsContext("north", services, Mock())
-        reports.render_reports(context)
-        assert ui.dataframe.call_count >= 3
-        assert ui.warning.call_count == 0
-    ui.error.assert_not_called()
-    assert repository.reads == [False]
-
-
-def test_reporting_page_binding_refuses_another_profiles_service(ledger) -> None:
-    from tabula_rasa.page_renderers.reporting_service import reporting_service
-    from tabula_rasa.storage import StorageValidationError
-
-    repository = FakeLedgerQueryRepository(ledger)
-    context = SimpleNamespace(
-        profile_key="south",
-        services=SimpleNamespace(profile_key="north", reporting=ReportingService(repository)),
-    )
-    with pytest.raises(StorageValidationError, match="selected business profile"):
-        reporting_service(context)
-    assert repository.reads == []

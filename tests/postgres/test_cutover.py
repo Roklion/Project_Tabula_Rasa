@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import text
 
 from scripts.cutover_bookkeeping import smoke_application
-from tabula_rasa.composition import create_application, create_sheets_application
+from tabula_rasa.composition import create_application
 from tabula_rasa.business_profiles import BusinessProfileConfigurationError
 from tabula_rasa.errors import StorageConflictError
 from tabula_rasa.infrastructure.postgres.composition import create_postgres_services
@@ -52,7 +52,7 @@ def test_rehearsed_cutover_composes_only_postgres_services_and_smokes_all_domain
     config = settings_for("alpha", "beta")
     def no_sheets(*args, **kwargs):
         raise AssertionError("PostgreSQL requests must never initialize or write Sheets.")
-    monkeypatch.setattr("tabula_rasa.composition.GoogleSheetsStorage.from_secrets", no_sheets)
+    monkeypatch.setattr("tabula_rasa.storage.GoogleSheetsStorage.from_secrets", no_sheets)
     for profile, plan in plans.items():
         prepared = controller.prepare(plan, mode="rehearsal", evidence=REHEARSAL_EVIDENCE)
         assert prepared["state"] == "prepared" and not prepared["cutover_authorized"]
@@ -68,8 +68,8 @@ def test_rehearsed_cutover_composes_only_postgres_services_and_smokes_all_domain
         assert application.services.reporting.period_report(application.services.reporting.read_ledger()).totals["net"] == 45.1
         assert smoke_application(profile, config, database, plan)["passed"]
         assert status(database, profile)["divergent"] is False
-        with pytest.raises(BusinessProfileConfigurationError, match="not configured"):
-            create_sheets_application(profile, config)
+        with pytest.raises(BusinessProfileConfigurationError, match="retired"):
+            create_application(profile, {**config, "bookkeeping_backends": {profile: {"backend": "sheets"}}})
     assert status(database, "alpha")["evidence"]["source_contract"]["pull_request"] == 263
     assert "Synthetic" not in json.dumps(activated)
 

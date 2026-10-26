@@ -1,19 +1,12 @@
-"""The first application port works with small fakes and the existing adapter."""
+"""Shared application ports preserve repository ownership without provider dependencies."""
 
 from pathlib import Path
 import subprocess
 import sys
-from unittest.mock import patch
 
 import pytest
 
 from tabula_rasa.application import LedgerInfo, assemble_application_services
-from tabula_rasa.business_profiles import BusinessProfileConfigurationError
-from tabula_rasa.composition import create_sheets_application
-from tabula_rasa.storage import GoogleSheetsStorage, StorageUnavailableError
-from tests.app_support import profile_config
-from tests.fakes import FakeWorkbook
-from tests.google_auth_fixtures import google_grant
 
 
 class FakeLedgerSetupRepository:
@@ -57,81 +50,6 @@ def test_receipt_capability_requires_both_ports(missing: str) -> None:
             receipt_repository=None if missing == "metadata" else object(),
             document_store=None if missing == "documents" else object(),
         )
-
-
-def test_sheets_composition_selects_profiles_and_shares_the_legacy_facade() -> None:
-    north_workbook, south_workbook = FakeWorkbook(), FakeWorkbook()
-    north_workbook.title = "North ledger"
-    south_workbook.title = "South ledger"
-    storages = {
-        "north-sheet": GoogleSheetsStorage(north_workbook),
-        "south-sheet": GoogleSheetsStorage(south_workbook),
-    }
-    secrets = {
-        "business_profiles": {
-            key: profile_config(
-                name=key.title(),
-                spreadsheet_id=f"{key}-sheet",
-                google_drive=google_grant(f"{key}@example.test"),
-            )
-            for key in ("north", "south")
-        }
-    }
-
-    with patch.object(
-        GoogleSheetsStorage,
-        "from_secrets",
-        side_effect=lambda selected: storages[selected["spreadsheet_id"]],
-    ) as create_storage:
-        north = create_sheets_application("north", secrets)
-        south = create_sheets_application("south", secrets)
-
-    assert create_storage.call_count == 2
-    assert [
-        call.args[0]["spreadsheet_id"] for call in create_storage.call_args_list
-    ] == ["north-sheet", "south-sheet"]
-    assert [
-        call.args[0]["google_drive"]["authorized_email"]
-        for call in create_storage.call_args_list
-    ] == ["north@example.test", "south@example.test"]
-    for key, application in (("north", north), ("south", south)):
-        assert application.services.profile_key == key
-        assert application.workbook_admin is storages[f"{key}-sheet"]
-        assert application.services.ledger.get_info().name == f"{key.title()} ledger"
-
-    result = north.services.ledger.ensure_defaults()
-    assert result["accounts"] > 0 and result["categories"] > 0
-    assert north.workbook_admin.list_accounts()
-    assert south.workbook_admin.list_accounts() == []
-    assert north.services.ledger.ensure_defaults() == {"accounts": 0, "categories": 0}
-
-    failure = StorageUnavailableError("Synthetic backend unavailable")
-    with patch.object(south.workbook_admin, "ensure_defaults", side_effect=failure):
-        with pytest.raises(StorageUnavailableError) as raised:
-            south.services.ledger.ensure_defaults()
-    assert raised.value is failure
-
-
-@pytest.mark.parametrize("profile_key", ["", " ", None, "missing"])
-def test_composition_never_falls_back_to_another_profile(profile_key: str) -> None:
-    secrets = {"business_profiles": {"north": profile_config()}}
-    with patch.object(GoogleSheetsStorage, "from_secrets") as create_storage:
-        with pytest.raises(BusinessProfileConfigurationError):
-            create_sheets_application(profile_key, secrets)
-    create_storage.assert_not_called()
-
-
-def test_factory_failure_is_propagated_without_retry() -> None:
-    failure = StorageUnavailableError("Synthetic backend unavailable")
-    with patch.object(
-        GoogleSheetsStorage, "from_secrets", side_effect=failure
-    ) as create_storage:
-        with pytest.raises(StorageUnavailableError) as raised:
-            create_sheets_application(
-                "north", {"business_profiles": {"north": profile_config()}}
-            )
-    assert raised.value is failure
-    create_storage.assert_called_once()
 
 
 def test_application_package_loads_without_ui_or_google_infrastructure() -> None:

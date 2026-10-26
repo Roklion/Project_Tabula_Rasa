@@ -1,3 +1,4 @@
+from tests.sheets_fixtures import account as fixture_account, category as fixture_category, mileage as fixture_mileage, payee as fixture_payee, receipts as fixture_receipts, transaction as fixture_transaction
 import csv
 
 from ._support import (
@@ -18,7 +19,6 @@ from ._support import (
     hashlib,
     io,
     json,
-    patch,
     pytest,
     rewrite_backup_tables,
     zipfile,
@@ -108,8 +108,8 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         )
 
     def test_backup_contains_csv_files_and_manifest(self) -> None:
-        self.storage.create_account("Checking", "Bank")
-        self.storage.create_mileage_trip(
+        fixture_account(self.storage, "Checking", "Bank")
+        fixture_mileage(self.storage,
             trip_date="2026-07-20",
             miles=4.5,
             start_location="Office",
@@ -151,7 +151,7 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         assert validated["workbook_title"] == "Test Ledger"
 
     def test_backup_forces_fresh_worksheet_reads(self) -> None:
-        account = self.storage.create_account("Checking", "Bank")
+        account = fixture_account(self.storage, "Checking", "Bank")
         self.storage.list_accounts(active_only=False)
         headers = self.workbook.sheets["Accounts"].rows[0]
         self.workbook.sheets["Accounts"].rows[1][headers.index("name")] = "External"
@@ -162,48 +162,10 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             assert account["id"] in archive.read("Accounts.csv").decode("utf-8")
             assert "External" in archive.read("Accounts.csv").decode("utf-8")
 
-    def test_backup_serializes_normalized_recurring_schedule_enums(self) -> None:
-        self.storage.ensure_defaults()
-        account = self.storage.list_accounts()[0]
-        category = self.storage.list_categories(kind="Expense")[0]
-        payee = self.storage.create_payee("Noncanonical vendor")
-        schedule = self.storage.create_recurring_schedule(
-            schedule_id="noncanonical-export",
-            name="Noncanonical export",
-            txn_date="2026-07-31",
-            recurrence_unit="month",
-            amount=10,
-            account_id=account["id"],
-            category_id=category["id"],
-        )
-        row = self.storage._find_row("RecurringSchedules", schedule["id"])
-        changed = dict(row.values)
-        changed.update({
-            "kind": " expense ",
-            "source_kind": " transaction ",
-            "recurrence_unit": "months",
-            "status": "ACTIVE",
-            "account_id": f" {account['id']} ",
-            "category_id": f" {category['id']} ",
-            "payee_id": f" {payee['id']} ",
-        })
-        self.storage._replace_row("RecurringSchedules", row, changed)
-
-        backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
-
-        with zipfile.ZipFile(io.BytesIO(backup)) as archive:
-            schedules = list(csv.DictReader(io.StringIO(archive.read("RecurringSchedules.csv").decode())))
-        assert schedules[0]["kind"] == "Expense"
-        assert schedules[0]["recurrence_unit"] == "month"
-        assert schedules[0]["status"] == "active"
-        assert schedules[0]["account_id"] == account["id"]
-        assert schedules[0]["category_id"] == category["id"]
-        assert schedules[0]["payee_id"] == payee["id"]
-        assert self.storage.validate_backup_zip(backup)["format_version"] == BACKUP_FORMAT_VERSION
 
     def test_backup_rejects_an_externally_corrupted_hierarchy(self) -> None:
-        parent = self.storage.create_account("Operating", "Bank")
-        child = self.storage.create_account(
+        parent = fixture_account(self.storage, "Operating", "Bank")
+        child = fixture_account(self.storage,
             "Savings", "Cash", parent_id=parent["id"]
         )
         account_sheet = self.workbook.sheets["Accounts"]
@@ -220,16 +182,16 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             )
 
     def test_backup_inventories_referenced_and_unreferenced_receipts(self) -> None:
-        account = self.storage.create_account("Checking", "Bank")
-        category = self.storage.create_category("Sales", "Income")
-        transaction = self.storage.create_transaction(
+        account = fixture_account(self.storage, "Checking", "Bank")
+        category = fixture_category(self.storage, "Sales", "Income")
+        transaction = fixture_transaction(self.storage,
             txn_date="2026-07-31",
             kind="Income",
             amount=10,
             account_id=account["id"],
             category_id=category["id"],
         )
-        self.storage.link_transaction_receipt(
+        fixture_receipts(self.storage,
             transaction["id"],
             reference=TEST_RECEIPT_REFERENCE,
         )
@@ -288,10 +250,10 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             self.storage.validate_backup_zip(output.getvalue())
 
     def test_backup_validation_normalizes_padded_payee_ids(self) -> None:
-        account = self.storage.create_account("Checking", "Bank")
-        category = self.storage.create_category("Office", "Expense")
-        payee = self.storage.create_payee("Vendor")
-        self.storage.create_transaction(
+        account = fixture_account(self.storage, "Checking", "Bank")
+        category = fixture_category(self.storage, "Office", "Expense")
+        payee = fixture_payee(self.storage, "Vendor")
+        fixture_transaction(self.storage,
             txn_date="2026-09-01",
             kind="Expense",
             amount=10,
@@ -317,7 +279,7 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
 
     def test_backup_rejects_invalid_payee_records(self) -> None:
         storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
-        payee = storage.create_payee("Valid vendor")
+        payee = fixture_payee(storage, "Valid vendor")
         backup = storage.export_backup_zip(
             build_receipt_manifest("test", storage.list_transactions(), [])
         )
@@ -392,25 +354,12 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             [f"'{title}'" for title in WORKSHEET_HEADERS]
         ]
 
-    def test_import_preview_reuses_cache_but_commit_revalidates(self) -> None:
-        with patch.object(
-            self.storage,
-            "_refresh_rows",
-            wraps=self.storage._refresh_rows,
-        ) as refresh_rows:
-            self.storage.preview_quickbooks_transactions([])
-            preview_refreshes = refresh_rows.call_count
-            self.storage.preview_quickbooks_transactions([])
-            self.storage.import_quickbooks_transactions([])
-
-        assert preview_refreshes == 1
-        assert refresh_rows.call_count == preview_refreshes + 1
 
     def test_restore_backup_into_blank_workbook_and_verify_rows(self) -> None:
-        account = self.storage.create_account("Checking", "Bank", 125)
-        category = self.storage.create_category("Sales", "Income")
-        payee = self.storage.create_payee("Customer")
-        transaction = self.storage.create_transaction(
+        account = fixture_account(self.storage, "Checking", "Bank", 125)
+        category = fixture_category(self.storage, "Sales", "Income")
+        payee = fixture_payee(self.storage, "Customer")
+        transaction = fixture_transaction(self.storage,
             txn_date="2026-07-19",
             kind="Income",
             amount=25,
@@ -418,11 +367,11 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             category_id=category["id"],
             payee_id=payee["id"],
         )
-        self.storage.link_transaction_receipt(
+        fixture_receipts(self.storage,
             transaction["id"],
             reference=TEST_RECEIPT_REFERENCE,
         )
-        mileage = self.storage.create_mileage_trip(
+        mileage = fixture_mileage(self.storage,
             trip_date="2026-07-19",
             miles=8.4,
             start_location="Office",
@@ -456,79 +405,14 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         ]
         assert restored_storage.list_mileage_trips()[0]["id"] == mileage["id"]
 
-    def test_backup_round_trips_mixed_recurring_source_kind(self) -> None:
-        account = self.storage.create_account("Checking", "Bank")
-        category = self.storage.create_category("Office", "Expense")
-        result = self.storage.create_recurring_mixed_use_expense(
-            schedule_id="mixed-backup-schedule",
-            name="Shared office",
-            txn_date="2026-09-01",
-            recurrence_unit="month",
-            recurrence_interval=1,
-            total_expense="100.00",
-            business_use_percentage="50",
-            account_id=account["id"],
-            category_id=category["id"],
-            allocation_rationale="Workspace",
-        )
-        backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
-        restored_storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
-        restored_storage.restore_backup_zip(backup)
-        schedule = restored_storage.get_recurring_schedule("mixed-backup-schedule")
-        source = restored_storage.get_mixed_use_expense(result["source"]["id"])
-        projection = next(
-            item
-            for item in restored_storage.list_transactions()
-            if item["id"] == result["transaction"]["id"]
-        )
-        assert schedule["source_kind"] == "mixed_use"
-        assert source["recurring_source_kind"] == "mixed_use"
-        assert projection["recurring_source_kind"] == "mixed_use"
-
-    def test_backup_canonicalizes_mixed_recurring_allocation(self) -> None:
-        account = self.storage.create_account("Checking", "Bank")
-        category = self.storage.create_category("Office", "Expense")
-        self.storage.create_recurring_mixed_use_expense(
-            schedule_id="mixed-canonical-backup",
-            name="Shared office",
-            txn_date="2026-09-01",
-            recurrence_unit="month",
-            recurrence_interval=1,
-            total_expense="100.00",
-            business_use_percentage="50",
-            account_id=account["id"],
-            category_id=category["id"],
-            allocation_rationale="Workspace",
-        )
-        row = self.storage._find_row(
-            "RecurringSchedules", "mixed-canonical-backup"
-        )
-        corrupted = dict(row.values)
-        corrupted["amount"] = "99.00"
-        self.storage._replace_row("RecurringSchedules", row, corrupted)
-
-        backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
-
-        with zipfile.ZipFile(io.BytesIO(backup)) as archive:
-            schedules = list(
-                csv.DictReader(
-                    io.StringIO(
-                        archive.read("RecurringSchedules.csv").decode("utf-8")
-                    )
-                )
-            )
-        assert schedules[0]["amount"] == "50.00"
-        assert self.storage.validate_backup_zip(backup)["format_version"] == (
-            BACKUP_FORMAT_VERSION
-        )
 
     def test_backup_round_trips_account_and_category_hierarchies(self) -> None:
-        account_parent = self.storage.create_account("Operating", "Bank")
-        account_child = self.storage.create_account(
+        account_parent = fixture_account(self.storage, "Operating", "Bank")
+        account_child = fixture_account(self.storage,
             "Savings", "Cash", parent_id=account_parent["id"]
         )
-        category_parent = self.storage.create_category("Travel", "Expense")
-        category_child = self.storage.create_category(
+        category_parent = fixture_category(self.storage, "Travel", "Expense")
+        category_child = fixture_category(self.storage,
             "Flights", "Expense", parent_id=category_parent["id"]
         )
         backup = self.storage.export_backup_zip(
@@ -550,10 +434,10 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         )
 
     def test_backup_validation_rejects_tampered_hierarchy_graphs(self) -> None:
-        first = self.storage.create_account("First", "Other")
-        second = self.storage.create_account("Second", "Other")
-        third = self.storage.create_account("Third", "Other")
-        liability = self.storage.create_account(
+        first = fixture_account(self.storage, "First", "Other")
+        second = fixture_account(self.storage, "Second", "Other")
+        third = fixture_account(self.storage, "Third", "Other")
+        liability = fixture_account(self.storage,
             "Liability",
             "Other",
             classification="Liability",
@@ -592,9 +476,9 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
                 self.storage.validate_backup_zip(tampered)
 
     def test_backup_validation_rejects_malformed_transaction_receipts(self) -> None:
-        account = self.storage.create_account("Checking", "Bank")
-        category = self.storage.create_category("Office", "Expense")
-        self.storage.create_transaction(
+        account = fixture_account(self.storage, "Checking", "Bank")
+        category = fixture_category(self.storage, "Office", "Expense")
+        fixture_transaction(self.storage,
             txn_date="2026-09-01", kind="Expense", amount="10.00",
             account_id=account["id"], category_id=category["id"],
         )
@@ -608,8 +492,8 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             self.storage.validate_backup_zip(tampered)
 
     def test_backup_validation_rejects_incompatible_category_parent(self) -> None:
-        expense = self.storage.create_category("Travel", "Expense")
-        income = self.storage.create_category("Sales", "Income")
+        expense = fixture_category(self.storage, "Travel", "Expense")
+        income = fixture_category(self.storage, "Sales", "Income")
         backup = self.storage.export_backup_zip(
             backup_receipt_manifest(self.storage)
         )
@@ -629,7 +513,7 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
             self.storage.validate_backup_zip(tampered)
 
     def test_restore_refuses_legacy_backup_before_writing(self) -> None:
-        self.storage.create_account("Checking", "Bank")
+        fixture_account(self.storage, "Checking", "Bank")
         backup = rewrite_backup_tables(
             self.storage.export_backup_zip(backup_receipt_manifest(self.storage)),
             {},
@@ -641,16 +525,16 @@ class TestGoogleSheetsStorage(GoogleSheetsStorageTestCase):
         assert target.list_accounts(active_only=False) == []
 
     def test_restore_refuses_nonblank_target(self) -> None:
-        self.storage.create_account("Checking", "Bank")
+        fixture_account(self.storage, "Checking", "Bank")
         backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
         target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
-        target.create_account("Existing", "Cash")
+        fixture_account(target, "Existing", "Cash")
 
         with pytest.raises(StorageConflictError):
             target.restore_backup_zip(backup)
 
     def test_restore_rejects_tampered_csv(self) -> None:
-        self.storage.create_account("Checking", "Bank")
+        fixture_account(self.storage, "Checking", "Bank")
         backup = self.storage.export_backup_zip(backup_receipt_manifest(self.storage))
         output = io.BytesIO()
         with zipfile.ZipFile(io.BytesIO(backup)) as source, zipfile.ZipFile(

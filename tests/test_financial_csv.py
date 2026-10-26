@@ -17,7 +17,7 @@ from tabula_rasa.application.reporting_contracts import (
 )
 from tabula_rasa.errors import StorageNotFoundError
 from tabula_rasa.ledger_records import LEDGER_COLUMNS
-from tests.test_journal_exports import JOURNAL_COLUMNS, TRANSACTION_COLUMNS
+from tests.financial_csv_support import JOURNAL_COLUMNS, TRANSACTION_COLUMNS
 
 
 def csv_rows(content):

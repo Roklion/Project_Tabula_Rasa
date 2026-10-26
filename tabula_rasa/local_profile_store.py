@@ -185,7 +185,7 @@ def _validate_stored_profiles(profiles: object) -> dict[str, dict[str, Any]]:
             raise LocalProfileStoreError("Local profile store has an invalid format.")
         if "gcp_service_account" in raw_settings:
             raise LocalProfileStoreError(
-                "Run scripts/migrate_profile_oauth.py before loading service-account profiles."
+                "Service-account profiles are unsupported. Preserve the original configuration and use local Google setup."
             )
         try:
             settings = build_profile_settings(

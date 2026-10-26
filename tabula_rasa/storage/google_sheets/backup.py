@@ -33,6 +33,7 @@ from .validation import (
     _validate_tag_records,
 )
 from tabula_rasa.mixed_use import validate_mixed_use_allocation
+from tabula_rasa.recurring import decode_schedule
 
 class BackupMixin:
     """Mixin for the backup storage boundary."""
@@ -60,11 +61,10 @@ class BackupMixin:
                 for title, rows in snapshot.items()
             }
         )
-        self._validate_recurring_references()
         self.list_assets(_force_refresh=True)
         accounts = self._account_lookup(force_refresh=True)
         categories = self._category_lookup(force_refresh=True)
-        from .depreciation_posting import validate_depreciation_history
+        from tabula_rasa.depreciation_posting import validate_depreciation_history
         validate_depreciation_history(
             [row.values for row in snapshot["Assets"]],
             [row.values for row in snapshot["Transactions"]], accounts, categories,
@@ -125,7 +125,7 @@ class BackupMixin:
                     tag = next(item for item in tag_records if item["id"] == record_id)
                     values = tag
                 elif title == "RecurringSchedules":
-                    values = {**values, **self._decode_schedule(values)}
+                    values = {**values, **decode_schedule(values)}
                     if values.get("source_kind") == "mixed_use":
                         allocation = validate_mixed_use_allocation(
                             values.get("total_expense"),
@@ -180,7 +180,11 @@ class BackupMixin:
                     "utf-8"
                 ),
             )
-        return archive_buffer.getvalue()
+        backup = archive_buffer.getvalue()
+        # Validate the serialized final format, including normalized schedules,
+        # before exposing a recovery artifact. This never invokes generation.
+        self.validate_backup_zip(backup)
+        return backup
 
     @staticmethod
     def validate_backup_zip(backup: bytes) -> dict[str, Any]:

@@ -1,10 +1,8 @@
 """Reference services validate without persistence and preserve the Sheets contract."""
 
-from copy import deepcopy
 from pathlib import Path
 import subprocess
 import sys
-from unittest.mock import patch
 
 import pytest
 
@@ -12,23 +10,11 @@ from tabula_rasa.application import (
     AccountService,
     PayeeService,
     TagService,
-    assemble_application_services,
 )
-from tabula_rasa.composition import create_sheets_application
 from tabula_rasa.errors import (
-    StorageConflictError,
     StorageNotFoundError,
     StorageValidationError,
 )
-from tabula_rasa.infrastructure.google_sheets import (
-    GoogleSheetsAccountRepository,
-    GoogleSheetsLedgerSetupRepository,
-    GoogleSheetsPayeeRepository,
-    GoogleSheetsTagRepository,
-)
-from tabula_rasa.storage import GoogleSheetsStorage
-from tests.app_support import profile_config
-from tests.fakes import FakeWorkbook
 
 
 class RecordingRepository:
@@ -237,195 +223,6 @@ def test_service_failures_are_propagated_without_retry(service_type, operation):
         operation(service_type(repository))
     assert raised.value is failure
     assert len(repository.calls) == 1
-
-
-def _sheets_services(storage):
-    return assemble_application_services(
-        "test",
-        ledger_repository=GoogleSheetsLedgerSetupRepository(storage),
-        account_repository=GoogleSheetsAccountRepository(storage),
-        payee_repository=GoogleSheetsPayeeRepository(storage),
-        tag_repository=GoogleSheetsTagRepository(storage),
-    )
-
-
-def test_account_adapter_preserves_hierarchy_classification_and_depreciation_guards(
-    storage,
-):
-    service = _sheets_services(storage).accounts
-    parent = service.create("Operating", "Bank")
-    child = service.create("Reserve", "Cash", parent_id=parent["id"])
-    original_rows = deepcopy(storage._workbook.sheets["Accounts"].rows)
-
-    with pytest.raises(StorageConflictError, match="unique"):
-        service.create(" operating ", "Cash")
-    with pytest.raises(StorageValidationError, match="Asset"):
-        service.update(parent["id"], classification="Liability")
-    with pytest.raises(StorageValidationError, match="hierarchy"):
-        service.update(parent["id"], parent_id=child["id"])
-    assert storage._workbook.sheets["Accounts"].rows == original_rows
-
-    expense = storage.create_category("Depreciation", "Expense")
-    offset = service.create("Accumulated depreciation", "Other", classification="Asset")
-    storage.create_asset(
-        name="Office laptop",
-        asset_type="Computers & office equipment",
-        acquisition_date="2026-01-15",
-        depreciation_start_date="2026-01-31",
-        cost_basis="1200",
-        salvage_value="0",
-        useful_life_quarters=20,
-        depreciation_method="Straight-line",
-        depreciation_expense_account_id=expense["id"],
-        accumulated_depreciation_account_id=offset["id"],
-    )
-    with pytest.raises(StorageConflictError, match="Other / Asset"):
-        service.update(offset["id"], type="Bank")
-    service.deactivate(child["id"])
-    assert child["id"] not in {record["id"] for record in service.list()}
-    assert (
-        next(
-            record
-            for record in service.list(active_only=False)
-            if record["id"] == child["id"]
-        )["active"]
-        is False
-    )
-
-
-@pytest.mark.parametrize("kind", ["payees", "tags"])
-def test_managed_adapters_keep_deduplication_reactivation_and_stale_guards(
-    storage, kind
-):
-    service = getattr(_sheets_services(storage), kind)
-    source = service.create("Ａｃｍｅ   Supplies", active=False)
-    reactivated = service.create("acme supplies")
-    assert reactivated["id"] == source["id"]
-    assert reactivated["active"] == "TRUE"
-    assert len(service.list()) == 1
-    target = service.create("Target")
-    service.update(source["id"], active=False, expected=reactivated)
-
-    for operation in (
-        lambda: service.rename(source["id"], "Renamed", expected=reactivated),
-        lambda: service.merge(
-            target["id"], [source["id"]], expected=[target, reactivated]
-        ),
-        lambda: service.remove(source["id"], expected=reactivated),
-    ):
-        with pytest.raises(StorageConflictError, match="changed"):
-            operation()
-    fresh = next(record for record in service.list() if record["id"] == source["id"])
-    assert fresh["name"] == "Ａｃｍｅ   Supplies" and fresh["active"] == "FALSE"
-    assert service.remove(source["id"], expected=fresh) == {"status": "fully_applied"}
-
-
-def test_profile_composition_scopes_reference_mutations_and_preserves_merge_fields():
-    storages = {
-        f"{key}-sheet": GoogleSheetsStorage(FakeWorkbook())
-        for key in ("north", "south")
-    }
-    secrets = {
-        "business_profiles": {
-            key: profile_config(name=key.title(), spreadsheet_id=f"{key}-sheet")
-            for key in ("north", "south")
-        }
-    }
-    with patch.object(
-        GoogleSheetsStorage,
-        "from_secrets",
-        side_effect=lambda selected: storages[selected["spreadsheet_id"]],
-    ):
-        north = create_sheets_application("north", secrets)
-        south = create_sheets_application("south", secrets)
-    created = {}
-    for key, application in (("north", north), ("south", south)):
-        services, storage = application.services, application.workbook_admin
-        account = services.accounts.create("Checking", "Bank", "100")
-        category = storage.create_category("Office", "Expense")
-        source_payee, target_payee = (
-            services.payees.create("Source"),
-            services.payees.create("Target"),
-        )
-        source_tag, target_tag = (
-            services.tags.create("Source"),
-            services.tags.create("Target"),
-        )
-        transaction = storage.create_transaction(
-            txn_date="2026-09-01",
-            kind="Expense",
-            amount="10.55",
-            account_id=account["id"],
-            category_id=category["id"],
-            payee_id=source_payee["id"],
-            tag_ids=[source_tag["id"]],
-            description="Invoice payment",
-            reference="INV-42",
-        )
-        trip = storage.create_mileage_trip(
-            trip_date="2026-09-02",
-            miles="12.5",
-            start_location="Office",
-            destination="Client",
-            business_purpose="Site visit",
-            tag_ids=[source_tag["id"]],
-        )
-        created[key] = (
-            account,
-            source_payee,
-            target_payee,
-            source_tag,
-            target_tag,
-            transaction,
-            trip,
-        )
-    south_before = {
-        title: deepcopy(sheet.rows)
-        for title, sheet in storages["south-sheet"]._workbook.sheets.items()
-    }
-    transaction_sheet = north.workbook_admin._workbook.sheets["Transactions"]
-    transaction_before = dict(
-        zip(transaction_sheet.rows[0], transaction_sheet.rows[1], strict=True)
-    )
-    account, source_payee, target_payee, source_tag, target_tag, transaction, trip = (
-        created["north"]
-    )
-    services = north.services
-    services.accounts.update(
-        account["id"], name="North checking", opening_balance="150"
-    )
-    for service, record in (
-        (services.payees, source_payee),
-        (services.tags, source_tag),
-    ):
-        with pytest.raises(StorageConflictError, match="referenced"):
-            service.remove(record["id"], expected=record)
-    assert services.payees.merge(
-        target_payee["id"],
-        [source_payee["id"]],
-        expected=[source_payee, target_payee],
-    ) == {"status": "fully_applied", "count": "1"}
-    assert services.tags.merge(
-        target_tag["id"],
-        [source_tag["id"]],
-        expected=[source_tag, target_tag],
-    ) == {"status": "fully_applied", "count": "1"}
-    fresh_transaction = north.workbook_admin.list_transactions()[0]
-    transaction_after = dict(
-        zip(transaction_sheet.rows[0], transaction_sheet.rows[1], strict=True)
-    )
-    for field, value in transaction_before.items():
-        if field not in {"payee_id", "tag_ids"}:
-            assert transaction_after[field] == value
-    assert fresh_transaction["payee_id"] == target_payee["id"]
-    assert fresh_transaction["tag_ids"] == [target_tag["id"]]
-    fresh_trip = north.workbook_admin.list_mileage_trips()[0]
-    assert fresh_trip["id"] == trip["id"] and fresh_trip["miles"] == trip["miles"]
-    assert fresh_trip["tag_ids"] == [target_tag["id"]]
-    assert {
-        title: sheet.rows
-        for title, sheet in storages["south-sheet"]._workbook.sheets.items()
-    } == south_before
 
 
 def test_reference_services_run_without_importing_ui_or_persistence():

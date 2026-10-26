@@ -8,8 +8,7 @@ migration window: the migration drains and blocks audited table writers before r
 the activation watermark, and holds those locks through baseline capture and trigger
 installation. Reads may continue; pause old application writers until the compatible
 audited runtime is deployed. The commercial HTTP runtime starts and serves page loads
-without scheduler or recurring mutations. The legacy internal Streamlit initialization
-route retains its existing reconciliation. recurring job execution's opt-in worker
+without scheduler or recurring mutations. Legacy Streamlit initialization/page reconciliation is retired. recurring job execution's opt-in worker
 integration is documented below; the accounting control service's independent
 [period/correction policy](../accounting/PERIODS_AND_CORRECTIONS.md) remains off until
 approved adoption.
@@ -325,7 +324,8 @@ no production writes.
 
 Forward migration `0013_accounting_controls` adds persisted recurring authority
 and typed job target/business-date fields. Existing entities retain explicit
-PostgreSQL reconciliation; the legacy Sheets/Streamlit session trigger is unaffected.
+PostgreSQL reconciliation. Legacy Sheets/Streamlit session and page generation
+are retired; startup and page loads never generate occurrences.
 Commercial GET/startup remains read-only. `recurring.dispatch` and
 `recurring.schedule` are registered beside the probe, using the existing recurring
 service, schedule baseline guard, stable schedule/date occurrence identities and
@@ -387,7 +387,7 @@ shared counterpart through commit. It drains an in-flight occurrence, then fence
 further worker effects. Old queued/claimed recurring jobs become safe no-ops;
 historical jobs/attempts/occurrences remain. Re-enabling advances the authority
 revision, retains due dates and resumes catchup. Switching neither migrates the
-Sheets ledger nor retires its supported reference flow.
+Sheets ledger or changes the frozen source/recovery contract.
 
 Before hosted activation, record the exact environment/entity allowlist, operator
 identity, approved business zone, timer owner/cadence, compute/storage budget, narrow DB

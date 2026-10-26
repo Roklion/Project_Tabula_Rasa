@@ -1,43 +1,9 @@
-"""Trusted per-profile bookkeeping composition; no Streamlit dependency."""
-
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
-
-from tabula_rasa.application import ApplicationServices, assemble_application_services
-from tabula_rasa.business_profiles import (
-    BusinessProfileConfigurationError,
-    select_profile_secrets,
-)
-from tabula_rasa.infrastructure.google_sheets import GoogleSheetsLedgerSetupRepository
+"""Trusted PostgreSQL composition; Sheets is retained for operator recovery only."""
+from collections.abc import Mapping
+from dataclasses import dataclass
+from tabula_rasa.application import ApplicationServices
+from tabula_rasa.business_profiles import BusinessProfileConfigurationError, select_profile_secrets
 from tabula_rasa.infrastructure.drive_composition import create_drive_document_store
-from tabula_rasa.infrastructure.google_sheets_mileage import GoogleSheetsMileageRepository
-from tabula_rasa.infrastructure.google_sheets_receipts import GoogleSheetsReceiptRepository
-from tabula_rasa.infrastructure.google_sheets_reporting import GoogleSheetsLedgerQueryRepository
-from tabula_rasa.infrastructure.google_sheets import (
-    GoogleSheetsAccountRepository,
-    GoogleSheetsCategoryRepository,
-    GoogleSheetsPayeeRepository,
-    GoogleSheetsTagRepository,
-    GoogleSheetsTransactionRepository,
-    GoogleSheetsJournalRepository,
-)
-from tabula_rasa.infrastructure.google_sheets_assets import GoogleSheetsAssetRepository
-from tabula_rasa.infrastructure.google_sheets_mixed_use import GoogleSheetsMixedUseRepository
-from tabula_rasa.infrastructure.google_sheets_recurring import GoogleSheetsRecurringRepository
-from tabula_rasa.infrastructure.google_sheets_imports import GoogleSheetsTransactionImportRepository
-from tabula_rasa.storage import GoogleSheetsStorage
-
-
-@dataclass(frozen=True)
-class SheetsApplication:
-    """Bookkeeping services and explicit Sheets workbook administration.
-
-    Only backup/operator workflows receive workbook_admin. Ordinary pages
-    receive services, so provider-specific methods are not an application API.
-    """
-
-    services: ApplicationServices
-    workbook_admin: GoogleSheetsStorage = field(repr=False)
 
 
 @dataclass(frozen=True)
@@ -46,13 +12,11 @@ class PostgresApplication:
     workbook_admin: None = None
 
 
-def _backend_configuration(profile_key, secrets, *, explicit=False):
+def _backend_configuration(profile_key, secrets):
     configurations = secrets.get("bookkeeping_backends", {})
     if not isinstance(configurations, Mapping):
         raise BusinessProfileConfigurationError("bookkeeping_backends must be a trusted per-profile mapping.")
     configured = configurations.get(profile_key)
-    if profile_key not in configurations and not explicit:
-        return {"backend": "sheets"}
     if (not isinstance(configured, Mapping) or not isinstance(configured.get("backend"), str)
             or configured["backend"] not in {"sheets", "postgres", "maintenance"}):
         raise BusinessProfileConfigurationError("An explicit valid bookkeeping backend is required for this profile.")
@@ -81,10 +45,10 @@ def create_application(profile_key, secrets, *, database=None, drive_client_fact
     if not isinstance(profile_key, str) or not profile_key.strip():
         raise BusinessProfileConfigurationError("Application services require a selected business profile.")
     selected = select_profile_secrets(secrets, profile_key)
-    configured = _backend_configuration(profile_key, secrets, explicit=True)
+    configured = _backend_configuration(profile_key, secrets)
     backend = configured["backend"]
     if backend == "sheets":
-        return create_sheets_application(profile_key, secrets, drive_client_factory=drive_client_factory)
+        raise BusinessProfileConfigurationError("Sheets bookkeeping is retired. Use the PostgreSQL browser application.")
     if backend == "maintenance":
         raise BusinessProfileConfigurationError("This profile is in bookkeeping maintenance.")
     if database is None:
@@ -101,42 +65,3 @@ def create_application(profile_key, secrets, *, database=None, drive_client_fact
         document_store=store if store.scope_key else None,
         document_store_kind="google_drive" if store.scope_key else None)
     return PostgresApplication(services)
-
-
-def create_sheets_application(
-    profile_key: str,
-    secrets: Mapping[str, object],
-    *,
-    drive_client_factory: Callable[[], object] | None = None,
-) -> SheetsApplication:
-    """Build one graph from the selected profile's existing Sheets backend."""
-    # select_profile_secrets has a first-profile default for legacy callers.
-    # A composition request must always name its profile explicitly.
-    if not isinstance(profile_key, str) or not profile_key.strip():
-        raise BusinessProfileConfigurationError(
-            "Application services require a selected business profile."
-        )
-    selected_secrets = select_profile_secrets(secrets, profile_key)
-    if _backend_configuration(profile_key, secrets)["backend"] != "sheets":
-        raise BusinessProfileConfigurationError("This profile is not configured for the Sheets runtime.")
-    storage = GoogleSheetsStorage.from_secrets(selected_secrets)
-
-    services = assemble_application_services(
-        profile_key,
-        ledger_repository=GoogleSheetsLedgerSetupRepository(storage),
-        reporting_repository=GoogleSheetsLedgerQueryRepository(storage),
-        receipt_repository=GoogleSheetsReceiptRepository(profile_key, storage),
-        document_store=_document_store(profile_key, selected_secrets, secrets, drive_client_factory),
-        mileage_repository=GoogleSheetsMileageRepository(storage),
-        account_repository=GoogleSheetsAccountRepository(storage),
-        category_repository=GoogleSheetsCategoryRepository(storage),
-        import_repository=GoogleSheetsTransactionImportRepository(storage),
-        payee_repository=GoogleSheetsPayeeRepository(storage),
-        tag_repository=GoogleSheetsTagRepository(storage),
-        transaction_repository=GoogleSheetsTransactionRepository(storage),
-        journal_repository=GoogleSheetsJournalRepository(storage),
-        asset_repository=GoogleSheetsAssetRepository(storage),
-        mixed_use_repository=GoogleSheetsMixedUseRepository(storage),
-        recurring_repository=GoogleSheetsRecurringRepository(storage),
-    )
-    return SheetsApplication(services=services, workbook_admin=storage)

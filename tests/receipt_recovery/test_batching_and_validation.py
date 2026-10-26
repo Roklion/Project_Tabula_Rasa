@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.sheets_fixtures import receipts as fixture_receipts
 
 from tests.google_auth_fixtures import GOOGLE_OAUTH_CONFIG, google_grant
 
@@ -46,7 +47,7 @@ def test_recovery_removes_old_reference_when_confirmed_reference_is_also_present
         old_file_id=str(reference["id"]),
         reference={**reference, "id": "newreceipt01"},
     )
-    target.link_transaction_receipt(
+    fixture_receipts(target,
         transaction_id,
         file_id=str(reference["id"]),
         name=str(reference["name"]),

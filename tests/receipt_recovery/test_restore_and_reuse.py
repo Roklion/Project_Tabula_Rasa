@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.sheets_fixtures import account as fixture_account, category as fixture_category, mixed as fixture_mixed, receipts as fixture_receipts, transaction as fixture_transaction
 
 import json
 from pathlib import Path
@@ -144,10 +145,10 @@ def test_recovery_reuses_original_drive_file_without_remapping() -> None:
 
 def test_mixed_use_receipt_recovery_updates_source_and_projection() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
-    account = storage.create_account("Checking", "Bank")
-    category = storage.create_category("Office", "Expense")
+    account = fixture_account(storage, "Checking", "Bank")
+    category = fixture_category(storage, "Office", "Expense")
     old_reference = make_reference(1, b"receipt")
-    source = storage.create_mixed_use_expense(
+    source = fixture_mixed(storage,
         txn_date="2026-07-31",
         total_expense="100.00",
         business_use_percentage="50",
@@ -187,7 +188,7 @@ def test_recovery_preserves_conflict_check_before_skipping_reused_file() -> None
     backup, target, transaction_id = backup_with_receipts([reference])
     accounts = target.list_accounts(_force_refresh=True)
     categories = target.list_categories(_force_refresh=True)
-    other_transaction = target.create_transaction(
+    other_transaction = fixture_transaction(target,
         txn_date="2026-07-31",
         kind="Income",
         amount=10,
@@ -303,7 +304,7 @@ def test_recovery_remaps_legacy_reference_when_original_file_is_reused() -> None
     content = b"receipt"
     reference = make_reference(1, content)
     backup, target, transaction_id = backup_with_receipts([reference])
-    target.link_transaction_receipt(
+    fixture_receipts(target,
         transaction_id,
         file_id=str(reference["id"]),
         name=str(reference["name"]),

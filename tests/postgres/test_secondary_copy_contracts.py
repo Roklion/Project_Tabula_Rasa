@@ -1,4 +1,4 @@
-"""Mixed-use copies share preparation and active association rules on both stores."""
+"""Mixed-use copies preserve shared preparation and active PostgreSQL associations."""
 
 from tests.postgres.test_secondary_service_contracts import secondary_services as secondary_services
 

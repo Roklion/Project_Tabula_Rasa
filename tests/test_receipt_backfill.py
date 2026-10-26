@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.sheets_fixtures import account as fixture_account, category as fixture_category, mixed as fixture_mixed, mixed_row as fixture_mixed_row, payee as fixture_payee, receipts as fixture_receipts, transaction as fixture_transaction
 
 import hashlib
 from unittest.mock import Mock
@@ -81,15 +82,15 @@ def _backfilled_drive_receipt(
 def test_preparation_updates_drive_and_active_transaction_reference(
     storage: GoogleSheetsStorage,
 ) -> None:
-    account = storage.create_account("Checking", "Bank")
-    transaction = storage.create_transaction(
+    account = fixture_account(storage, "Checking", "Bank")
+    transaction = fixture_transaction(storage,
         txn_date="2026-07-31",
         kind="Transfer",
         amount=10,
         account_id=account["id"],
-        to_account_id=storage.create_account("Savings", "Bank")["id"],
+        to_account_id=fixture_account(storage, "Savings", "Bank")["id"],
     )
-    storage.link_transaction_receipt(
+    fixture_receipts(storage,
         transaction["id"],
         file_id="receipt123456",
         name="statement.pdf",
@@ -127,8 +128,8 @@ def test_preparation_routes_mixed_use_receipt_remaps_through_source_api(
     storage: GoogleSheetsStorage,
 ) -> None:
     storage.ensure_defaults()
-    payee = storage.create_payee("Mixed-use vendor")
-    source = storage.create_mixed_use_expense(
+    payee = fixture_payee(storage, "Mixed-use vendor")
+    source = fixture_mixed(storage,
         txn_date="2026-07-31",
         account_id=storage.list_accounts(active_only=False)[0]["id"],
         category_id=next(
@@ -142,11 +143,7 @@ def test_preparation_routes_mixed_use_receipt_remaps_through_source_api(
         business_use_percentage="50",
         allocation_rationale="Measured use",
     )
-    storage.set_mixed_use_receipt_references(
-        source["id"],
-        [{"id": "receipt123456", "name": "old-name.pdf"}],
-        expected_source=source,
-    )
+    fixture_receipts(storage, storage._find_row("MixedUseExpenses", source['id']).values["linked_transaction_id"], references=[{'id': 'receipt123456', 'name': 'old-name.pdf'}])
     drive = Mock()
     drive.list_profile_receipts.return_value = [_backfilled_drive_receipt("north")]
     mixed_remap = Mock(wraps=storage.remap_mixed_use_receipt)
@@ -168,19 +165,19 @@ def test_preparation_routes_mixed_use_receipt_remaps_through_source_api(
     assert mixed_remap.call_args.kwargs["reference"]["id"] == "receipt123456"
     assert mixed_remap.call_args.kwargs["reference"]["receipt_id"] == "a" * 32
     generic_remap.assert_not_called()
-    assert storage.get_mixed_use_expense(source["id"])["receipt_references"]
+    assert fixture_mixed_row(storage, source["id"])["receipt_references"]
 
 
 def test_preparation_does_not_migrate_a_drive_only_transaction_association() -> None:
     workbook = FakeWorkbook()
     storage = GoogleSheetsStorage(workbook, sleeper=lambda _delay: None)
-    account = storage.create_account("Checking", "Bank")
-    transaction = storage.create_transaction(
+    account = fixture_account(storage, "Checking", "Bank")
+    transaction = fixture_transaction(storage,
         txn_date="2026-07-31",
         kind="Income",
         amount=10,
         account_id=account["id"],
-        category_id=storage.create_category("Sales", "Income")["id"],
+        category_id=fixture_category(storage, "Sales", "Income")["id"],
     )
     _set_raw_receipt_references(
         workbook,
@@ -217,8 +214,8 @@ def test_preparation_does_not_migrate_drive_only_mixed_use_association(
     storage: GoogleSheetsStorage,
 ) -> None:
     storage.ensure_defaults()
-    payee = storage.create_payee("Mixed-use vendor")
-    source = storage.create_mixed_use_expense(
+    payee = fixture_payee(storage, "Mixed-use vendor")
+    source = fixture_mixed(storage,
         txn_date="2026-07-31",
         account_id=storage.list_accounts(active_only=False)[0]["id"],
         category_id=next(
@@ -280,8 +277,8 @@ def test_preparation_does_not_overwrite_concurrent_mixed_use_receipt_change(
     storage: GoogleSheetsStorage,
 ) -> None:
     storage.ensure_defaults()
-    payee = storage.create_payee("Mixed-use vendor")
-    source = storage.create_mixed_use_expense(
+    payee = fixture_payee(storage, "Mixed-use vendor")
+    source = fixture_mixed(storage,
         txn_date="2026-07-31",
         account_id=storage.list_accounts(active_only=False)[0]["id"],
         category_id=next(
@@ -313,7 +310,7 @@ def test_preparation_does_not_overwrite_concurrent_mixed_use_receipt_change(
     ]
 
     def unlink_before_initialization(**_scope: str) -> dict[str, object]:
-        storage.set_mixed_use_receipt_references(source["id"], [])
+        fixture_receipts(storage, storage._find_row("MixedUseExpenses", source['id']).values["linked_transaction_id"], references=[])
         return _backfilled_drive_receipt(
             "north",
             transaction_id=projection_id,
@@ -330,7 +327,7 @@ def test_preparation_does_not_overwrite_concurrent_mixed_use_receipt_change(
 
     assert report["references_updated"] == 0
     assert report["errors"] == []
-    assert storage.get_mixed_use_expense(source["id"])[
+    assert fixture_mixed_row(storage, source["id"])[
         "receipt_references"
     ] == "[]"
     assert next(
@@ -343,13 +340,13 @@ def test_preparation_does_not_overwrite_concurrent_mixed_use_receipt_change(
 def test_preparation_does_not_override_a_concurrent_explicit_unlink() -> None:
     workbook = FakeWorkbook()
     storage = GoogleSheetsStorage(workbook, sleeper=lambda _delay: None)
-    account = storage.create_account("Checking", "Bank")
-    transaction = storage.create_transaction(
+    account = fixture_account(storage, "Checking", "Bank")
+    transaction = fixture_transaction(storage,
         txn_date="2026-07-31",
         kind="Income",
         amount=10,
         account_id=account["id"],
-        category_id=storage.create_category("Sales", "Income")["id"],
+        category_id=fixture_category(storage, "Sales", "Income")["id"],
     )
     _set_raw_receipt_references(
         workbook,
@@ -362,7 +359,7 @@ def test_preparation_does_not_override_a_concurrent_explicit_unlink() -> None:
     ]
 
     def unlink_before_initialization(**_scope: str) -> dict[str, object]:
-        storage.set_transaction_receipt_references(transaction["id"], [])
+        fixture_receipts(storage, transaction['id'], references=[])
         return _backfilled_drive_receipt(
             "north",
             transaction_id=transaction["id"],
@@ -385,15 +382,15 @@ def test_preparation_does_not_override_a_concurrent_explicit_unlink() -> None:
 
 def test_preparation_respects_an_explicitly_empty_reference_list() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
-    account = storage.create_account("Checking", "Bank")
-    transaction = storage.create_transaction(
+    account = fixture_account(storage, "Checking", "Bank")
+    transaction = fixture_transaction(storage,
         txn_date="2026-07-31",
         kind="Income",
         amount=10,
         account_id=account["id"],
-        category_id=storage.create_category("Sales", "Income")["id"],
+        category_id=fixture_category(storage, "Sales", "Income")["id"],
     )
-    storage.set_transaction_receipt_references(transaction["id"], [])
+    fixture_receipts(storage, transaction['id'], references=[])
     drive = Mock()
     drive.list_profile_receipts.return_value = [
         _legacy_drive_receipt("north", transaction_id=transaction["id"])
@@ -419,15 +416,15 @@ def test_preparation_respects_an_explicitly_empty_reference_list() -> None:
 def test_preparation_does_not_touch_another_profile_storage() -> None:
     north_storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
     south_storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
-    south_account = south_storage.create_account("Checking", "Bank")
-    south_transaction = south_storage.create_transaction(
+    south_account = fixture_account(south_storage, "Checking", "Bank")
+    south_transaction = fixture_transaction(south_storage,
         txn_date="2026-07-31",
         kind="Income",
         amount=10,
         account_id=south_account["id"],
-        category_id=south_storage.create_category("Sales", "Income")["id"],
+        category_id=fixture_category(south_storage, "Sales", "Income")["id"],
     )
-    south_storage.link_transaction_receipt(
+    fixture_receipts(south_storage,
         south_transaction["id"],
         file_id="receipt123456",
         name="south.pdf",
@@ -478,15 +475,15 @@ def test_preparation_does_not_download_receipts_with_valid_integrity_metadata() 
 
 def test_preparation_does_not_restore_a_concurrently_unlinked_reference() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
-    account = storage.create_account("Checking", "Bank")
-    transaction = storage.create_transaction(
+    account = fixture_account(storage, "Checking", "Bank")
+    transaction = fixture_transaction(storage,
         txn_date="2026-07-31",
         kind="Income",
         amount=10,
         account_id=account["id"],
-        category_id=storage.create_category("Sales", "Income")["id"],
+        category_id=fixture_category(storage, "Sales", "Income")["id"],
     )
-    storage.link_transaction_receipt(
+    fixture_receipts(storage,
         transaction["id"],
         file_id="receipt123456",
         name="statement.pdf",
@@ -495,10 +492,7 @@ def test_preparation_does_not_restore_a_concurrently_unlinked_reference() -> Non
     drive.list_profile_receipts.return_value = [_legacy_drive_receipt("north")]
 
     def unlink_before_backfill(**_scope: str) -> dict[str, object]:
-        storage.unlink_transaction_receipt(
-            transaction["id"],
-            file_id="receipt123456",
-        )
+        fixture_receipts(storage, transaction['id'], references=[])
         return _backfilled_drive_receipt("north")
 
     drive.backfill_receipt_checksum.side_effect = unlink_before_backfill
@@ -552,28 +546,15 @@ def test_preparation_reports_reference_failure_and_remains_resumable() -> None:
 
 def test_preparation_reconciles_filename_and_returns_fresh_manifest() -> None:
     storage = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
-    account = storage.create_account("Checking", "Bank")
-    transaction = storage.create_transaction(
+    account = fixture_account(storage, "Checking", "Bank")
+    transaction = fixture_transaction(storage,
         txn_date="2026-07-31",
         kind="Income",
         amount=10,
         account_id=account["id"],
-        category_id=storage.create_category("Sales", "Income")["id"],
+        category_id=fixture_category(storage, "Sales", "Income")["id"],
     )
-    storage.set_transaction_receipt_references(
-        transaction["id"],
-        [
-            {
-                "id": "receipt123456",
-                "name": "old-name.pdf",
-                "receipt_id": "a" * 32,
-                "sha256": hashlib.sha256(b"receipt").hexdigest(),
-                "original_filename": "statement.pdf",
-                "mime_type": "application/pdf",
-                "byte_size": 7,
-            }
-        ],
-    )
+    fixture_receipts(storage, transaction['id'], references=[{'id': 'receipt123456', 'name': 'old-name.pdf', 'receipt_id': 'a' * 32, 'sha256': hashlib.sha256(b'receipt').hexdigest(), 'original_filename': 'statement.pdf', 'mime_type': 'application/pdf', 'byte_size': 7}])
     receipt = _backfilled_drive_receipt("north")
     receipt["name"] = "renamed-in-drive.pdf"
     drive = Mock()

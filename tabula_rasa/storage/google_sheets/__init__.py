@@ -20,8 +20,6 @@ from .assets import ASSET_TYPES, AssetsMixin
 from .backup import BackupMixin
 from .mileage import MileageMixin
 from .mixed_use import _MixedUseMixin
-from .journals import JournalsMixin
-from .recurring import RecurringMixin
 from .payees import PayeesMixin
 from .receipts import ReceiptsMixin
 from .schema import (
@@ -59,14 +57,12 @@ class GoogleSheetsStorage(
     PayeesMixin,
     TagsMixin,
     TransactionsMixin,
-    JournalsMixin,
     _MixedUseMixin,
-    RecurringMixin,
     ReceiptsMixin,
     MileageMixin,
     BackupMixin,
 ):
-    """Compatibility facade preserving the existing storage API."""
+    """Operator facade for format-13 source, backup and receipt recovery."""
 
 
 __all__ = [

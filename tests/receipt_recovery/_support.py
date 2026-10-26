@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.sheets_fixtures import account as fixture_account, category as fixture_category, receipts as fixture_receipts, transaction as fixture_transaction
 
 import hashlib
 
@@ -48,9 +49,9 @@ def backup_with_receipts(
     profile_key: str = "north",
 ) -> tuple[bytes, GoogleSheetsStorage, str]:
     source = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _delay: None)
-    account = source.create_account("Checking", "Bank")
-    category = source.create_category("Sales", "Income")
-    transaction = source.create_transaction(
+    account = fixture_account(source, "Checking", "Bank")
+    category = fixture_category(source, "Sales", "Income")
+    transaction = fixture_transaction(source,
         txn_date="2026-07-31",
         kind="Income",
         amount=10,
@@ -58,7 +59,7 @@ def backup_with_receipts(
         category_id=category["id"],
     )
     for receipt_reference in references:
-        source.link_transaction_receipt(
+        fixture_receipts(source,
             transaction["id"],
             reference=receipt_reference,
         )

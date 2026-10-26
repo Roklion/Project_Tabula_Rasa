@@ -4,57 +4,30 @@
 
 Project Tabula Rasa is a bookkeeping and financial management application designed for individuals and businesses to manage accounts, transactions, expenses, assets, receipts, mileage, and financial reporting.
 
-The project is transitioning from its original Streamlit and Google Sheets architecture to a modern React frontend, FastAPI backend, and PostgreSQL database, with support for multi-tenant data isolation, authenticated access, and scalable deployment.
-
-The new architecture is under active development, while the legacy Streamlit application remains available during the transition.
-
-The application supports:
-
-- accounts, categories, profile-local Tags, transactions, transfers, and mileage;
-- balance-sheet, income-and-expense, and account reporting;
-- receipt storage in a business-specific Google Drive folder;
-- validated, versioned local and Google Drive backups;
-- optional Synology recovery copies; and
-- QuickBooks Online transaction and mileage imports.
+Bookkeeping runs in the React/FastAPI/PostgreSQL application. Named business access,
+shared accounting services, Google Drive receipts, recurring jobs and separate database
+and document recovery are documented in the guides below. The Streamlit entry point
+now serves local operator administration only.
 
 ## Quick start
 
-1. Install Python 3.12 or newer.
-2. Create the virtual environment and install the application dependencies:
+For browser/API development, follow [Runtime](docs/browser/RUNTIME.md). For a deployed
+application, follow [Deployment](docs/operations/DEPLOYMENT.md), [business
+access](docs/identity/BUSINESS_TENANCY.md) and [Using Tabula Rasa](docs/USING_TABULA_RASA.md).
+New PostgreSQL businesses are created in the application.
 
-   ```powershell
-   python -m venv .venv
-   .venv\Scripts\Activate.ps1
-   pip install -r requirements.txt
-   ```
+For protected local Google consent, grant replacement, folder administration and
+format-13 recovery setup, follow [Setup](docs/SETUP.md) and launch:
 
-3. Create the ignored local secrets file and set the application password:
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/run_local_profile_admin.ps1
+```
 
-   ```powershell
-   New-Item -ItemType Directory -Force .streamlit | Out-Null
-   New-Item -ItemType File -Force .streamlit\secrets.toml | Out-Null
-   python scripts\set_app_password.py
-   ```
-
-   The script stores only a password hash. Application-wide secrets live in
-   `.streamlit/secrets.toml`; business settings and per-profile credentials
-   live in `.streamlit/business_profiles.json`.
-
-4. Follow [Setup](docs/SETUP.md) to create
-   the first Google Sheets-backed profile.
-5. If receipts or cloud backups are needed, complete
-   [Google Drive setup](docs/GOOGLE_DRIVE.md).
-6. Start the application:
-
-   ```powershell
-   streamlit run tabula_rasa/app.py
-   ```
-
-This quick start runs the supported internal Streamlit/Google Sheets edition.
-The browser/API edition uses PostgreSQL after its applicable deployment and
-cutover gates; see [Commercial development](docs/browser/RUNTIME.md) and
-[Bookkeeping cutover](docs/accounting/CUTOVER.md). Neither edition uses a local
-SQLite database as an alternate live ledger.
+The administrator requires the application password, explicit local-admin flag,
+loopback binding and password reauthentication. It does not initialize a ledger or
+generate recurring occurrences on startup. Google self-service connectivity remains
+separate from native business creation; [connections](docs/identity/CONNECTIONS_AND_CLAIMS.md)
+defines the operator-assisted grant handoff.
 
 ## Documentation
 

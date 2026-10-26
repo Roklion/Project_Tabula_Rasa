@@ -135,7 +135,7 @@ agreement. An uncertain deploy stops for inspection under existing deployment ru
 
 | Workflow | Browser/API availability | Remaining internal/reference path and tracker |
 | --- | --- | --- |
-| Accounts/categories/payees/tags, ordinary transactions/journals, ledger/core reports | Implemented new-stack routes; no redirect to legacy UI | Streamlit remains a behavioral reference for unmigrated Sheets profiles.  |
+| Accounts/categories/payees/tags, ordinary transactions/journals, ledger/core reports | Implemented new-stack routes; no redirect to legacy UI | The Streamlit bookkeeping pages and writers are retired; local operator administration remains.  |
 | Ordinary transaction receipts | Implemented; default hosted runtime accepts the explicit Drive binding above | Operator grant/folder installation and real-provider verification remain required. Asset acquisition receipts stay on the ordinary acquisition transaction. |
 | Mixed-use source receipts | Implemented source-owned browser/API workflow; source-owned upload/link/download/unlink/recovery with protected source baselines | Outside the default alpha; selected grant/folder and hosted verification remain operator work. Generic projections stay read-only and recurring templates do not own receipts. See [workflow ports](IMPORTS_EXPORTS_AND_INTEGRATIONS.md). |
 | Recurring schedules and mixed-use sources/projections | Supported operations: create/edit, schedule state changes, explicit reconciliation and source/projection management | Outside the default alpha. Independent copy/conversion is available under recurring conversion and source copying. Durable generation independent of page loads remains platform operations. See [secondary workflows](RECURRING_AND_ASSETS.md). |
@@ -163,6 +163,14 @@ after PostgreSQL divergence. live owner cutover owns private live execution; syn
 alpha performs no authority activation.
 
 ## Streamlit retirement criterion
+
+**Current source boundary:** Streamlit bookkeeping pages, startup/page recurring
+generation and obsolete preparation converters are retired. Retained local operator
+administration still requires the flag, loopback bind, application password and
+reauthentication. Format-13 migration/archive recovery, current PostgreSQL recovery,
+Google grants/folders and forward schema history remain supported. This source change
+establishes no merge/deployment or commercial release acceptance.
+
 
 The commercial image already installs the API/PostgreSQL dependencies without
 Streamlit; CI verifies HTTP import/schema construction in that image. Retiring

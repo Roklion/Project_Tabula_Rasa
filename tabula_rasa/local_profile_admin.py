@@ -112,7 +112,6 @@ def render_local_profile_admin(
             if encoded_hash and verify_password(password, str(encoded_hash)):
                 st.session_state["local_profile_admin_unlocked"] = True
                 st.session_state["local_profile_admin_password_binding"] = password_binding(encoded_hash)
-                st.session_state["account_settings_route_pending"] = True
                 st.rerun()
             unlock_error.error("Incorrect password.")
         return

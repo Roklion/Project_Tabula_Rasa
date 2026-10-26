@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.sheets_fixtures import transaction as fixture_transaction
 
 import json
 from pathlib import Path
@@ -104,7 +105,7 @@ def test_recovery_rechecks_cross_transaction_conflicts_after_manual_edit() -> No
     backup, target, _ = backup_with_receipts([reference])
     accounts = target.list_accounts(_force_refresh=True)
     categories = target.list_categories(_force_refresh=True)
-    other_transaction = target.create_transaction(
+    other_transaction = fixture_transaction(target,
         txn_date="2026-07-31",
         kind="Income",
         amount=10,

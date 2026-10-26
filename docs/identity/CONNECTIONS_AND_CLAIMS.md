@@ -178,8 +178,8 @@ still refuses stale Sheets reactivation. Use PostgreSQL/document recovery.
 
 The new commercial runtime needs named business access, approved provider grants
 and separate database/document recovery. Sheets profile registration, workbook
-Picker/bootstrap, local backup/Cloud Sync settings and the source converters
-serve retained internal/source-preparation workflows only; they are not new
+Picker/bootstrap, local backup/Cloud Sync settings serve retained operator/source/recovery workflows only; the two preparation
+converters are retired. These workflows are not new
 commercial feature requirements. Streamlit Cloud Secrets handoff is retired.
 Retaining an internal tool does not require porting it into the new application.
 
@@ -191,7 +191,7 @@ coverage does not attest to a selected deployment or authorize retirement.
 | Action and current implementation owner | In-app coverage and disposition | Remaining operator / verification responsibility |
 | --- | --- | --- |
 | Authenticate and select a business (`http/identity.py`, React session and scope boundary) | **Verified replacement for commercial access:** named login and My Businesses resolve independent server-authorized memberships. **Retain** the local application password/unlock for local administration. | [Authentication](AUTHENTICATION.md), [authorization](AUTHORIZATION.md) and [business access](BUSINESS_TENANCY.md) own session, removal, foreign-business and cache isolation. Membership never unlocks local configuration. |
-| Register a new business/profile (`local_profile_admin_forms.py`, `local_profile_store.py`) | **Verified replacement for new PostgreSQL businesses:** Create business calls `POST /api/v1/businesses`; `WorkspaceService.create_business` reuses idempotent ledger bootstrap and creates a private backing organization. **Retain** local Sheets profile registration. | [Business access](BUSINESS_TENANCY.md) owns creation/isolation. Creation must not claim existing books, create a new Google grant or rewrite an accepted entity binding. Existing books use the separately approved claim procedure above. |
+| Register a new business/profile (`local_profile_admin_forms.py`, `local_profile_store.py`) | **Verified replacement for new PostgreSQL businesses:** Create business calls `POST /api/v1/businesses`; `WorkspaceService.create_business` reuses idempotent ledger bootstrap and creates a private backing organization. **Retain** local profile configuration for Google grant/folder and source/recovery administration. | [Business access](BUSINESS_TENANCY.md) owns creation/isolation. Creation must not claim existing books, create a new Google grant or rewrite an accepted entity binding. Existing books use the separately approved claim procedure above. |
 | Edit business name and local profile settings (`render_local_profile_edits`) | **Retain.** Business creation/member controls are not a profile-settings editor. The commercial business routes do not provide a general business rename or local workbook/path editor. | Local setup owns immutable profile keys, name validation, workbook ID and backup-path preservation. Identity/control-plane maintainers must verify any future edit replacement independently of creation. |
 | Manage members, roles and invitations (business routes and `WorkspaceService.business_operation`) | **Verified commercial capability**, not local configuration authority. Business-specific Owner/Admin controls reuse server role rules; My Businesses lists only authorized businesses. | [Business access](BUSINESS_TENANCY.md) owns last-Owner, role-change, invitation and cross-business checks. Member removal is not deletion of a local profile, ledger or provider grant. |
 | Configure Google client/consent and acquire or replace offline grants (`google_drive_admin.py`, Google OAuth helpers) | **Retain.** In-app Connect activates an operator-staged grant; it does not perform Google consent or acquire a refresh token. | Follow operator-assisted setup above and [Google setup](../GOOGLE_DRIVE.md). Verify exact account/client, approved loopback callback, `drive.file`, intended profile and folder; protect the shared client and each profile's grant separately. |
@@ -226,7 +226,7 @@ receipt namespace, grant and cached authorization must never cross scopes.
 ### Retirement decision and verification owners
 
 **Retain** local actions marked above except the explicitly retired Streamlit
-Secrets export. Conversion tools remain deferred as described below. The
+Secrets export. The profile/OAuth and receipt-association converters are retired. The
 maintainers' direction to stop using local administration is conditional on full needed functional coverage. A
 completed commercial business-access implementation is not proof of that
 condition. A future removal needs a per-action verified replacement or an
@@ -253,7 +253,7 @@ password rotation, removal of credential export controls, safe readiness
 failures, selected-profile workbook operations, business roles/bootstrap and foreign/revoked/stale grant denials.
 They do not certify live provider setup, NAS restoration or operator retirement.
 [Explicit source preparation](../accounting/SHEETS_MIGRATION.md#explicit-source-preparation-tools)
-owns the separate conversion-tool disposition.
+owns current source-preparation and retired-format guidance.
 
 ## Reuse and verification
 

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.sheets_fixtures import mixed as fixture_mixed, mixed_row as fixture_mixed_row
 
 import csv
 import hashlib
@@ -17,7 +18,7 @@ from tests.mixed_use_storage._support import expense_inputs
 def test_mixed_use_backup_round_trip_includes_source_and_linkage(
     default_storage: GoogleSheetsStorage,
 ) -> None:
-    source = default_storage.create_mixed_use_expense(
+    source = fixture_mixed(default_storage,
         **expense_inputs(default_storage),
         total_expense="80",
         business_use_percentage="12.5",
@@ -34,7 +35,7 @@ def test_mixed_use_backup_round_trip_includes_source_and_linkage(
 
     target = GoogleSheetsStorage(FakeWorkbook(), sleeper=lambda _: None)
     target.restore_backup_zip(backup)
-    restored = target.get_mixed_use_expense(source["id"])
+    restored = fixture_mixed_row(target, source["id"])
     assert restored["linked_transaction_id"] == source["linked_transaction_id"]
     assert target.list_transactions()[0]["source_id"] == source["id"]
 
@@ -42,7 +43,7 @@ def test_mixed_use_backup_round_trip_includes_source_and_linkage(
 def test_current_backup_rejects_orphaned_mixed_use_projection(
     default_storage: GoogleSheetsStorage,
 ) -> None:
-    default_storage.create_mixed_use_expense(
+    fixture_mixed(default_storage,
         **expense_inputs(default_storage),
         total_expense="80",
         business_use_percentage="12.5",

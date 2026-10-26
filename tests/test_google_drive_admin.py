@@ -73,7 +73,7 @@ def test_readiness_rechecks_direct_profile_root_conflict() -> None:
     )
 
 
-def test_oauth_callback_returns_to_account_settings_and_persists_profile_grant(
+def test_oauth_callback_persists_profile_grant_and_clears_query(
     tmp_path: Path,
 ) -> None:
     config = Mock()
@@ -120,9 +120,7 @@ def test_oauth_callback_returns_to_account_settings_and_persists_profile_grant(
         drive_settings,
         path=tmp_path / "profiles.json",
     )
-    assert google_drive_admin.st.session_state["navigation_page"] == (
-        "Account settings"
-    )
+    assert not google_drive_admin.st.query_params
 
 
 def test_drive_validation_uses_only_visible_parent_ids() -> None:
