@@ -42,11 +42,41 @@ including after assertion failures. Missing database configuration, compiled
 assets or required browser engines fails the required gate; ordinary Python runs
 may still skip native browser tests when their environment is not installed.
 
+Native tests request the session-scoped `native_browser` fixture in
+`tests/postgres/conftest.py`. `NativeBrowsers` in
+`tests/postgres/browser_support.py` starts Playwright once per pytest process
+and lazily launches each requested engine once. Each test uses
+`with native_browser(engine) as browser:` and creates fresh contexts/pages;
+the block closes every context even after assertion failure. Cookies, storage,
+routes, downloads and pages never carry into the next test. Session teardown
+closes the browser processes before stopping Playwright. The existing per-test
+database and HTTP-server fixtures retain their lifetimes; never share a context
+or database merely to reduce setup cost. Tests with blocked HTTP work release
+it before browser-context cleanup. The standalone deployment-smoke entry point
+owns its own Playwright runtime and is tested in a subprocess, avoiding a
+nested synchronous Playwright event loop in the shared pytest process.
+
+The alpha acceptance matrix still runs the complete journey on every existing
+engine/viewport pair. Reference creation requires both the successful HTTP
+response and the form's `Record created.` status before the next navigation.
+The response event alone does not prove the form consumed the result and
+cleared its unsaved-changes guard. Delayed-operation and receipt-failure
+regressions seed
+only their prerequisite synthetic record through the existing services, then
+call the same `receipt_workflow` or `delete_journal` step used by the full
+journey. These focused cases retain real browser/HTTP/PostgreSQL mutations,
+operation-specific safe errors, the beyond-default-wait delay, retained receipt
+bytes and other-business isolation without repeating unrelated reference setup,
+conflict editing, reports and cleanup flows.
+
 Repository CI separates **Frontend, contracts and runtime image**, two required
-**Browser UI** shards, and **Native browser (HTTP + PostgreSQL)**. Node UI and
-native jobs each install all three engines; native builds its own SPA and uses
-its own disposable database. **Full test suite** requires every partition on the
-current head/merge candidate. Failed runs retain per-shard Playwright JUnit,
+**Browser UI** shards, and two required **Native browser (HTTP + PostgreSQL)**
+shards. Browser jobs use pinned images with all three engines preinstalled;
+each native shard builds its own SPA and uses its own disposable PostgreSQL
+service. The native matrix partitions modules exactly once and preserves all
+engine/viewport cases; fail-fast is disabled and each shard retains its own
+`native-browser-results-1` or `native-browser-results-2` artifact. **Full test suite**
+requires every partition on the current head/merge candidate. Failed runs retain per-shard Playwright JUnit,
 traces/screenshots and native JUnit results. The commercial release-image
 workflow consumes successful Repository CI on `main`. No external customer data,
 ledger files or customer credentials are required.

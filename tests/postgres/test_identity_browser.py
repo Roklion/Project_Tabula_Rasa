@@ -3,11 +3,13 @@
 from pathlib import Path
 import json
 import socket
+import subprocess
+import sys
 from threading import Thread
 from time import monotonic, sleep, time
 from urllib.parse import parse_qs, urlencode, urlsplit
 
-from playwright.sync_api import expect, sync_playwright
+from playwright.sync_api import expect
 import pytest
 import uvicorn
 
@@ -95,100 +97,96 @@ def configure_login(context, origin, claims):
 
 
 def test_named_deployment_smoke_uses_public_shell_and_denied_http_boundary(named_server):
-    from tabula_rasa.deployment.smoke import named_smoke
-    named_smoke(named_server[0], 'development')
+    # The deployment entry point owns its Playwright runtime, so exercise it in
+    # a separate process even when this pytest session already owns a browser.
+    subprocess.run([sys.executable, '-c',
+        'import sys; from tabula_rasa.deployment.smoke import named_smoke; '
+        'named_smoke(sys.argv[1], "development")', named_server[0]],
+        check=True, timeout=30)
 
 
 @pytest.mark.parametrize('width', [1440, 390])
-def test_stale_provider_session_has_accessible_deliberate_recovery_and_clean_user_isolation(named_server, width):
+def test_stale_provider_session_has_accessible_deliberate_recovery_and_clean_user_isolation(named_server, width, native_browser):
     origin, _, _, _, _, _, claims, info = named_server
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
-        try:
-            retained = browser.new_context(viewport={'width': width, 'height': 1000})
-            configure_login(retained, origin, claims)
-            page = retained.new_page()
-            claims['auth_time'] = int(time()) - 600
-            page.goto(origin)
-            page.get_by_role('link', name='Sign in', exact=True).click()
-            expect(page.get_by_role('alert')).to_contain_text('did not confirm a recent sign-in')
-            expect(page.get_by_role('alert')).to_contain_text('Request reference:')
-            expect(page.get_by_text('You do not need to delete browser cookies.', exact=False)).to_be_visible()
-            assert retained.request.get(origin + '/api/v1/session').status == 401
-            assert_accessible(page)
-            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
-            # Recovery is a real click. A fresh signed response establishes Alice
-            # without deleting either the app or provider browser state.
-            claims['auth_time'] = int(time())
-            page.get_by_role('link', name='Sign in', exact=True).click()
-            expect(page.get_by_role('button', name='Sign out', exact=True)).to_be_visible()
-            alice = retained.request.get(origin + '/api/v1/session').json()
-            assert alice['entity']['id'] == 'alpha'
-            clean = browser.new_context(viewport={'width': width, 'height': 1000})
-            configure_login(clean, origin, claims)
-            claims['sub'] = info['sub'] = 'bob'
-            other = clean.new_page()
-            other.goto(origin)
-            other.get_by_role('link', name='Sign in', exact=True).click()
-            expect(other.get_by_role('button', name='Sign out', exact=True)).to_be_visible()
-            bob = clean.request.get(origin + '/api/v1/session').json()
-            assert bob['entity']['id'] == 'beta' and bob['actor_id'] != alice['actor_id']
-            assert clean.request.get(origin + '/api/v1/entities/alpha/accounts').status == 403
-            assert retained.request.get(origin + '/api/v1/entities/beta/accounts').status == 403
-            page.get_by_role('button', name='Sign out', exact=True).click()
-            expect(page.get_by_role('link', name='Sign in', exact=True)).to_be_visible()
-            expect(page.get_by_role('alert')).to_have_count(0)
-            assert clean.request.get(origin + '/api/v1/session').status == 200
-        finally:
-            browser.close()
+    with native_browser('chromium') as browser:
+        retained = browser.new_context(viewport={'width': width, 'height': 1000})
+        configure_login(retained, origin, claims)
+        page = retained.new_page()
+        claims['auth_time'] = int(time()) - 600
+        page.goto(origin)
+        page.get_by_role('link', name='Sign in', exact=True).click()
+        expect(page.get_by_role('alert')).to_contain_text('did not confirm a recent sign-in')
+        expect(page.get_by_role('alert')).to_contain_text('Request reference:')
+        expect(page.get_by_text('You do not need to delete browser cookies.', exact=False)).to_be_visible()
+        assert retained.request.get(origin + '/api/v1/session').status == 401
+        assert_accessible(page)
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        # Recovery is a real click. A fresh signed response establishes Alice
+        # without deleting either the app or provider browser state.
+        claims['auth_time'] = int(time())
+        page.get_by_role('link', name='Sign in', exact=True).click()
+        expect(page.get_by_role('button', name='Sign out', exact=True)).to_be_visible()
+        alice = retained.request.get(origin + '/api/v1/session').json()
+        assert alice['entity']['id'] == 'alpha'
+        clean = browser.new_context(viewport={'width': width, 'height': 1000})
+        configure_login(clean, origin, claims)
+        claims['sub'] = info['sub'] = 'bob'
+        other = clean.new_page()
+        other.goto(origin)
+        other.get_by_role('link', name='Sign in', exact=True).click()
+        expect(other.get_by_role('button', name='Sign out', exact=True)).to_be_visible()
+        bob = clean.request.get(origin + '/api/v1/session').json()
+        assert bob['entity']['id'] == 'beta' and bob['actor_id'] != alice['actor_id']
+        assert clean.request.get(origin + '/api/v1/entities/alpha/accounts').status == 403
+        assert retained.request.get(origin + '/api/v1/entities/beta/accounts').status == 403
+        page.get_by_role('button', name='Sign out', exact=True).click()
+        expect(page.get_by_role('link', name='Sign in', exact=True)).to_be_visible()
+        expect(page.get_by_role('alert')).to_have_count(0)
+        assert clean.request.get(origin + '/api/v1/session').status == 200
 
 
 @pytest.mark.parametrize('width', [1440, 390])
-def test_named_sign_in_revocation_two_users_and_cross_tab_logout(named_server, width):
+def test_named_sign_in_revocation_two_users_and_cross_tab_logout(named_server, width, native_browser):
     origin, repo, alice, bob, a, _, claims, info = named_server
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
-        try:
-            alice_browser = browser.new_context(viewport={'width': width, 'height': 1000})
-            bob_browser = browser.new_context(viewport={'width': width, 'height': 1000})
-            for context in (alice_browser, bob_browser):
-                configure_login(context, origin, claims)
-            first, second = alice_browser.new_page(), bob_browser.new_page()
-            first.goto(origin)
-            expect(first.get_by_role('link', name='Sign in', exact=True)).to_be_visible()
-            assert_accessible(first)
-            with first.expect_response(lambda response: '/api/v1/auth/login' in response.url) as begin:
-                first.get_by_role('link', name='Sign in', exact=True).click()
-            assert begin.value.status == 200  # Redirect adapter above asserts the native 303.
-            expect(first.get_by_role('button', name='Sign out', exact=True)).to_be_visible()
-            assert alice_browser.request.get(origin + '/api/v1/entities/beta/accounts').status == 403
-            claims['sub'] = info['sub'] = 'bob'
-            second.goto(origin)
-            second.get_by_role('link', name='Sign in', exact=True).click()
-            expect(second.get_by_role('button', name='Sign out', exact=True)).to_be_visible()
-            assert bob_browser.request.get(origin + '/api/v1/session').json()['entity']['id'] == 'beta'
-            repo.set_membership(a, bob.id, 'owner')
-            repo.set_user_state(alice.id, 'disabled')
-            first.evaluate("window.dispatchEvent(new Event('focus'))")
-            expect(first.get_by_role('link', name='Sign in', exact=True)).to_be_visible()
-            assert bob_browser.request.get(origin + '/api/v1/session').status == 200
-            peer = bob_browser.new_page()
-            peer.goto(origin)
-            expect(peer.get_by_role('button', name='Sign out', exact=True)).to_be_visible()
-            with second.expect_response(lambda response: response.request.method == 'POST'
-                                        and response.url.endswith('/auth/logout')) as logged_out:
-                second.get_by_role('button', name='Sign out', exact=True).click()
-            assert logged_out.value.status == 204
-            expect(second.get_by_role('link', name='Sign in', exact=True)).to_be_visible()
-            expect(peer.get_by_role('link', name='Sign in', exact=True)).to_be_visible()
-            peer.reload()
-            expect(peer.get_by_role('link', name='Sign in', exact=True)).to_be_visible()
-        finally:
-            browser.close()
+    with native_browser('chromium') as browser:
+        alice_browser = browser.new_context(viewport={'width': width, 'height': 1000})
+        bob_browser = browser.new_context(viewport={'width': width, 'height': 1000})
+        for context in (alice_browser, bob_browser):
+            configure_login(context, origin, claims)
+        first, second = alice_browser.new_page(), bob_browser.new_page()
+        first.goto(origin)
+        expect(first.get_by_role('link', name='Sign in', exact=True)).to_be_visible()
+        assert_accessible(first)
+        with first.expect_response(lambda response: '/api/v1/auth/login' in response.url) as begin:
+            first.get_by_role('link', name='Sign in', exact=True).click()
+        assert begin.value.status == 200  # Redirect adapter above asserts the native 303.
+        expect(first.get_by_role('button', name='Sign out', exact=True)).to_be_visible()
+        assert alice_browser.request.get(origin + '/api/v1/entities/beta/accounts').status == 403
+        claims['sub'] = info['sub'] = 'bob'
+        second.goto(origin)
+        second.get_by_role('link', name='Sign in', exact=True).click()
+        expect(second.get_by_role('button', name='Sign out', exact=True)).to_be_visible()
+        assert bob_browser.request.get(origin + '/api/v1/session').json()['entity']['id'] == 'beta'
+        repo.set_membership(a, bob.id, 'owner')
+        repo.set_user_state(alice.id, 'disabled')
+        first.evaluate("window.dispatchEvent(new Event('focus'))")
+        expect(first.get_by_role('link', name='Sign in', exact=True)).to_be_visible()
+        assert bob_browser.request.get(origin + '/api/v1/session').status == 200
+        peer = bob_browser.new_page()
+        peer.goto(origin)
+        expect(peer.get_by_role('button', name='Sign out', exact=True)).to_be_visible()
+        with second.expect_response(lambda response: response.request.method == 'POST'
+                                    and response.url.endswith('/auth/logout')) as logged_out:
+            second.get_by_role('button', name='Sign out', exact=True).click()
+        assert logged_out.value.status == 204
+        expect(second.get_by_role('link', name='Sign in', exact=True)).to_be_visible()
+        expect(peer.get_by_role('link', name='Sign in', exact=True)).to_be_visible()
+        peer.reload()
+        expect(peer.get_by_role('link', name='Sign in', exact=True)).to_be_visible()
 
 
 @pytest.mark.parametrize('width', [1440, 390])
-def test_named_transaction_receipt_logout_then_other_user_has_no_residual_data(named_server, width):
+def test_named_transaction_receipt_logout_then_other_user_has_no_residual_data(named_server, width, native_browser):
     origin, repo, alice, _, _, b, claims, info = named_server
     # An overlapping membership lets Alice explicitly select another workspace;
     # Bob still cannot read Alice's original workspace.
@@ -198,13 +196,11 @@ def test_named_transaction_receipt_logout_then_other_user_has_no_residual_data(n
         for scope in ('alpha', 'beta'):
             account(connection, scope, 'cash')
             category(connection, scope, 'office', kind='Expense')
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
-        try:
-            context = browser.new_context(viewport={'width': width, 'height': 1000})
-            # Installed in every document before app code, including Alice's
-            # original receipt document if Back restores it from the BFCache.
-            context.add_init_script("""(() => {
+    with native_browser('chromium') as browser:
+        context = browser.new_context(viewport={'width': width, 'height': 1000})
+        # Installed in every document before app code, including Alice's
+        # original receipt document if Back restores it from the BFCache.
+        context.add_init_script("""(() => {
                 const privateText = text => ['Alice private transaction', 'alice-private.pdf']
                     .some(value => (text || '').includes(value));
                 const record = records => {
@@ -216,78 +212,76 @@ def test_named_transaction_receipt_logout_then_other_user_has_no_residual_data(n
                 addEventListener('pageshow', () => record([]));
                 new MutationObserver(record).observe(document, {subtree: true, childList: true, characterData: true});
             })();""")
-            configure_login(context, origin, claims)
-            page = context.new_page()
-            page.goto(origin)
-            page.get_by_role('link', name='Sign in', exact=True).click()
-            expect(page.get_by_role('button', name='Sign out', exact=True)).to_be_visible()
-            selector = page.get_by_label('Select business')
-            if selector.input_value() != 'alpha':
-                selector.select_option('alpha')
-                page.get_by_role('button', name='Discard draft and switch').click()
-                expect(page.get_by_text('Role: Owner', exact=True)).to_be_visible()
-            page.get_by_label('Select business').select_option('beta')
-            page.get_by_role('button', name='Discard draft and switch').click()
-            expect(page.get_by_text('Role: Read-only', exact=True)).to_be_visible()
-            page.get_by_label('Select business').select_option('alpha')
+        configure_login(context, origin, claims)
+        page = context.new_page()
+        page.goto(origin)
+        page.get_by_role('link', name='Sign in', exact=True).click()
+        expect(page.get_by_role('button', name='Sign out', exact=True)).to_be_visible()
+        selector = page.get_by_label('Select business')
+        if selector.input_value() != 'alpha':
+            selector.select_option('alpha')
             page.get_by_role('button', name='Discard draft and switch').click()
             expect(page.get_by_text('Role: Owner', exact=True)).to_be_visible()
-            page.goto(origin + '/transactions/new')
-            page.get_by_label('Date', exact=True).fill('2026-10-06')
-            page.get_by_label('Amount', exact=True).fill('19.25')
-            page.get_by_label('From account', exact=True).select_option('cash')
-            page.get_by_label('Category', exact=True).select_option('office')
-            page.get_by_label('Description / memo', exact=True).fill('Alice private transaction')
-            with page.expect_response(lambda response: response.request.method == 'POST'
-                                      and response.url.endswith('/transactions')) as created:
-                page.get_by_role('button', name='Save transaction', exact=True).click()
-            assert created.value.status == 201
-            record = created.value.json()['id']
-            page.goto(origin + '/transactions/' + record + '/receipts')
-            page.get_by_label('Receipt files').set_input_files({
-                'name': 'alice-private.pdf', 'mimeType': 'application/pdf', 'buffer': b'%PDF synthetic Alice',
-            })
-            page.get_by_role('button', name='Attach selected receipts').click()
-            expect(page.get_by_role('status').filter(has_text='1 receipt attached.')).to_be_visible()
-            with page.expect_download() as download:
-                page.get_by_role('link', name='Download alice-private.pdf', exact=True).click()
-            assert Path(download.value.path()).read_bytes() == b'%PDF synthetic Alice'
-            linked = context.request.get(origin + '/api/v1/entities/alpha/transactions/' + record + '/receipts').json()['items']
-            document = linked[0]['id']
-            receipt_url = page.url
-            receipt_history_length = page.evaluate('history.length')
-            previous = context.request.get(origin + '/api/v1/session').json()
-            with page.expect_response(lambda response: response.request.method == 'POST'
-                                      and response.url.endswith('/auth/logout')) as logged_out:
-                page.get_by_role('button', name='Sign out', exact=True).click()
-            assert logged_out.value.status == 204
-            expect(page.get_by_role('link', name='Sign in', exact=True)).to_be_visible()
-            expect(page.get_by_text('alice-private.pdf', exact=False)).to_have_count(0)
-            claims['sub'] = info['sub'] = 'bob'
-            page.get_by_role('link', name='Sign in', exact=True).click()
-            expect(page.get_by_role('button', name='Sign out', exact=True)).to_be_visible()
-            current = context.request.get(origin + '/api/v1/session').json()
-            assert current['actor_id'] != previous['actor_id']
-            assert current['cache_scope'] != previous['cache_scope']
-            assert current['entity']['id'] == 'beta'
-            page.evaluate("sessionStorage.setItem('security_probe_active', '1')")
-            for path in ('transactions', 'transactions/' + record + '/receipts', 'documents/' + document + '/content'):
-                assert context.request.get(origin + '/api/v1/entities/alpha/' + path).status == 403
-            page.goto(origin + '/transactions')
-            expect(page.get_by_role('heading', name='No matching entries', exact=True)).to_be_visible()
+        page.get_by_label('Select business').select_option('beta')
+        page.get_by_role('button', name='Discard draft and switch').click()
+        expect(page.get_by_text('Role: Read-only', exact=True)).to_be_visible()
+        page.get_by_label('Select business').select_option('alpha')
+        page.get_by_role('button', name='Discard draft and switch').click()
+        expect(page.get_by_text('Role: Owner', exact=True)).to_be_visible()
+        page.goto(origin + '/transactions/new')
+        page.get_by_label('Date', exact=True).fill('2026-10-06')
+        page.get_by_label('Amount', exact=True).fill('19.25')
+        page.get_by_label('From account', exact=True).select_option('cash')
+        page.get_by_label('Category', exact=True).select_option('office')
+        page.get_by_label('Description / memo', exact=True).fill('Alice private transaction')
+        with page.expect_response(lambda response: response.request.method == 'POST'
+                                  and response.url.endswith('/transactions')) as created:
+            page.get_by_role('button', name='Save transaction', exact=True).click()
+        assert created.value.status == 201
+        record = created.value.json()['id']
+        page.goto(origin + '/transactions/' + record + '/receipts')
+        page.get_by_label('Receipt files').set_input_files({
+            'name': 'alice-private.pdf', 'mimeType': 'application/pdf', 'buffer': b'%PDF synthetic Alice',
+        })
+        page.get_by_role('button', name='Attach selected receipts').click()
+        expect(page.get_by_role('status').filter(has_text='1 receipt attached.')).to_be_visible()
+        with page.expect_download() as download:
+            page.get_by_role('link', name='Download alice-private.pdf', exact=True).click()
+        assert Path(download.value.path()).read_bytes() == b'%PDF synthetic Alice'
+        linked = context.request.get(origin + '/api/v1/entities/alpha/transactions/' + record + '/receipts').json()['items']
+        document = linked[0]['id']
+        receipt_url = page.url
+        receipt_history_length = page.evaluate('history.length')
+        previous = context.request.get(origin + '/api/v1/session').json()
+        with page.expect_response(lambda response: response.request.method == 'POST'
+                                  and response.url.endswith('/auth/logout')) as logged_out:
+            page.get_by_role('button', name='Sign out', exact=True).click()
+        assert logged_out.value.status == 204
+        expect(page.get_by_role('link', name='Sign in', exact=True)).to_be_visible()
+        expect(page.get_by_text('alice-private.pdf', exact=False)).to_have_count(0)
+        claims['sub'] = info['sub'] = 'bob'
+        page.get_by_role('link', name='Sign in', exact=True).click()
+        expect(page.get_by_role('button', name='Sign out', exact=True)).to_be_visible()
+        current = context.request.get(origin + '/api/v1/session').json()
+        assert current['actor_id'] != previous['actor_id']
+        assert current['cache_scope'] != previous['cache_scope']
+        assert current['entity']['id'] == 'beta'
+        page.evaluate("sessionStorage.setItem('security_probe_active', '1')")
+        for path in ('transactions', 'transactions/' + record + '/receipts', 'documents/' + document + '/content'):
+            assert context.request.get(origin + '/api/v1/entities/alpha/' + path).status == 403
+        page.goto(origin + '/transactions')
+        expect(page.get_by_role('heading', name='No matching entries', exact=True)).to_be_visible()
+        expect(page.get_by_text('Alice private transaction', exact=True)).to_have_count(0)
+        # Traverse every entry added by Bob's login and ledger navigation,
+        # including the actual receipt entry visited while Alice was signed in.
+        history_steps = page.evaluate('history.length') - receipt_history_length
+        assert history_steps > 0
+        for _ in range(history_steps):
+            page.go_back(wait_until='networkidle')
+            assert page.evaluate("sessionStorage.getItem('security_probe_exposure')") is None
             expect(page.get_by_text('Alice private transaction', exact=True)).to_have_count(0)
-            # Traverse every entry added by Bob's login and ledger navigation,
-            # including the actual receipt entry visited while Alice was signed in.
-            history_steps = page.evaluate('history.length') - receipt_history_length
-            assert history_steps > 0
-            for _ in range(history_steps):
-                page.go_back(wait_until='networkidle')
-                assert page.evaluate("sessionStorage.getItem('security_probe_exposure')") is None
-                expect(page.get_by_text('Alice private transaction', exact=True)).to_have_count(0)
-                expect(page.get_by_text('alice-private.pdf', exact=False)).to_have_count(0)
-            expect(page).to_have_url(receipt_url)
-            for storage in ('localStorage', 'sessionStorage'):
-                stored = page.evaluate(f'JSON.stringify(Object.entries({storage}))')
-                assert all(value not in stored for value in ('Alice private transaction', 'alice-private.pdf', document))
-        finally:
-            browser.close()
+            expect(page.get_by_text('alice-private.pdf', exact=False)).to_have_count(0)
+        expect(page).to_have_url(receipt_url)
+        for storage in ('localStorage', 'sessionStorage'):
+            stored = page.evaluate(f'JSON.stringify(Object.entries({storage}))')
+            assert all(value not in stored for value in ('Alice private transaction', 'alice-private.pdf', document))

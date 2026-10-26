@@ -15,11 +15,12 @@ methodology; dated measurements and review progress belong in GitHub discussions
 | Windows environment bootstrap | `windows-tooling`: PowerShell/Python 3.12 | 15 min |
 | Frontend unit/fast checks, OpenAPI/client drift, TypeScript/build, HTTP/Git preview contracts and deployment-image inspection | `frontend-contract`: Node 24/Python 3.12; no database/browser installation | 15 min |
 | UI, responsive behavior, accessibility and visual evidence with controlled transport | `browser`: two disjoint Playwright shards, all four desktop/mobile/Firefox/WebKit projects, two workers per runner | 20 min each |
-| Critical browser journeys through compiled React, real HTTP/services/PostgreSQL, identity/workspace lifecycle and isolation | `native-browser`: its own build, three engines, disposable PostgreSQL and isolated loopback servers | 20 min |
+| Critical browser journeys through compiled React, real HTTP/services/PostgreSQL, identity/workspace lifecycle and isolation | `native-browser`: two disjoint module shards, each with its own build, three engines, disposable PostgreSQL and isolated loopback servers | 20 min each |
 | Current-revision aggregate | `full-suite`: always requires every dependency to succeed | 5 min |
 
-Six component runners execute independently, followed by one aggregate. Matrix
-fail-fast is disabled to retain both shards' diagnostics. No path filters,
+Seven component runners execute independently, followed by one aggregate. Matrix
+fail-fast is disabled for both browser matrices to retain every shard's
+diagnostics. No path filters,
 optional components, blanket retries or scheduled-only suites are introduced.
 CI policy tests execute the actual Bash gate with unsuccessful results for every
 dependency: missing, pending, skipped, cancelled, timed-out and failed results
@@ -50,10 +51,25 @@ the job container's loopback network. Both UI shards, all projects, worker limit
 artifacts, time budgets and the aggregate success requirement remain unchanged.
 
 The Python job has no compiled SPA. Native browser scenarios retain prerequisite
-skips there and run in the required native job with
-`TABULA_RASA_REQUIRE_BROWSER_TESTS=1`. CI policy checks the explicit invocation
-against every `tests/postgres/test*browser*.py` module. Accounting, isolation,
+skips there and run once across the two required native shards with
+`TABULA_RASA_REQUIRE_BROWSER_TESTS=1`. The workflow matrix owns the explicit
+module inventory: shard 1 runs alpha journeys, browser quality and workspace;
+shard 2 runs the remaining native modules. Group modules by observed duration,
+not case count; keep fixture lifetimes and all engine/viewport cases intact.
+CI policy checks that every `tests/postgres/test*browser*.py` module appears
+exactly once across nonempty shards. Both must succeed for the aggregate gate;
+a failed shard can be rerun independently. Each uploads its own artifact with
+`native-browser-results.xml` and any native browser evidence. Accounting, isolation,
 migration and recovery remain required on each PR.
+
+Within each native shard, one session-scoped Playwright runtime lazily reuses
+one process per requested engine. Every test still owns fresh browser contexts,
+a disposable database and a loopback HTTP server. Context cleanup runs on
+success and failure; process reuse must not preserve private browser state.
+The alpha engine/viewport acceptance matrix retains the full journey, while
+its delayed-operation and injected-failure cases exercise extracted production
+steps with focused synthetic setup. See [native fixture and scenario
+ownership](../browser/TESTING.md#repeatable-local-and-ci-gate).
 
 ## Contract and browser ownership
 
@@ -111,11 +127,13 @@ Native commands/prerequisites are in [Browser quality](../browser/TESTING.md#rep
 They use explicitly configured disposable databases, never application credentials.
 Normal local validation stays scoped to affected behavior; CI is the full gate.
 
-Download metadata using read-only GitHub CLI access:
+Download metadata using read-only GitHub CLI access. Extract each native
+artifact into a directory matching its artifact name, then include both JUnit
+reports when summarizing the native partition:
 
 ```powershell
 gh api repos/Roklion/Project_Tabula_Rasa/actions/runs/RUN_ID/jobs?per_page=100 > jobs.json
-python scripts/summarize_ci_timings.py --jobs jobs.json --junit native-browser-results.xml
+python scripts/summarize_ci_timings.py --jobs jobs.json --junit native-browser-results-1/native-browser-results.xml native-browser-results-2/native-browser-results.xml
 ```
 
 Use all pages of one completed attempt (currently fewer than 100 jobs). For a
@@ -127,5 +145,5 @@ unknown intervals as measured zeroes. Still-running jobs are rejected. JUnit
 summaries retain aggregate counts/times only, never testcase names, properties,
 failure messages or stdout/stderr. Review evidence before retention. Raw synthetic
 CI JUnit/traces/screenshots have unique artifact names: `browser-ui-1`,
-`browser-ui-2`, `frontend-contract-results`, `native-browser-results`,
-`python-results` and `windows-results`.
+`browser-ui-2`, `frontend-contract-results`, `native-browser-results-1`,
+`native-browser-results-2`, `python-results` and `windows-results`.

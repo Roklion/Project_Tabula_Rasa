@@ -45,3 +45,14 @@ def empty_database():
 def database(empty_database):
     upgrade(empty_database)
     return empty_database
+
+
+@pytest.fixture(scope="session")
+def native_browser():
+    # Engines are shared; open() owns fresh contexts for exactly one test block.
+    from playwright.sync_api import sync_playwright
+    from tests.postgres.browser_support import NativeBrowsers
+
+    with sync_playwright() as playwright:
+        with NativeBrowsers(playwright) as browsers:
+            yield browsers.open

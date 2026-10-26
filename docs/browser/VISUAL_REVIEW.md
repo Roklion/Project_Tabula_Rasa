@@ -47,8 +47,9 @@ Compare matching scenarios, engines and widths. Keep both packages when sharing
 the result; older manifests must not be relabeled as new-format evidence.
 
 Repository CI uploads per-shard UI evidence in **browser-ui-1** and
-**browser-ui-2**, and native evidence in **native-browser-results**, even on
-failure. On publication, attach the sanitized local before/after package or link
+**browser-ui-2**, and native evidence in **native-browser-results-1** and
+**native-browser-results-2**, even on failure. On publication, attach the
+sanitized local before/after package or link
 its retained artifact alongside the current CI candidate; local ignored files
 alone are not a durable hosted handoff. Keep generated validation output out of
 Git. Retain the accepted evidence before Actions artifacts expire.

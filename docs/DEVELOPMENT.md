@@ -103,7 +103,7 @@ they are not mandatory before PR creation or at review completion.
 
 [Repository CI](../.github/workflows/ci.yml) consolidates the former PostgreSQL
 and commercial-foundation workflows. Its stable merge-gate check name is
-**`Full test suite`**. It requires success from all required partitions (six runner jobs):
+**`Full test suite`**. It requires success from all required partitions (seven runner jobs):
 
 - **Python suite (Linux + PostgreSQL)** installs `requirements-dev.txt` with
   Python 3.12, runs `ruff check .` and `python -m pytest -ra` over every test
@@ -126,13 +126,15 @@ and commercial-foundation workflows. Its stable merge-gate check name is
   all four existing browser/device projects. Both shards are required; fail-fast
   is disabled to retain diagnostics from both. No browser/viewport or assertion
   is removed. Each shard uploads a uniquely named JUnit/trace/screenshot artifact.
-- **Native browser (HTTP + PostgreSQL)** independently builds the SPA and runs
-  every `tests/postgres/test*browser*.py` module against its own disposable
-  PostgreSQL service with all three engines and required-browser mode. The CI
-  policy test verifies the explicit file inventory so a newly added module cannot
-  be silently omitted. The complete Python suite still discovers every test;
+- **Native browser (HTTP + PostgreSQL, shard 1/2 and 2/2)** partitions every
+  `tests/postgres/test*browser*.py` module between two parallel runners. Each
+  independently builds the SPA and uses its own disposable PostgreSQL service,
+  all three engines and required-browser mode. Both shards are required, with
+  fail-fast disabled and separate artifacts. The CI policy test verifies that
+  every module appears exactly once, so new modules cannot be silently omitted.
+  The complete Python suite still discovers every test;
   native scenarios skip there because that isolated checkout has no SPA build.
-  Native tests execute in this required job rather than twice. Python lint and
+  Native tests execute once across these required shards. Python lint and
   non-browser integration contracts remain owned by the Python job.
 
 The explicitly invoked Streamlit viewport scripts below remain optional developer
