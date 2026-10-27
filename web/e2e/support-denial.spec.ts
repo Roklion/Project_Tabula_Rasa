@@ -2,6 +2,9 @@ import { expect, test } from '@playwright/test';
 import { probe } from '../support-denial';
 
 test.use({ trace: 'off', screenshot: 'off', video: 'off' });
+// The standalone operator launches Chromium only. WebKit's intercepted requests
+// omit cookie headers and cannot fulfill redirects; they are not its transport.
+test.skip(({ browserName }) => browserName !== 'chromium', 'Operator client uses Chromium only.');
 const target = { origin: 'https://synthetic.invalid', release: 'a'.repeat(40), organization: 'org-a',
   business: 'business-a', approval: 'private-ref', synthetic: true, consent: true };
 const requestId = 'b'.repeat(32);
