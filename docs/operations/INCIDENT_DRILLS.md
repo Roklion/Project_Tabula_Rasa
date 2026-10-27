@@ -136,6 +136,14 @@ If no approved normal-client route or safe isolation exists, stop that drill and
 record the exact missing route/access/approval. Do not substitute fabricated
 events, direct database tampering or source tests for hosted evidence.
 
+For the single scoped privileged-denial request, follow the
+[credential-safe synthetic operator invocation](SUPPORT.md#synthetic-privileged-denial-client).
+It uses its own interactive named-login context and selected-session scope, never
+manual session/CSRF handoff or a new support grant. Exact-target/window approval
+and one-request consent are required before execution. Its expected generic 403
+leaves `privileged_denied` correlation and notification **unverified**; collect
+those independently. Do not repeat it to reach the normal alert threshold.
+
 After each drill, remove only its approved fault, verify release/topology and
 scope, inspect uncertain mutations before retry, and confirm original bytes and
 unaffected-business state remain intact. Check no fault control, competing job
