@@ -154,6 +154,58 @@ evidence, named primary/alternate operators, observed limitations and unresolved
 checks; external release and customer lifecycle and commercial recovery agreement retain
 release authority.
 
+## Synthetic privileged-denial client
+
+For a separately approved synthetic drill without credential handoff, use the
+opt-in Node 24 operator command below from the repository root. Install the locked
+web tooling with `npm --prefix web ci` and its Chromium engine with
+`npm --prefix web exec -- playwright install chromium` first. This is a standalone
+command, never a Playwright test-runner invocation or product navigation feature.
+
+```powershell
+node web/support-denial.ts --origin https://APPROVED_SYNTHETIC_ORIGIN --release EXACT_40_HEX_SHA --organization APPROVED_ORG --business APPROVED_BUSINESS --approval PRIVATE_APPROVAL_REFERENCE --synthetic-approved --consent-one-request
+```
+
+The operator must already hold an external approval record for the exact HTTPS
+origin, immutable release, existing synthetic named identity and organization/
+business, window, one-request budget and private evidence custody. `--approval`
+is only an opaque reference (letters/digits/underscore/hyphen); the command cannot
+verify that record or prove staging from a hostname or SHA. Flags attest approval;
+they do not grant it. Confirm there is **no support grant**; do not provision or
+revoke one to make this exercise pass. No account, secret or deployment changes
+are part of this command.
+
+It opens its own ephemeral Chromium context. Complete ordinary human login/MFA
+and select the approved existing business in that browser, then type the fixed
+one-request consent phrase in the terminal. Do not enter credentials in the
+terminal. The client checks `/version` and the authorized ready named session's
+organization/business claims, rejects setup/alpha/anonymous or mismatched scope,
+and sends one fixed diagnostics POST with reason `incident`. Browser-managed
+cookies and Origin plus session-response CSRF stay in that context; no credential
+or storage state is exported. Other application API traffic is blocked except
+login, session/business choices and explicit business selection, so ordinary
+dashboard financial requests may show errors during selection.
+
+Run without debug/inspector environment settings. The standalone command enables
+no trace, HAR, video, screenshot, download, request/response logging or reporter;
+do not add recording wrappers or developer-tools captures. It closes the context
+and browser on completion/failure. Expected output is fixed `expected_forbidden`
+or `refused`, verified release (or null), a validated server request ID (or null),
+and `collector_and_notification: unverified`. Redirects, malformed/oversized
+responses, unsafe IDs, wrong scope and unexpected success fail without dumping
+contents or retrying. After any failure or uncertain request, inspect independently;
+rerunning consumes a new budget and needs a new approval.
+
+**HTTP 403 alone does not prove `privileged_denied` or alert delivery.** An
+independent authorized operator must correlate the safe request ID/release with
+the actual collector event, correct pseudonymous scope and approved recipient's
+delivered incident. CSRF `authorization_denied` is not equivalent. One request
+does not satisfy the normal security-denial alert threshold; approve any isolated
+threshold change separately and restore it under the [drill procedure](INCIDENT_DRILLS.md#dependency-and-job-drill-preflight).
+Keep actual outcomes in the owning issue/PR and private incident record, not in
+repository evidence reports. Source tests and client output prove no hosted
+execution, notification, stage readiness or launch acceptance.
+
 ## Reuse and validation
 
 The implementation extends identity control plane and server authorization's existing
