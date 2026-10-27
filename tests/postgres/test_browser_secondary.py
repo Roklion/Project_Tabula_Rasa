@@ -147,13 +147,13 @@ def test_dropped_write_and_background_read_keep_loaded_draft(database, commercia
         assert snapshot(database) == before
 
 
-@pytest.mark.parametrize('resource,field,property_name,heading', [
-    ('assets', 'Notes', 'notes', 'Asset detail'),
-    ('mixed-use', 'Allocation rationale', 'allocation_rationale', 'Mixed-use expense'),
-    ('recurring', 'Schedule name', 'name', 'Recurring schedule'),
+@pytest.mark.parametrize('resource,field,property_name,heading,list_heading', [
+    ('assets', 'Notes', 'notes', 'Asset detail', 'Assets'),
+    ('mixed-use', 'Allocation rationale', 'allocation_rationale', 'Mixed-use expense', 'Mixed-use expenses'),
+    ('recurring', 'Schedule name', 'name', 'Recurring schedule', 'Recurring expenses'),
 ])
 def test_secondary_cached_revisit_waits_for_fresh_record_and_rejects_failed_read(database, commercial, commercial_server,
-                                                                              resource, field, property_name, heading, native_browser):
+                                                                              resource, field, property_name, heading, list_heading, native_browser):
     alpha, _, _, _ = commercial
     if resource == 'assets':
         offset = alpha.accounts.create('Accumulated depreciation', 'Other', classification='Asset')['id']
@@ -177,6 +177,8 @@ def test_secondary_cached_revisit_waits_for_fresh_record_and_rejects_failed_read
         page.goto(commercial_server + '/' + resource + '/' + row['id'])
         expect(page.get_by_label(field, exact=True)).to_have_value(row[property_name])
         page.get_by_role('button', name='Back to records', exact=True).click()
+        # Commit the list view before going back so this is a new detail visit.
+        expect(page.get_by_role('heading', name=list_heading, exact=True)).to_be_visible()
         updated = update()
         waiting = []
         page.route(endpoint, lambda route: waiting.append(route))
@@ -194,6 +196,7 @@ def test_secondary_cached_revisit_waits_for_fresh_record_and_rejects_failed_read
         assert saved.value.status == 200 and saved.value.request.post_data_json['baseline'] == updated['baseline']
         expect(page.get_by_role('status').filter(has_text='Changes saved.')).to_be_visible()
         page.get_by_role('button', name='Back to records', exact=True).click()
+        expect(page.get_by_role('heading', name=list_heading, exact=True)).to_be_visible()
         before = snapshot(database)
         page.route(endpoint, lambda route: route.abort())
         page.go_back()
