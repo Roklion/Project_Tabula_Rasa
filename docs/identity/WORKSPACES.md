@@ -160,6 +160,18 @@ cannot inspect the receipt. There is no half-created/incomplete durable state:
 resume means retrying the same request. Receipts and ledger defaults survive
 pool/worker restart. Session inspection then discovers the first available entity.
 
+After an explicitly approved operator tenancy reconciliation, a historical
+receipt retains its request ID and original payload hash but can reference the
+business's new private container. The original result/mapping remains in the
+operator's private recovery/provenance record. Exact replay/status authorizes
+the receipt's current business and returns that current container; ongoing
+access to its former container is neither necessary nor sufficient. Legacy
+organization-bearing POST replay still requires `entity:manage` in the current
+business. Status retains its existing read-access contract. Revoked/inactive
+membership denies access; an altered original payload conflicts, and replay
+never creates another business or default records. This is explicit maintenance,
+not an automatic conversion on login, retry or startup.
+
 ## Browser onboarding
 
 Sign in (or register with the configured hosted identity provider). With no active
