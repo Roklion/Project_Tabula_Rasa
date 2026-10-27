@@ -1,5 +1,6 @@
 """Real control-plane persistence; byte providers and credentials are synthetic."""
 from dataclasses import replace
+from hashlib import sha256
 import json
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -8,7 +9,7 @@ from cryptography.fernet import Fernet
 import pytest
 from sqlalchemy import text
 
-from tabula_rasa.application.documents import DocumentMetadata, DocumentReference, ReceiptInventory
+from tabula_rasa.application.documents import DocumentError, DocumentMetadata, DocumentReference, ReceiptInventory
 from tabula_rasa.application.identity import IdentityError, capabilities
 from tabula_rasa.http.connections import TenantConnections
 from tabula_rasa.http.context import RequestContext
@@ -131,7 +132,7 @@ def test_two_org_grants_restart_disconnect_reconnect_and_no_exported_tokens(data
     assert all(b'fake-refresh' not in file.read_bytes() for file in tmp_path.iterdir())
     # Grant loss denies at the byte boundary, including already-composed stores.
     (tmp_path / (refs[0] + '.grant')).unlink()
-    with pytest.raises(IdentityError, match='unavailable') as error:
+    with pytest.raises(DocumentError, match='unavailable') as error:
         cached.fetch('alpha', 'file')
     assert error.value.__context__ is None
     assert manager.document_store(beta).fetch('beta', 'file') == b'beta'
@@ -144,9 +145,9 @@ def test_revoked_grant_updates_safe_status_and_member_removal_denies_cached_stor
     def revoked(*args, **kwargs):
         raise GoogleDriveAuthorizationError('synthetic provider credential must never escape')
     manager.store_factory = lambda row, payload, **kwargs: SimpleNamespace(scope_key=row['store_scope_key'], fetch=revoked)
-    with pytest.raises(IdentityError) as caught:
+    with pytest.raises(DocumentError) as caught:
         cached.fetch('alpha', 'file')
-    assert str(caught.value) == 'unavailable' and caught.value.__context__ is None
+    assert str(caught.value) == 'Document storage is unavailable.' and caught.value.__context__ is None
     assert manager.repository.status(alpha).status == 'reconnect_required'
     # Preserve an owner while removing the caller.
     repo.set_membership(alpha.organization_id, beta.actor_id, 'owner')
@@ -220,3 +221,86 @@ def test_nonowner_cannot_inspect_or_manage_grants(database, tmp_path, role):
         with pytest.raises(IdentityError, match='forbidden'):
             manager.document_store(alpha).upload('alpha', object())
     store.get.assert_not_called()
+
+
+@pytest.mark.parametrize('failure', ['missing_grant', 'provider_unavailable'])
+def test_document_dependency_telemetry_and_recovery_preserve_other_business(database, tmp_path, caplog, failure):
+    repo, manager, store, calls, alpha, beta, refs, session = fixture(database, tmp_path)
+    content = {'alpha': b'alpha', 'beta': b'beta'}
+    documents = {}
+    selected = []
+    unavailable = False
+    for ctx in (alpha, beta):
+        data = content[ctx.entity_id]
+        doc = DocumentReference(ctx.entity_id, DocumentMetadata('a' * 32, 'receipt.pdf', 'receipt.pdf',
+            'application/pdf', len(data), sha256(data).hexdigest()), 'provider-file', '')
+        PostgresReceiptRepository(database, ctx.entity_id, store_kind='google_drive',
+            store_scope_key='folder-' + ctx.entity_id).register_document(doc)
+        documents[ctx.entity_id] = doc
+
+    def provider(row, payload, **kwargs):
+        entity = row['entity_id']
+        selected.append(entity)
+        def fetch(*args):
+            if unavailable and entity == 'alpha':
+                raise RuntimeError('synthetic-private-provider-detail')
+            return content[entity]
+        return SimpleNamespace(scope_key=row['store_scope_key'], fetch=fetch,
+            inventory=lambda *args, **kwargs: ReceiptInventory((documents[entity],), ()))
+
+    manager.store_factory = provider
+    client, auth, factory = client_for(database)
+    caplog.set_level('INFO', logger='tabula_rasa.http')
+
+    def event(response):
+        logged = [json.loads(record.message) for record in caplog.records if record.name == 'tabula_rasa.http']
+        return next(item for item in reversed(logged) if item.get('request_id') == response.headers['x-request-id'])
+
+    with client:
+        runtime = client.app.state.runtime
+        runtime.service_factory = lambda ctx: create_postgres_services(database, ctx.entity_id,
+            document_store=manager.document_store(ctx), document_store_kind='google_drive')
+        tokens = {entity: auth.sessions.issue(verified(subject))[0]
+                  for entity, subject in (('alpha', 'alice'), ('beta', 'bob'))}
+
+        def read(entity):
+            client.cookies.clear()
+            client.cookies.set(auth.session_cookie, tokens[entity])
+            return client.get('/api/v1/entities/' + entity + '/documents/' + 'a' * 32 + '/content')
+
+        for entity in content:
+            assert read(entity).content == content[entity]
+        encrypted = (tmp_path / (refs[0] + '.grant')).read_bytes()
+        if failure == 'missing_grant':
+            (tmp_path / (refs[0] + '.grant')).rename(tmp_path / 'offline.grant')
+        else:
+            unavailable = True
+        response = read('alpha')
+        assert response.status_code == 503 and response.json()['error']['code'] == 'unavailable'
+        signal = event(response)
+        assert signal['provider'] == 'documents' and signal['provider_status'] == 'unavailable'
+        assert signal['operation'] == 'download_document' and signal['outcome'] == 'failure'
+        assert signal.get('security_event') is None
+        unaffected = read('beta')
+        assert unaffected.status_code == 200 and unaffected.content == content['beta']
+        assert event(unaffected)['outcome'] == 'success'
+        assert manager.repository.status(alpha).status == manager.repository.status(beta).status == 'connected'
+        if failure == 'missing_grant':
+            (tmp_path / 'offline.grant').rename(tmp_path / (refs[0] + '.grant'))
+        unavailable = False
+        recovered = read('alpha')
+        assert recovered.status_code == 200 and recovered.content == content['alpha']
+        assert event(recovered)['outcome'] == 'success'
+        assert (tmp_path / (refs[0] + '.grant')).read_bytes() == encrypted
+        for ctx in (alpha, beta):
+            retained = PostgresReceiptRepository(database, ctx.entity_id, store_kind='google_drive',
+                store_scope_key='folder-' + ctx.entity_id).retained_documents()
+            assert retained == (documents[ctx.entity_id],)
+        before = len(selected)
+        denied = client.get('/api/v1/entities/beta/documents/' + 'a' * 32 + '/content')
+        assert denied.status_code == 403
+        assert event(denied)['security_event'] == 'authorization_denied'
+        assert len(selected) == before
+    assert 'synthetic-private-provider-detail' not in response.text + caplog.text
+    assert 'fake-refresh' not in response.text + caplog.text
+    assert str(tmp_path) not in response.text + caplog.text

@@ -44,6 +44,13 @@ Login success can include its authenticated actor; failures never infer an actor
 from an email, cookie or submitted claim. Logout does not perform an additional
 session read just to enrich telemetry during an outage.
 
+After fresh membership and connection checks, document-adapter failures (including
+unreadable encrypted grants and provider failures) use the existing document-error
+boundary: HTTP 503, `provider=documents` and `failure_code=unavailable`. They do not
+emit an identity-denial event. Earlier authorization/connection lookup failures keep
+their existing identity handling; provider credential revocation still records the
+connection's reconnect-required state.
+
 Named login adds fixed `security_reason` rejection categories and optional `login_ref`
 to correlate start/callback events. This is an HMAC pseudonym of a separate
 noncredential diagnostic reference, never a hash of state, session or login credentials.

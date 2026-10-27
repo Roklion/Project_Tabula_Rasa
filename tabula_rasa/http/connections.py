@@ -1,4 +1,5 @@
 """Authorized provider composition; existing Drive adapters own byte behavior."""
+from tabula_rasa.application.documents import DocumentError
 from tabula_rasa.application.identity import IdentityError
 from tabula_rasa.infrastructure.postgres.connections import PostgresConnections
 
@@ -98,7 +99,7 @@ class AuthorizedDocumentStore:
             reconnect = isinstance(error, GoogleDriveAuthorizationError) or isinstance(error.__cause__, GoogleDriveAuthorizationError)
         if reconnect and self.store_kind == 'google_drive':
             self.manager.repository.require_reconnect(row)
-        raise IdentityError('unavailable')
+        raise DocumentError('Document storage is unavailable.')
 
     def upload(self, entity_id, upload):
         return self._call('upload', entity_id, upload)
