@@ -394,3 +394,73 @@ or activate commercial production.
 [Operational observability](OBSERVABILITY.md) owns the sanitized telemetry contract,
 optional collection setup, tier/retention/access checkpoint, alert thresholds, staging
 smoke and platform operations integration responsibilities.
+
+## Stage-specific operational readiness
+
+The release operator assembles an evidence matrix before changing the supported
+stage. Keep dated results, acceptance checkboxes and approval references in the
+owning operational discussion, not in this guide. Record the exact selected
+release, schema, topology, target binding and observation time for every result.
+Main CI, an image build, a deployment record and an observed running service are
+distinct evidence. A later main commit does not refresh an earlier live drill.
+
+| Minimum | Restricted synthetic technical alpha | Trusted owner-operated bookkeeping | Unrelated external beta / commercial production |
+| --- | --- | --- | --- |
+| Access and scope | Explicit synthetic scope and protected ingress; named mode or the supported restricted gate; no unrelated customer admission | Named owner, exact authorized business/document bindings, fresh membership and cross-business denial; preserve divergent PostgreSQL authority | Selected-release named identity, business roles, revocation and browser isolation; usable account/admin recovery before admission |
+| Recovery | Explicitly accepted synthetic loss/availability limits; distinguish DB and document-byte coverage and disclose unperformed checks | Achieved PostgreSQL protection plus separate byte archives, compatible metadata/links, retained source/history, owner custody and a usable recovery procedure | Accepted stage RPO/RTO, retention, capacity, recovery points, full-service boundaries and operator/escalation coverage, with independent alternate recovery when commercially required |
+| Jobs | No timer is implied by a successful manual probe; approve each synthetic mutation/window separately | Exact business/time zone, bounded durable worker, observed scheduled execution and failure/remediation, missed-run/terminal monitoring and retained attempts | Representative selected-cohort operation, retry/deduplication and delivered incidents meeting accepted cadence/capacity; separately approved activation |
+| Provider limits and privacy | Inspect effective region/tier/headroom/shared consumption, idle behavior, logging and grant limits; accept bounded technical gaps explicitly | Recheck those limits against actual owner workload, secret/key custody, alert recipient and backup-health responsibilities | Inspect selected provider and downstream/proxy/sink access/retention, usage eligibility, quota/cost headroom and incident response; free tiers pass only if achieved outcomes meet the accepted stage |
+| Validation and approval | Current-revision authoritative CI/review plus applicable synthetic checks; no automatic release from a repository pass | Consume exact owner-cutover evidence and approved protection limits; operations work must not disturb the working owner service | Consume security and operations evidence; separate beta admission, commercial authority activation and paid-release decisions remain with their human release owners |
+
+For each minimum, record: acceptance item; pass/fail/unperformed/not applicable;
+immutable evidence URL and tested revision; actual resource/topology reference;
+remaining work and dependency; responsible human/component owner; and explicit
+stage approval or the exact missing decision. An owner named as the requested
+approver is not evidence that they have accepted. Deferrals require scope, a
+specific owning issue, responsible owner and completion/reconsideration trigger.
+Do not waive an essential protection by labeling it cosmetic or deferring it to
+paid launch when beta already needs it.
+
+Inspect actual Render/Neon region, compute/tier, project-wide consumption,
+connection budget, suspension/history and remaining capacity. Inspect selected
+document storage headroom, effective Cloud project quota, grant lifecycle and
+shared account/client failure boundary. Console values, operator attestations and
+published limits must be identified separately; templates and account locality
+do not establish effective settings. Provider purchases and configuration changes
+retain their separate approval checkpoints.
+
+Use [controlled drills](INCIDENT_DRILLS.md#dependency-and-job-drill-preflight)
+for execution and [incident evidence](INCIDENT_RESPONSE.md#timeline-evidence-and-closure)
+for sanitized handoff. Consume [hosted rollout](../identity/HOSTED_ROLLOUT.md#hosted-rehearsal-and-expected-results),
+[observability](OBSERVABILITY.md#metrics-alerts-and-first-triage),
+[job operation](JOBS_AND_AUDIT.md#operator-entrypoints-and-manual-hosted-checkpoint)
+and [support](SUPPORT.md) at their proven scope. A configured alert is not a
+delivered incident; email settings are not delivered email. Verify recipient
+acknowledgment and actual recovery separately, including manually resolved job
+incidents. Keep a real provider fault distinct from source tests or simulated logs.
+
+### Recovery replacement and handoff
+
+Before retiring a recovery capability, inventory its live, manual, test and
+operator consumers. Classify each as retained, replaced and eligible, or deferred
+to a specific issue with owner and trigger. Reuse the
+[resource retirement procedure](RESOURCE_RETIREMENT.md); replacement evidence
+must match the selected stage's guarantee, not just share a backup label.
+
+Verify the [database restore](DATABASE_RECOVERY.md),
+[audit history/protections](AUDIT_RECOVERY.md), and separate
+[receipt archive/restore](../storage/RECEIPT_RECOVERY.md), including compatible
+metadata/link identities, available recovery points, scoped credentials and key
+custody. Database archives do not contain external receipt bytes. A manual byte
+archive does not establish a document NAS scheduler, continuous protection or
+alternate-operator recovery. Record the DB/bytes capture boundaries and any
+unrecoverable interval; do not combine unrelated historical passes into a new
+whole-service pass. Verify restored state before forward migration and apply the
+canonical return-to-service/authority rules before any separately approved rebind.
+
+Preserve archived divergent Sheets sources and disabled old writers, receipt
+bytes, NAS generations/checksums and deployed schema history. Never reactivate
+stale Sheets after PostgreSQL divergence. Capability retirement provides no data
+disposal authority: each resource deletion needs its own exact-target approval.
+Issue closure, technical handoff and recovery verification supply no beta,
+commercial cutover or charging approval.

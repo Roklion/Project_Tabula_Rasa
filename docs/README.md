@@ -57,6 +57,7 @@ and authority boundaries during transition; follow the guide for your runtime.
 ## Deployment and operations
 
 - [Development/staging deployment](operations/DEPLOYMENT.md),
+  [stage-specific operational readiness](operations/DEPLOYMENT.md#stage-specific-operational-readiness),
   [observability](operations/OBSERVABILITY.md), and
   [least-privilege support](operations/SUPPORT.md).
 - [Durable jobs and bookkeeping audit history](operations/JOBS_AND_AUDIT.md) and
