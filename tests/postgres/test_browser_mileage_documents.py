@@ -30,6 +30,8 @@ def test_mileage_revisit_waits_for_fresh_detail_and_surfaces_deleted_record(comm
         page.goto(commercial_server + path)
         expect(page.get_by_label('Notes', exact=True)).to_have_value(TRIP['notes'])
         page.get_by_role('button', name='Back to records', exact=True).click()
+        # History can change before React commits the list and unmounts the editor.
+        expect(page.get_by_role('heading', name='Mileage', exact=True)).to_be_visible()
         updated = client.patch(PREFIX + 'mileage/' + created['id'], headers=HEADERS,
                                json={'baseline': created['baseline'], 'changes': {**TRIP, 'notes': 'Other client edit'}})
         assert updated.status_code == 200
