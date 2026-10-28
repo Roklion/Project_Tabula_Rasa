@@ -67,15 +67,12 @@ class PostgresWorkspaceRepository:
         with audit_context(self.database, AuditContext('user', actor, 'workspace.bootstrap', entity_id,
                            operation_id='bootstrap:' + request_id)), identity_operation(self.database) as connection:
             self._users(connection, actor)
-            if organization_id:
-                require_capability(self._role(connection, actor, organization_id, lock=True), 'entity:manage')
             previous = connection.execute(text('''SELECT * FROM workspace_bootstraps
                 WHERE user_id=:user AND request_id=:request'''), {'user': actor, 'request': request_id}).mappings().first()
             if previous:
                 if previous['payload_hash'] != payload:
                     raise IdentityError('conflict')
-                self._role(connection, actor, previous['organization_id'])
-                return self._bootstrap_result(previous)
+                return self._bootstrap_result(connection, actor, previous, legacy=organization_id is not None)
             # Retain authorized replay of historical receipts, but never append a
             # new business to an existing permission container.
             if organization_id is not None:
@@ -89,8 +86,14 @@ class PostgresWorkspaceRepository:
                 {'user': actor, 'request': request_id, 'payload': payload, 'org': org, 'entity': entity_id})
             return {'state': 'ready', 'organization_id': org, 'entity_id': entity_id}
 
-    @staticmethod
-    def _bootstrap_result(row):
+    def _bootstrap_result(self, connection, actor, row, *, legacy=False):
+        # The original payload stays immutable, while an approved operator
+        # reconciliation can change the receipt's current private container.
+        access = self._business_access(connection, actor, row['organization_id'])
+        if access['entity_id'] != row['entity_id']:
+            raise IdentityError('forbidden')
+        if legacy:
+            require_capability(access['role'], 'entity:manage')
         return {'state': 'ready', 'organization_id': row['organization_id'], 'entity_id': row['entity_id']}
 
     def bootstrap_status(self, actor, request_id):
@@ -100,8 +103,7 @@ class PostgresWorkspaceRepository:
                 WHERE user_id=:user AND request_id=:request'''), {'user': actor, 'request': request_id}).mappings().first()
             if row is None:
                 return {'state': 'not_started', 'organization_id': None, 'entity_id': None}
-            self._role(connection, actor, row['organization_id'])
-            return self._bootstrap_result(row)
+            return self._bootstrap_result(connection, actor, row)
 
     def business_operation(self, session, business_id, operation, *args):
         # Thin business adapter: the same transaction and policy/locks own both
