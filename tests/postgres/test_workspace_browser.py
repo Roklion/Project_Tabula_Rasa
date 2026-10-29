@@ -58,7 +58,13 @@ def test_independent_roles_flat_navigation_and_shared_invitee(named_server, engi
         assert_accessible(owner)
         for index, invitation in enumerate(invitations):
             invitee.goto(origin + '/invitations')
-            invitee.get_by_label('Invitation credential', exact=True).fill(invitation.credential)
+            # Settle WebKit's page/input focus before pasting into the password field.
+            invitee.bring_to_front()
+            credential_field = invitee.get_by_label('Invitation credential', exact=True)
+            credential_field.focus()
+            expect(credential_field).to_be_focused()
+            credential_field.fill(invitation.credential)
+            expect(credential_field).not_to_be_empty()
             invitee.get_by_role('button', name='Review invitation').click()
             offer = invitee.get_by_role('region', name='Invited business')
             expect(offer.get_by_text('Business reference: ' + ('alpha' if index == 0 else 'beta'), exact=True)).to_be_visible()
