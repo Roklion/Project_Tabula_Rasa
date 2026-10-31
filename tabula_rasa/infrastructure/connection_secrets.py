@@ -1,4 +1,4 @@
-"""Encrypted operator-provisioned grants, independent of login and SQL exports."""
+"""Encrypted tenant-bound provider grants, independent of login and SQL exports."""
 import json
 import os
 from pathlib import Path
@@ -14,8 +14,8 @@ from tabula_rasa.application.identity import IdentityError
 class ConnectionSecrets:
     """Key comes from environment secret injection; directory holds ciphertext only.
 
-    Provisioning is an explicit operator action. Runtime needs read-only directory
-    access. Never accept a path/key/reference from browser transport.
+    Operator grants support read-only mounts. Customer OAuth requires a private
+    persistent writable directory. Never accept a path/key/reference from browser transport.
     """
     def __init__(self, directory, key):
         self.directory = Path(directory)

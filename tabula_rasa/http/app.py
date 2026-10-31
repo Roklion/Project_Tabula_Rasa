@@ -132,6 +132,9 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
             response.headers.setdefault("Cache-Control", "no-store")
         route = request.scope.get("route")
         operation = getattr(route, "operation_id", None) or ("static_assets" if getattr(route, "path", "").startswith("/assets") else "unmatched")
+        if operation == 'complete_drive_authorization':
+            # Includes denied callbacks that never reach the route's redirect.
+            response.headers['Referrer-Policy'] = 'no-referrer'
         policy = ROUTE_POLICIES.get(operation)
         failure = getattr(request.state, "failure_code", None)
         if response.status_code >= 500 and failure is None:
@@ -190,6 +193,7 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
     app.include_router(mileage_imports.router)
     app.include_router(documents.router)
     app.include_router(connections.router)
+    app.include_router(connections.callback_router)
     app.include_router(financial_csv.router)
     app.include_router(reporting.router)
     app.include_router(secondary.router)

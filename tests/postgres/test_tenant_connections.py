@@ -188,7 +188,8 @@ def test_http_owner_freshness_csrf_foreign_scope_logout_and_private_bytes(databa
         headers = {'origin': auth.settings.public_origin, 'x-csrf-token': info['csrf_token']}
         client.cookies.set(auth.csrf_cookie, info['csrf_token'])
         path = '/api/v1/entities/alpha/connections/google-drive'
-        assert client.get(path).json() == {'provider': 'google_drive', 'status': 'connected', 'revision': 2}
+        assert client.get(path).json() == {'provider': 'google_drive', 'status': 'connected', 'revision': 2,
+                                                 'self_service_available': False, 'authorization_status': None, 'authorized_account': None}
         assert client.get('/api/v1/entities/beta/connections/google-drive').status_code == 403
         assert client.post(path, json={'revision': 2, 'connect': False}).status_code == 403
         assert client.post(path, headers=headers, json={'revision': 1, 'connect': False}).status_code == 409

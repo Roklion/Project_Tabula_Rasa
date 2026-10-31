@@ -4,7 +4,7 @@ The current document path uses Google Drive for bytes and PostgreSQL for metadat
 and links. It requires no AWS account, bucket, billing or S3 SDK.
 [ADR 0004](../adr/0004-managed-receipt-storage.md) records the Drive-first decision.
 [Optional object storage](OBJECT_STORAGE.md) remains deferred groundwork; adoption
-and customer self-service connectivity require separate review.
+requires separate review. Customer self-service uses the existing protected Drive binding.
 
 ## Contract and existing workflows
 
@@ -16,11 +16,11 @@ provider credentials. Existing narrow Google scopes, server authorization and ex
 connections membership/connection checks, alpha binding and owner-operated paths remain.
 Unlink changes references only. Failed SQL linking retains uploaded receipts.
 
-The current external connections browser surface activates an operator-provisioned
-grant. It is not customer self-service OAuth consent/folder onboarding;
-document-provider adoption review owns that gap. Internal administrator OAuth remains
-loopback-only. No new hosted callback or customer onboarding is implemented by this
-operator recovery tooling.
+The [customer connection flow](../identity/GOOGLE_DRIVE.md) supports browser consent and
+managed-folder setup when enabled, retaining operator-provisioned activation otherwise.
+Both produce the same encrypted grant and DocumentStore binding used by recovery tooling.
+Internal administrator OAuth stays loopback-only. Recovery commands still require an
+approved private connection envelope; onboarding does not establish scheduled byte backup.
 
 ## Byte protection versus database recovery
 
