@@ -559,14 +559,12 @@ def test_preparation_reconciles_filename_and_returns_fresh_manifest() -> None:
     receipt["name"] = "renamed-in-drive.pdf"
     drive = Mock()
     drive.list_profile_receipts.return_value = [receipt]
-    data_changed = Mock()
 
     manifest = prepare_backup_receipt_manifest(
         storage,
         drive,
         profile_key="north",
         folder_id="northfolder123",
-        on_data_changed=data_changed,
     )
 
     current = storage.list_transactions(_force_refresh=True)[0]
@@ -574,7 +572,6 @@ def test_preparation_reconciles_filename_and_returns_fresh_manifest() -> None:
         "renamed-in-drive.pdf"
     )
     assert manifest["receipts"][0]["stored_filename"] == "renamed-in-drive.pdf"
-    data_changed.assert_called_once_with()
     drive.backfill_receipt_checksum.assert_not_called()
     assert drive.list_profile_receipts.call_count == 2
 

@@ -82,6 +82,11 @@ and `ledger_presentation.py`; these shared calculations outlive the deleted page
 | Sheets backup/archive and shared final-format validators | `backup_google_sheets.py`, `validate_google_sheets_backup.py`, blank-target restore and independent migration preflight |
 | Sheets receipt remap, source/projection parity, managed row update and bounded uncertain readback helpers | `receipt_backfill.prepare_backup_receipt_manifest` from backup CLI and `receipt_recovery.recover_receipts_from_synology` from recovery CLI |
 | Shared recurring rules and format-13 recurring provenance validation | PostgreSQL recurring service/queue, migration extraction, archive validation and restore; no Sheets generation engine remains |
+| `bookkeeping_export/` and PostgreSQL export/recovery adapters | Browser canonical export, `export_postgres_entity.py`, database/audit verification and document archive metadata/link validation |
+| `migration/`, Sheets extraction and PostgreSQL migration/cutover adapters | Explicit frozen-source extraction/acceptance; migrated runtime authority, provenance and divergence guards; shared binding digests used by identity/connections |
+| `application/document_recovery.py`, `infrastructure/document_archive.py`, document stores and SQL location promotion | `manage_document_storage.py` backup/offline verify/isolated restore; shared verified copy preserves canonical IDs, links and original locators |
+| NAS backup runner, source inspector and `deploy/nas/` | Operator SQL capture/health/restore procedures and CI's `tests/tooling/nas_backup_smoke.py` TLS/encryption/restore check |
+| Hosted Drive recovery workflow and runner; receipt recovery benchmark | Explicit isolated two-entity Drive drill and encrypted evidence capture; synthetic Sheets receipt-remap performance comparison, respectively |
 | `infrastructure/postgres/jobs.py`, `recurring_jobs.py`, job CLI and NAS monitor | PostgreSQL recurring dispatch, reconciliation and the NAS runner/heartbeat |
 | `presentation.py`, `ledger_auth.py`, public legal routes | Local administration styling, login, password reauthentication and footer |
 
@@ -90,6 +95,13 @@ page contexts/renderers and UI-only pending recurrence/submission state are reti
 Read and receipt recovery helpers retain only their actual operator/CLI consumers.
 Tests populate synthetic workbook rows directly rather than keeping obsolete mutation
 APIs alive for fixture construction.
+
+The Windows weekly Sheets-backup installer and the receipt-preparation UI notification
+hook are retired. Manual source/archive preservation, validation and receipt remapping
+retain their existing owners. The CLI keeps weekly/all-profile options compatible with
+previously installed tasks; source retirement never modifies a scheduler. Local Synology
+settings describe profile-scoped Cloud Sync custody and do not implement or attest a
+working NAS document-backup schedule.
 
 ## Recurring execution
 
