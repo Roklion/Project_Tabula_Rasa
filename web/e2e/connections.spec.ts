@@ -5,6 +5,39 @@ test.beforeEach(async ({ page }) => {
   await page.route('**/api/v1/auth/activity', route => route.fulfill({ status: 204 }));
 });
 
+test('customer first connection leaves for consent and returns to a scoped connected account', async ({ page }) => {
+  const session = { state: 'ready', actor_id: 'synthetic-owner', organization_id: 'synthetic-org',
+    entity: { id: 'alpha', name: 'Alpha demonstration' }, capabilities: ['bookkeeping:read', 'connections:manage'],
+    cache_scope: 'customer-drive-alpha', csrf_token: 'synthetic-csrf', trusted_development: false };
+  let connected = false;
+  await page.route('**/api/v1/session', route => route.fulfill({ json: session }));
+  await page.route('**/api/v1/businesses', route => route.fulfill({ json: { items: [session.entity] } }));
+  await page.route('**/api/v1/entities/alpha/connections/google-drive', route => route.fulfill({ json: {
+    provider: 'google_drive', status: connected ? 'connected' : 'not_configured', revision: connected ? 1 : 0,
+    self_service_available: true, authorized_account: connected ? 'synthetic@example.test' : null,
+  } }));
+  await page.route('**/api/v1/entities/alpha/connections/google-drive/authorize', route => {
+    expect(route.request().method()).toBe('POST');
+    expect(route.request().postDataJSON()).toEqual({ revision: 0 });
+    expect(route.request().headers()['x-csrf-token']).toBe('synthetic-csrf');
+    return route.fulfill({ json: { authorization_url: new URL('/synthetic-consent', page.url()).href } });
+  });
+  // Synthetic provider navigation only; real hosted Google acceptance is independent.
+  await page.route('**/synthetic-consent', route => {
+    connected = true;
+    return route.fulfill({ contentType: 'text/html', body: '<a href="/data">Return to business</a>' });
+  });
+  await page.goto('/data');
+  await page.getByRole('button', { name: 'Connect Google Drive' }).click();
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog).toContainText('Continue to Google');
+  expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()).violations).toEqual([]);
+  await dialog.getByRole('button', { name: 'Connect Google Drive' }).click();
+  await page.getByRole('link', { name: 'Return to business' }).click();
+  await expect(page.getByText('Google account: synthetic@example.test')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Disconnect Google Drive' })).toBeVisible();
+});
+
 test('owner connection confirmation is accessible and usable at desktop and mobile widths', async ({ page }) => {
   const session = { state: 'ready', actor_id: 'synthetic-owner', organization_id: 'synthetic-org',
     entity: { id: 'alpha', name: 'Alpha demonstration' }, capabilities: ['bookkeeping:read', 'connections:manage'],

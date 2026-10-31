@@ -57,6 +57,8 @@ export function createApi(fetcher: typeof fetch = (...args) => fetch(...args)) {
   return {
     connectionStatus: (s: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
       '/api/v1/entities/{entity_id}/connections/google-drive', listParams(s, signal)))),
+    authorizeDrive: (s: Session, body: Schemas['ConnectionStart']) => safe(async () => unwrap(await client.POST(
+      '/api/v1/entities/{entity_id}/connections/google-drive/authorize', { ...createParams(s), body }))),
     changeConnection: (s: Session, body: Schemas['ConnectionChange']) => safe(async () => unwrap(await client.POST(
       '/api/v1/entities/{entity_id}/connections/google-drive', { ...createParams(s), body }))),
     session: (signal?: AbortSignal) => safe(async () => unwrap(await client.GET('/api/v1/session', { signal, headers: headers() }))),

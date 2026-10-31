@@ -45,7 +45,8 @@ Matching an Alembic revision alone is insufficient.
 
 Supported archived revisions are `0013_accounting_controls`,
 `0014_document_locations`, `0015_support_controls`, `0016_business_tenancy` and
-`0017_customer_exports` (including immutable export request/availability evidence), with exact expected revision
+`0017_customer_exports` and `0018_drive_oauth` (including immutable export
+request/availability evidence; OAuth state is outside the audit inventory), with exact expected revision
 matching. Pre-activation revisions, including `0001_initial`, report
 `audit_history_unavailable`; other
 unsupported revisions stop with `audit_schema_unsupported`. Use their retained

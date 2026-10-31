@@ -273,6 +273,7 @@ def exchange_authorization_code(
     redirect_uri: str,
     *,
     session: requests.Session | None = None,
+    code_verifier: str | None = None,
 ) -> dict[str, Any]:
     """Exchange an authorization code and return sanitized persistent settings."""
     if not _clean_text(code):
@@ -287,6 +288,7 @@ def exchange_authorization_code(
                 "client_id": config.client_id,
                 "client_secret": config.client_secret,
                 "code": code,
+                **({"code_verifier": code_verifier} if code_verifier else {}),
                 "grant_type": "authorization_code",
                 "redirect_uri": redirect_uri,
             },

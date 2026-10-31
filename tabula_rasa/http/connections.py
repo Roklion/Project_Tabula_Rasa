@@ -9,6 +9,7 @@ class TenantConnections:
         self.repository = PostgresConnections(database)
         self.environment, self.secrets = environment, secrets
         self.store_factory = store_factory or provider_store
+        self.oauth = None
 
     def _store(self, row, *, validate=False):
         if self.secrets is None:

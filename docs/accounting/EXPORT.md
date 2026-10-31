@@ -17,7 +17,8 @@ entries/postings. A v1 snapshot alone does not restore period or correction immu
 controls; use full database recovery for those guarantees. Customer delivery
 wraps this exporter without changing its format; its [handoff contract](../browser/IMPORTS_EXPORTS_AND_INTEGRATIONS.md#customer-bookkeeping-and-accountant-handoff)
 explicitly excludes audit history. Revision `0017_customer_exports` adds only
-content-free delivery evidence outside canonical v1. Existing v1 exports from
+content-free delivery evidence outside canonical v1. Revision `0018_drive_oauth`
+adds customer authorization state, also excluded from v1. Existing v1 exports from
 `0004_mileage_order` remain valid; the exporter reports the observed supported revision
 and validates the same exact collection/field coverage. Migrated document ID mappings
 are included in provenance validation. The [cutover guide](CUTOVER.md) owns verification

@@ -464,3 +464,11 @@ stale Sheets after PostgreSQL divergence. Capability retirement provides no data
 disposal authority: each resource deletion needs its own exact-target approval.
 Issue closure, technical handoff and recovery verification supply no beta,
 commercial cutover or charging approval.
+
+## Customer Drive OAuth
+
+See [customer Google Drive setup](../identity/GOOGLE_DRIVE.md) for the optional
+`TABULA_RASA_CUSTOMER_DRIVE_OAUTH_FILE`, exact callback, forward migration and
+persistent writable encrypted grant custody. Read-only secret-file mounts alone
+cannot support self-service customer grants. Configure and verify approved staging
+before customer admission; no production setup is implied.

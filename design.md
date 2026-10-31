@@ -228,8 +228,11 @@ workbooks, Google grants or ledger data.
 **Current behavior — tenant Google connections :** Named Owners see
 a Google Drive connection section within Data & backup for the selected
 business. It shows safe status and explicit confirmed Connect/Reconnect/
-Disconnect actions, requires fresh login, and explains operator provisioning
-and separate Google consent revocation. No provider tokens, secret references,
+Disconnect actions and requires fresh login. With customer OAuth enabled, Connect
+redirects to Google consent, provisions a dedicated business folder and returns with
+connected account email. Connecting/incomplete setup has explicit retry guidance;
+reconnect preserves the same account/folders. Other deployments retain operator
+provisioning. Disconnect preserves files/links and explains separate Google revocation. No provider tokens, secret references,
 folder locators or credential-entry fields are displayed. Unavailable/stale
 commands remain visible failures and are not automatically retried.
 Read-only, Editor, Accountant and Admin do not see connection management.
