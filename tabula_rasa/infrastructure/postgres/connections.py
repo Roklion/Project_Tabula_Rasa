@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 import json
 
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from tabula_rasa.application.authorization import authorize_action
 from tabula_rasa.application.connections import ConnectionStatus
@@ -28,8 +29,17 @@ def require_recent_authentication(authenticated_at):
 def lock_connection_entity(connection, entity_id):
     # Serialize connection setup without blocking foreign-key KEY SHARE locks
     # used by bookkeeping writes. Competing setup must not queue behind Google.
-    connection.execute(text('SELECT id FROM business_entities WHERE id=:id FOR NO KEY UPDATE NOWAIT'),
-                       {'id': entity_id})
+    try:
+        connection.execute(text('SELECT id FROM business_entities WHERE id=:id FOR NO KEY UPDATE NOWAIT'),
+                           {'id': entity_id})
+    except SQLAlchemyError as error:
+        if getattr(getattr(error, 'orig', None), 'sqlstate', None) != '55P03':
+            raise
+    else:
+        return
+    # Only this explicit NOWAIT boundary classifies contention as a stale command.
+    # Leave unrelated lock timeouts unchanged and discard raw SQL exception context.
+    raise IdentityError('concurrent_write')
 
 
 class PostgresConnections:

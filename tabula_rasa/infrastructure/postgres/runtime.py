@@ -29,7 +29,7 @@ def safe_database_error(error: SQLAlchemyError | PsycopgError) -> DatabaseError:
     codes = {
         "23505": "duplicate", "23503": "reference", "23514": "invariant",
         "23502": "required", "40001": "concurrent_write", "40P01": "concurrent_write",
-        "25006": "read_only", "55P03": "concurrent_write",
+        "25006": "read_only",
         "55000": "backend_inactive",
         "TR423": "period_closed", "TR403": "forbidden", "TR409": "conflict",
         "53300": "database_exhausted",
