@@ -20,12 +20,14 @@ from sharing one original Drive document namespace.
 Neither table contains tokens or bytes. Canonical export v1 still contains
 26 bookkeeping collections; control-plane/secret records are excluded.
 
-Google grants live in encrypted Fernet files outside the checkout, image and
-database. Deployment injects these independently of ZITADEL login secrets:
+Google grants use the same encrypted Fernet envelopes in private files or an
+explicit dedicated credential database, outside the checkout, image and bookkeeping
+database/exports. Deployment injects custody independently of ZITADEL login secrets:
 
 | Setting | Operator responsibility |
 | --- | --- |
 | `TABULA_RASA_CONNECTION_SECRETS_DIR` | Absolute private directory holding encrypted `<opaque-reference>.grant` files. Operator grants support read-only mounts; customer OAuth needs durable private writable storage shared by API replicas. |
+| `TABULA_RASA_CONNECTION_SECRETS_DATABASE_URL` | Optional PostgreSQL credential database instead of the directory. All replicas use the same target/key. Remote connections require TLS; inject a restricted runtime role. Never use the bookkeeping database or enable both backends. See shared custody below. |
 | `TABULA_RASA_CONNECTION_SECRETS_KEY` | Separate environment-specific Fernet key from the deployment secret manager. Never a browser variable, command argument or committed file. |
 
 Generate keys using the approved private secret-management process. File provisioning
@@ -53,6 +55,68 @@ provider token supplies Google authority. Access tokens remain in the existing
 Drive client's request lifetime. Missing keys/files, wrong envelopes and provider
 failures deny bytes with safe unavailable errors. Ordinary ledger reads can
 continue when a configured receipt connection is unavailable/disconnected.
+
+## Shared encrypted custody
+
+For stateless API workers, the optional PostgreSQL backend retains the existing
+opaque references, Fernet encryption, exact environment/business/provider envelope
+checks and append-only `put`/`get` contract. No plaintext tokens or business identifiers
+are stored as SQL columns. It opens a short-lived connection per operation, with
+five-second connection/statement timeouts and no idle pool. Budget active custody
+connections alongside ledger/provider work; no workload capacity is implied. Failure
+denies access without falling back to a directory or another grant. Runtime does no DDL,
+overwrite, deletion, automatic transfer or key rotation.
+
+An operator must approve the exact environment, database, roles, private transport,
+capacity/cost and custody before provisioning. An existing approved PostgreSQL provider
+may host a separate database if its plan/security boundaries permit it; no new provider
+or paid upgrade is implied. Each environment needs its own database, role and key.
+
+1. Provision a **dedicated empty credential database** and separate non-owner,
+   non-superuser login role through the approved provider process. Keep administrative
+   credentials out of the application. Apply
+   [`connection-custody.sql`](../../deploy/commercial/connection-custody.sql) as the
+   schema owner only on that approved database. It refuses nonempty databases and is
+   separate from application Alembic migrations. Revoke unwanted default database/public
+   schema privileges and grant the selected runtime role only database CONNECT,
+   schema USAGE and table SELECT/INSERT on `connection_custody.grants`. Do not grant
+   UPDATE/DELETE/DDL, role administration or ledger access.
+2. Inject `TABULA_RASA_CONNECTION_SECRETS_DATABASE_URL` with that runtime role and
+   secure transport (prefer `sslmode=verify-full` with the provider's trusted root).
+   Preserve the existing environment-specific Fernet key. Do not expose URLs/keys in
+   command arguments, console output, browser state or public evidence.
+3. Before switching an existing deployment, freeze connection changes and preserve all
+   current encrypted files and their original key independently. From an approved private
+   source directory, run the operator-only copy tool:
+
+   ```text
+   python -m scripts.copy_connection_custody --source ABSOLUTE_PRIVATE_DIRECTORY --environment staging
+   python -m scripts.copy_connection_custody --source ABSOLUTE_PRIVATE_DIRECTORY --environment staging --apply --expect-plan REVIEWED_SHA256
+   ```
+
+   Dry-run is default and performs only SELECTs on the destination. Review its target-
+   and ciphertext-bound plan digest and counts, obtain exact-target approval, then apply.
+   The copy validates the environment and decryption key, retains original ciphertext and
+   references, uses one destination transaction and refuses conflicting existing records.
+   Identical existing records are accepted on rerun; source files and application metadata
+   are never changed. Preserve all retained references, including incomplete OAuth attempts;
+   do not generate new references or rebind folders as a transfer shortcut.
+4. Confirm destination counts and authorized resolution of every active connection.
+   Coherently switch all workers to the same database/key and remove the directory setting
+   from runtime configuration; configuring both fails closed. Retain the private source
+   copy for recovery. Never roll back to an old file snapshot after new grants have been
+   committed without separately reconciling those new references.
+5. Before enabling customer OAuth, verify two synthetic businesses across worker recreation,
+   same-account reconnect and exact-byte receipt access on the selected deployed revision.
+   Local database tests are implementation evidence, not a hosted persistence drill.
+
+Credential ciphertext needs its own independent backup/restore and alternate-operator
+custody. Keep the key separately recoverable, preserve opaque references and coordinate
+its recovery point with bookkeeping connection metadata and independent receipt bytes.
+A ledger-only restore, customer export or customer-owned Drive cannot reconstruct grants.
+Include this credential database in the operations recovery/access inventory and legal
+retention matrix; neither the SQL setup nor a copied grant proves schedules, alerts or
+RPO/RTO. No automatic pruning of retained grants or expired verifier envelopes is supplied.
 
 ## Operator-assisted Google connect and reconnect
 

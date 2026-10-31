@@ -35,6 +35,21 @@ def test_store_refuses_tampered_ciphertext(tmp_path):
         store.get(reference, **scope)
 
 
+@pytest.mark.parametrize('extra', [
+    {'TABULA_RASA_CONNECTION_SECRETS_DIR': '/private'},
+    {'TABULA_RASA_CONNECTION_SECRETS_DATABASE_URL': 'postgresql://user:never-echo@remote.example/custody'},
+    {'TABULA_RASA_CONNECTION_SECRETS_DATABASE_URL': 'invalid-never-echo'},
+    {'TABULA_RASA_CONNECTION_SECRETS_KEY': 'never-echo'},
+])
+def test_database_custody_configuration_fails_closed_without_sensitive_context(extra):
+    values = {'TABULA_RASA_CONNECTION_SECRETS_DATABASE_URL': 'postgresql://localhost/custody',
+              'TABULA_RASA_CONNECTION_SECRETS_KEY': Fernet.generate_key().decode(), **extra}
+    with pytest.raises(IdentityError) as error:
+        ConnectionSecrets.from_environment(values)
+    assert error.value.__context__ is None
+    assert 'never-echo' not in str(error.value)
+
+
 def test_operator_cli_errors_do_not_echo_input_or_credentials(tmp_path, capsys, monkeypatch):
     from unittest.mock import Mock
     from scripts.manage_identity_bindings import main
