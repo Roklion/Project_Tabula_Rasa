@@ -418,7 +418,7 @@ def backup_all_profiles(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Back up the live ledger to a versioned ZIP archive"
+        description="Preserve a format-13 Sheets source in a verified versioned ZIP archive"
     )
     parser.add_argument(
         "--secrets",

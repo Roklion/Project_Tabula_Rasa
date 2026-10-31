@@ -296,18 +296,6 @@ class TestBackupScripts:
 
             assert main() == 1
 
-    def test_windows_registration_defaults_to_one_all_profile_task(self) -> None:
-        script = (PROJECT_ROOT / "scripts" / "register_weekly_backup_task.ps1").read_text(
-            encoding="utf-8"
-        )
-        assert "$AllProfiles = $true" in script
-        assert "$arguments += ' --all-profiles'" in script
-        assert "-MultipleInstances IgnoreNew" in script
-        assert "New-TimeSpan -Days 3" in script
-        assert "New-TimeSpan -Minutes 15" in script
-        assert "-not $BackupDirectory" in script
-        assert '[string]$TaskName = "Project Tabula Rasa Weekly Backup"' in script
-
     def test_current_backup_inventories_the_configured_receipt_folder(self) -> None:
         storage = Mock(spec=GoogleSheetsStorage)
         storage.list_transactions.return_value = []

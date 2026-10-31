@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
 from tabula_rasa.google_drive import GoogleDriveClient
@@ -33,7 +32,7 @@ def prepare_profile_receipts(
     """Refresh receipt metadata and active Sheets references before backup.
 
     Receipts that already contain valid integrity metadata are never downloaded.
-    Failures are reported per file so a later startup or command-line run can
+    Failures are reported per file so a later command-line run can
     safely resume the remaining work.
     """
     transactions = storage.list_transactions(_force_refresh=True)
@@ -119,7 +118,6 @@ def prepare_backup_receipt_manifest(
     *,
     profile_key: str,
     folder_id: str,
-    on_data_changed: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
     """Prepare receipts and return a newly read, validated backup inventory.
 
@@ -133,8 +131,6 @@ def prepare_backup_receipt_manifest(
         profile_key=profile_key,
         folder_id=folder_id,
     )
-    if report["references_updated"] and on_data_changed is not None:
-        on_data_changed()
     if report["errors"]:
         raise ReceiptPreparationError(
             "Receipt preparation is incomplete; no backup was created. "

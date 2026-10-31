@@ -1,9 +1,9 @@
 # Backup and recovery
 
 This is the operator guide for creating, validating, copying, and restoring
-Tabula Rasa backups. Backups are recovery artifacts, not alternate live
-ledgers. Every restore targets a new blank Google workbook and refuses the
-configured live workbook.
+preserved format-13 Sheets backups. Backups are recovery artifacts, not alternate
+live ledgers. Sheets archive restoration targets a new blank Google workbook and
+refuses every configured live workbook.
 
 For an activated PostgreSQL entity, the [bookkeeping cutover
 guide](accounting/CUTOVER.md) defines the bounded rollback to its preserved format-13
@@ -16,7 +16,7 @@ fallback to a diverged PostgreSQL ledger.
 
 ```mermaid
 flowchart LR
-    Sheets["Live profile Google Sheet"]
+    Sheets["Preserved format-13 profile Google Sheet"]
     Archive["Validated versioned ZIP"]
     Local["Protected local or synchronized folder"]
     Drive["Profile Google Drive Ledger Backups"]
@@ -32,9 +32,12 @@ flowchart LR
     NAS -->|"Copy out, validate, restore"| Restore
 ```
 
-Google Drive is the primary cloud-native destination. Local storage and
-Synology are additional failure boundaries. The app does not use local
-storage as the active ledger.
+For these Sheets archives, Google Drive is the cloud destination; local storage
+and Synology are additional failure boundaries. Current bookkeeping recovery uses
+the separate [PostgreSQL recovery](operations/DATABASE_RECOVERY.md),
+[NAS SQL archive](operations/NAS_BACKUP.md) and
+[document-byte recovery](storage/RECEIPT_RECOVERY.md) procedures. Neither a Sheets
+ZIP nor a PostgreSQL dump contains the external receipt bytes.
 
 ## Archive format and safety
 
@@ -115,14 +118,11 @@ Google Drive Desktop is not required.
 The keep value must be at least 2 and defaults to 30. Backups contain private
 ledger data and must never be committed.
 
-## Schedule weekly backups
+## Manual all-profile preservation
 
-The Windows registration script provides Monday, Tuesday, and Wednesday at
-10:00 PM as retry opportunities for one weekly backup. The default all-profile
-task evaluates each profile independently; a failure or weekly duplicate for
-one profile does not prevent later profiles from running. A successful
-current-format archive with a verified receipt inventory suppresses later
-attempts in that local ISO week. An older ledger-only archive does not.
+The explicit command evaluates each profile independently; a failure for one
+profile does not prevent later profiles from running. It remains available for
+approved source/archive preservation, independently of Windows scheduling.
 
 All-profile cloud backup:
 
@@ -136,36 +136,29 @@ All-profile local backup:
 python scripts\backup_google_sheets.py --all-profiles --local-dir --keep 30
 ```
 
-Register a cloud task:
+## Retired Windows task installation
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\register_weekly_backup_task.ps1 -AllProfiles -GoogleDrive -TaskName "Project Tabula Rasa Weekly Backup"
-```
+The Windows weekly Sheets-backup task installer is retired. New protection for
+PostgreSQL bookkeeping follows the NAS SQL and separate document-byte procedures
+linked above. Retiring the installer does not replace archive readers, receipt
+remapping or the manual preservation commands, and establishes no document backup
+schedule or new recovery guarantee.
 
-Register a local or synchronized-folder task:
+Removing installer source changes no installed task. Other installations may still
+have `Project Tabula Rasa Weekly Backup`, `Project Tabula Rasa Weekly Local Backup`,
+`Tabula Rosa Weekly Backup` or a custom task name. An absent default task on one
+machine does not establish their absence elsewhere. Inventory their command,
+checkout, account, profile and destination before separately authorizing any
+scheduler change. Keep old writers stopped and divergent sources frozen; a task
+must not be treated as current PostgreSQL protection. Backup preparation can update
+Sheets receipt references and Drive integrity metadata, so it is not a read-only
+operation on a frozen source.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\register_weekly_backup_task.ps1 -AllProfiles -Local -TaskName "Project Tabula Rasa Weekly Local Backup"
-```
-
-Existing installations may still have the historical task named `Tabula Rosa
-Weekly Backup` or another earlier Project Tabula Rasa task identity. Before
-registering the current task, manually rename or remove each legacy task in
-Windows Task Scheduler and verify that only the intended task remains. The
-registration script intentionally does not rename or remove existing tasks, so
-leaving both identities enabled creates duplicate weekly backup attempts.
-
-Omitting both `-Profile` and `-AllProfiles` uses all-profile behavior. A single
-profile task remains available with `-Profile` and `-GoogleDrive` or `-Local`. In
-a multi-profile installation, when using `-BackupDirectory`, also supply
-`-Profile`; the registration script does not add a profile selector, and the
-task otherwise exits without creating a backup. An explicit `-BackupDirectory`
-is rejected in all-profile mode so profiles cannot share a destination. Tasks
-use `MultipleInstances IgnoreNew`. Both local and cloud-native tasks use
-Windows Task Scheduler's `Interactive` logon type under the registering
-Windows account, so the task does not run while that account is logged out.
-Cloud-native mode uses Google APIs directly and does not require Google Drive
-Desktop. The task does not perform a missed-run catch-up.
+The backup CLI retains `--all-profiles` and `--once-per-week` compatibility for
+existing invocations. A verified format-13 archive for the selected profile in the
+current local ISO week suppresses another weekly attempt. Local all-profile mode
+uses separate profile destinations; an explicit `--local-dir PATH` requires a
+single profile. This compatibility does not install, enable, disable or remove tasks.
 
 ## Validate an archive
 
@@ -444,7 +437,6 @@ retry; identity and checksum rules prevent unnecessary duplicate uploads.
 | --- | --- |
 | Backup format and storage validation | `tabula_rasa/storage/google_sheets/backup.py` and `validation.py` |
 | Local and Drive backup command | scripts/backup_google_sheets.py |
-| Scheduled task registration | scripts/register_weekly_backup_task.ps1 |
 | Archive validation | scripts/validate_google_sheets_backup.py |
 | Workbook restore | scripts/restore_google_sheets_backup.py |
 | Receipt preparation and manifest | tabula_rasa/receipt_backfill.py and tabula_rasa/receipt_manifest.py |
