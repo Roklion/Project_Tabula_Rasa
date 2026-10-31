@@ -253,6 +253,71 @@ control-plane recovery records separately from canonical bookkeeping exports and
 restored sessions before bringing a restored environment online (platform operations
 recovery gate).
 
+## Bounded synthetic session-revocation client
+
+The standalone Node 24 client exercises the existing revoke-all route without
+copying credentials. Install the locked web dependencies and Chromium as described
+for the [synthetic diagnostics client](../operations/SUPPORT.md#synthetic-privileged-denial-client).
+It is not part of the product bundle or navigation.
+
+```powershell
+node web/session-revocation.ts --origin https://APPROVED_SYNTHETIC_ORIGIN --release EXACT_40_HEX_SHA --organization APPROVED_A_ORG --business APPROVED_A_BUSINESS --control-organization APPROVED_B_ORG --control-business APPROVED_B_BUSINESS --approval PRIVATE_APPROVAL_REFERENCE --expires-at APPROVED_UTC_WINDOW_END --read-budget 10 --synthetic-approved --consent-one-revocation
+```
+
+Replace the window end with an exact UTC `YYYY-MM-DDTHH:MM:SSZ` timestamp,
+in the future and at most 30 minutes away. Before invocation, obtain external
+approval naming the origin, immutable release, existing synthetic A and B
+identities/businesses, user-wide revocation impact, exact window, request budgets
+and private custody. The opaque approval reference and flags attest that decision;
+they do not grant authority or prove a target is staging. Revoke-all affects A's
+sessions across all its staging businesses, including separately authorized
+businesses outside the selected one. It changes no role, membership, support
+grant, provider credential or environment epoch.
+
+The operator completes normal login/MFA and business selection in three separate
+ephemeral Chromium contexts: invoking A, a second independently issued A session
+held for denial verification, and independently authorized B. Credentials are
+entered only in the ordinary identity-provider UI. The terminal requests each
+fixed `READY INVOKING-A`, `READY HELD-A` and `READY CONTROL-B` phrase. Login traffic
+uses the diagnostics client's existing narrow guard, with at most 30 same-origin
+API GET attempts and four business-selection POST attempts per context. Other
+application API reads/mutations are blocked; dashboard requests can show errors.
+Identity-provider interaction and static assets are separate from these API budgets.
+
+After selection, the login pages close without clearing their contexts' cookies.
+Locally fulfilled blank same-origin pages stop SPA polling and run only the fixed
+probes. Ten probe GETs are allowed in total: version and ready named session in
+each context, another fresh version/session check for invoking A immediately
+before the action, then held-A and B session checks. Session and CSRF data remain
+inside each page. Per-run salted tags compare actor equality and independent
+session scopes without exporting raw actor identifiers or session DTOs; tags are
+not printed or retained.
+
+Only after the two A identities match, their issued session scopes differ and
+B's identity differs does the terminal request `SEND ONE USER-WIDE REVOCATION`.
+Exactly one fixed CSRF-protected revoke-all POST can proceed from invoking A.
+There is no mutation retry. Redirect, transport uncertainty, unexpected response,
+expired approval or identity/scope/release mismatch stops the exercise. The held
+A context must return the canonical 401 after the POST while retaining its own
+issued credential; merely clearing the invoking context is insufficient. B must
+remain ready with its original actor/session scope and authorized business.
+
+All contexts and the browser close on completion or failure. Output contains only
+fixed status/phase, verified release, allowlisted request references, revocation
+confirmation state and held-A/B outcomes. `unconfirmed` means the POST might have
+taken effect: inspect private server state before a new approved attempt. A
+`stopped` result after confirmation does not undo revocation. Do not enable
+diagnostic environment/runtime flags, tracing, HAR, video or credential handoff.
+The CLI rejects those diagnostic modes and uses no test-runner recording fixtures.
+
+Client success proves neither collector/notification delivery nor hosted execution
+when run with synthetic transport tests. Correlate the actual authorized run's
+`user_sessions_revoked` request and held-session denial independently. This
+single-worker user revocation does not establish idle/absolute expiry, restart,
+multi-worker rotation, identity-provider outage or database/configuration faults.
+Keep execution evidence in the owning operational discussion and private record;
+deployment, hosted execution and stage/release acceptance remain separate approvals.
+
 ## Validation and remaining checkpoints
 
 Regression coverage uses signed synthetic RSA tokens, bounded fake provider responses,
