@@ -12,6 +12,31 @@ from tabula_rasa.google_drive import (
 from ._support import FakeResponse, DriveSession, drive_settings, oauth_config
 
 class TestGoogleDriveReceipts:
+    @pytest.mark.parametrize('damage', [None, 'profile', 'folder', 'trashed', 'identity', 'kind'])
+    def test_single_receipt_metadata_uses_scoped_get_and_refuses_foreign_or_deleted_file(self, damage):
+        from tests.drive_fixtures import receipt_drive_file
+        file = receipt_drive_file('receipt12345', 'receipt.pdf', profile_key='north', parent_id='folder123456')
+        if damage == 'profile':
+            file['appProperties']['tabulaRasaProfile'] = 'south'
+        elif damage == 'folder':
+            file['parents'] = ['foreign12345']
+        elif damage == 'trashed':
+            file['trashed'] = True
+        elif damage == 'identity':
+            file['id'] = 'foreign12345'
+        elif damage == 'kind':
+            file['appProperties']['tabulaRasaKind'] = 'backup'
+        session = DriveSession([FakeResponse(200, file)])
+        client = GoogleDriveClient(oauth_config(), drive_settings(), session=session, sleeper=lambda _: None)
+        if damage:
+            with pytest.raises(GoogleDriveAccessError, match='selected receipt folder'):
+                client.receipt_file(profile_key='north', folder_id='folder123456', file_id='receipt12345')
+        else:
+            assert client.receipt_file(profile_key='north', folder_id='folder123456', file_id='receipt12345') == file
+        assert len(session.requests) == 1
+        assert session.requests[0][1].endswith('/files/receipt12345')
+        assert 'q' not in session.requests[0][2]['params']
+
     @pytest.mark.parametrize('duplicate', [False, True])
     def test_recovery_reuses_one_matching_identity_and_rejects_duplicates(self, duplicate):
         from tests.drive_fixtures import receipt_drive_file

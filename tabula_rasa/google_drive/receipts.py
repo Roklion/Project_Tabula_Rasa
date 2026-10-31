@@ -91,6 +91,24 @@ def _validate_recovery_identity(matches, filename, checksum):
 class _ReceiptOperationsMixin:
     """Receipt upload, inventory, backfill, and recovery operations."""
 
+    def receipt_file(self, *, profile_key: str, folder_id: str, file_id: str) -> dict[str, Any]:
+        """Resolve one current scoped receipt without scanning its entire folder."""
+        folder_id = self._valid_folder_id(folder_id)
+        file_id = self._valid_folder_id(file_id)
+        response = self._request('GET', f'{DRIVE_API_ROOT}/files/{file_id}', params={
+            'fields': 'id,name,mimeType,trashed,size,description,appProperties,parents',
+            'supportsAllDrives': 'true',
+        })
+        file = dict(_json_response(response))
+        properties = file.get('appProperties', {})
+        if (file.get('id') != file_id or file.get('trashed')
+                or folder_id not in file.get('parents', [])
+                or not isinstance(properties, Mapping)
+                or properties.get('tabulaRasaProfile') != profile_key
+                or properties.get('tabulaRasaKind') != 'receipt'):
+            raise GoogleDriveAccessError("The receipt is not in this profile's selected receipt folder.")
+        return file
+
     def upload_receipt(
         self,
         *,

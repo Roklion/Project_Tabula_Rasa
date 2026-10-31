@@ -21,13 +21,14 @@ FORMAT_VERSION = 1
 # 0014 retains recovery-only provider locations; documents keeps the current location.
 # 0015 adds only privileged support grants/history, excluded from financial exports.
 # 0016 adds only a control-plane uniqueness constraint; v1 stays unchanged.
-# 0017 adds customer authorization state, excluded from financial exports.
-SUPPORTED_DATABASE_REVISION = "0017_drive_oauth"
+# 0017 adds content-free customer delivery evidence; canonical v1 is unchanged.
+# 0018 adds customer OAuth state, excluded from financial exports.
+SUPPORTED_DATABASE_REVISION = "0018_drive_oauth"
 SUPPORTED_DATABASE_REVISIONS = ("0004_mileage_order", "0005_bookkeeping_cutover",
                                 "0006_identity_control_plane", "0007_identity_sessions", "0008_owner_lock_scope",
                                 "0009_external_connections", "0010_workspace_lifecycle",
                                 "0010_onboarding_routes", "0011_control_plane_join", "0012_operations", "0013_accounting_controls",
-                                '0014_document_locations', '0015_support_controls', '0016_business_tenancy', SUPPORTED_DATABASE_REVISION)
+                                '0014_document_locations', '0015_support_controls', '0016_business_tenancy', '0017_customer_exports', SUPPORTED_DATABASE_REVISION)
 ROOT = "id:text created_at:instant updated_at:instant incarnation_id:text version:integer"
 
 

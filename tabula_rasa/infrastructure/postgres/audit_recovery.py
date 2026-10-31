@@ -19,7 +19,7 @@ from .entity_export import PostgresEntityExportRepository
 from .migrations import MIGRATION_ROOT, current_revision
 
 FORMAT = 'tabula-rasa-audit-recovery-v1'
-SUPPORTED_REVISIONS = {'0013_accounting_controls', '0014_document_locations', '0015_support_controls', '0016_business_tenancy', '0017_drive_oauth'}
+SUPPORTED_REVISIONS = {'0013_accounting_controls', '0014_document_locations', '0015_support_controls', '0016_business_tenancy', '0017_customer_exports', '0018_drive_oauth'}
 AUDIT_TABLES = ('audit_events', 'audit_baseline', 'audit_activation')
 RECOVERY_FUNCTIONS = frozenset({'audit_immutable', 'audit_insert_guard', 'audit_summary',
                              'audit_row_digest', 'capture_bookkeeping_audit',
@@ -130,7 +130,7 @@ def _inventory(connection, revision):
     # Validate supported capture/immutability semantics before trusting a source
     # oracle; a drifted trigger with the right name is not a valid protection.
     required = {(table, 'audit_capture'): (
-        5 if table == 'support_actions' else 29, 'capture_bookkeeping_audit',
+        5 if table in {'support_actions', 'customer_export_actions'} else 29, 'capture_bookkeeping_audit',
         True, True, ('\0'.join(fields)+'\0').encode().hex(),
     ) for table, fields in keys.items()}
     required.update({
@@ -154,8 +154,10 @@ def _inventory(connection, revision):
         required[(table, 'action_history')] = (21, 'capture_period_action', False, False, '')
     for table in ('accounting_period_policy', 'accounting_periods', 'entry_corrections'):
         required[(table, 'immutable_truncate')] = (34, 'audit_immutable', False, False, '')
-    if revision in {'0015_support_controls', '0016_business_tenancy', '0017_drive_oauth'}:
+    if revision in {'0015_support_controls', '0016_business_tenancy', '0017_customer_exports', '0018_drive_oauth'}:
         required[('support_actions', 'immutable')] = (58, 'audit_immutable', False, False, '')
+    if revision in {'0017_customer_exports', '0018_drive_oauth'}:
+        required[('customer_export_actions', 'immutable')] = (58, 'audit_immutable', False, False, '')
     valid_triggers = all(
         key in triggers and triggers[key]['tgenabled'] == 'O' and triggers[key]['function_schema'] == 'public'
         and tuple(triggers[key][field] for field in ('tgtype','proname','tgdeferrable','tginitdeferred','arguments')) == expected
@@ -167,7 +169,7 @@ def _inventory(connection, revision):
         'qual': "(entity_id = current_setting('tabula.audit_reader_entity'::text, true))", 'with_check': None,
     } for table, name in [('accounting_period_actions','scoped_period_action_read'),
                          ('audit_baseline','scoped_baseline_read'), ('audit_events','scoped_audit_read')]]
-    if revision in {'0015_support_controls', '0016_business_tenancy', '0017_drive_oauth'}:
+    if revision in {'0015_support_controls', '0016_business_tenancy', '0017_customer_exports', '0018_drive_oauth'}:
         scoped_tables.add('support_actions')
         context = "(NULLIF(current_setting('tabula.audit_context'::text, true), ''::text))::jsonb"
         expected_policies.extend([

@@ -61,6 +61,14 @@ class PostgresRuntime:
         # Error translation only; repositories own transaction boundaries.
         return translate_database_errors()
 
+    def prepare_customer_export(self, context, include_documents):
+        from tabula_rasa.infrastructure.postgres.customer_export import prepare_customer_export
+        return prepare_customer_export(self, context, include_documents)
+
+    def record_customer_export(self, context, request_id, status):
+        from tabula_rasa.infrastructure.postgres.customer_export import record_export
+        record_export(self.database, context.entity_id, request_id, status)
+
     def audit_operation(self, context, request_id, source):
         from tabula_rasa.infrastructure.postgres.audit import AuditContext, audit_context
         from .identity import NamedIdentity

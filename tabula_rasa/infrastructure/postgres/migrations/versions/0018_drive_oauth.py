@@ -1,8 +1,8 @@
 """Single-use customer Drive authorization transactions; credentials stay encrypted."""
 from alembic import op
 
-revision = '0017_drive_oauth'
-down_revision = '0016_business_tenancy'
+revision = '0018_drive_oauth'
+down_revision = '0017_customer_exports'
 branch_labels = None
 depends_on = None
 

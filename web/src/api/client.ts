@@ -157,6 +157,8 @@ export function createApi(fetcher: typeof fetch = (...args) => fetch(...args)) {
       '/api/v1/entities/{entity_id}/ledger', { ...listParams(s, signal), params: { path: { entity_id: s.entity.id }, query: filters } }))),
     reports: (s: Session, filters: { start?: string; end?: string } = {}, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
       '/api/v1/entities/{entity_id}/reports/summary', { ...listParams(s, signal), params: { path: { entity_id: s.entity.id }, query: filters } }))),
+    downloadCustomerExport: (s: Session, scope: 'metadata_only' | 'documents_inclusive', signal?: AbortSignal) => safe(async () => unwrap(await client.POST(
+      '/api/v1/entities/{entity_id}/exports/handoff', { ...createParams(s), body: { scope }, signal, parseAs: 'blob' }))),
     downloadTransactionsCsv: (s: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
       '/api/v1/entities/{entity_id}/exports/transactions.csv', { ...listParams(s, signal), parseAs: 'blob' }))),
     downloadJournalPostingsCsv: (s: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(

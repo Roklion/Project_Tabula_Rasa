@@ -220,6 +220,7 @@ def test_new_oauth_binding_composes_existing_document_adapter_and_preserves_rece
         receipt_id='a' * 32, sha256=sha256(content).hexdigest(), original_name='receipt.pdf', size=len(content))
     client.upload_receipt.return_value = drive_file
     client.list_profile_receipts.return_value = [drive_file]
+    client.receipt_file.return_value = drive_file
     client.download_file.return_value = content
     monkeypatch.setattr('tabula_rasa.google_drive.GoogleDriveClient', Mock(return_value=client))
     store = manager.document_store(alpha)

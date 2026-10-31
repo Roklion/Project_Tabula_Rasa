@@ -616,6 +616,20 @@ edition.
 
 ## Page headers, workflow groups, and messages
 
+**Current behavior — customer portability:** Data & backup includes Accountant
+handoff for the selected business. Owner, Admin and Accountant can download a ZIP
+of all 26 canonical collections, instructions and a versioned checksum manifest.
+The default includes retained receipts and verified unlinked provider files; an
+explicit metadata-only choice discloses that receipt bytes are absent. Audit
+history, identity, credentials and operational policies are excluded. The manifest
+discloses audit activation and unavailable pre-activation history. Shared loading
+and error components explain preparation and explicit retry. Missing/unverifiable
+files prevent full delivery. Limits are 50,000 records, 200 MiB of package content
+and five minutes of file preparation. Authority is rechecked before delivery;
+there is no retained archive or reusable link. Navigation/business changes abort
+the pending browser download. Editor and Read-only see the full-export capability
+requirement and retain ordinary CSV downloads.
+
 **Current behavior — existing workflow ports :** Data &
 backup contains separate Tabula Rasa CSV, QuickBooks transaction and QuickBooks
 mileage uploaders, scoped to the selected business. Uploaders require read, write

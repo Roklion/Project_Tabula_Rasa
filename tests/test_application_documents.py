@@ -83,6 +83,25 @@ class FakeReceiptRepository:
         self.records[(profile_key, transaction_id)] = [item for item in self.records[(profile_key, transaction_id)] if item.storage_key != storage_key]
 
 
+def test_export_inventory_resolves_two_profiles_once_and_rejects_foreign_reference_before_fetch():
+    from unittest.mock import Mock
+    store, repository = FakeDocumentStore(), FakeReceiptRepository()
+    north, south = (ReceiptService(profile, repository, store) for profile in ('north', 'south'))
+    a = north.upload('a' * 32, 'north.pdf', b'north')
+    b = south.upload('a' * 32, 'south.pdf', b'south')
+    repository.link('north', 'txn', a)
+    store.inventory = Mock(wraps=store.inventory)
+    assert north.export_inventory().documents == (a,)
+    assert south.export_inventory().documents == (b,)
+    assert store.inventory.call_count == 2
+    store.fetch = Mock(wraps=store.fetch)
+    with pytest.raises(DocumentValidationError, match='different business profile'):
+        north.download_reference(b)
+    store.fetch.assert_not_called()
+    assert north.download_reference(a)[1] == b'north'
+    assert south.download_reference(b)[1] == b'south'
+
+
 def prepared(*, identity="a" * 32, name="receipt.pdf", content=b"receipt"):
     return prepare_receipt_uploads([DocumentUpload(identity, name, "application/pdf", hashlib.sha256(content).hexdigest(), content)])
 

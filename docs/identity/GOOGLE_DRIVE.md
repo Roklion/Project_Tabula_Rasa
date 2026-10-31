@@ -28,7 +28,7 @@ bytes and the approved recovery procedure. Membership never grants access to tok
 
 Google authorization is separate from login. Only active Owners can start or complete it.
 The start POST requires Origin/CSRF, recent login and the reviewed connection revision.
-Forward migration `0017_drive_oauth` stores hashed unpredictable state/session references,
+Forward migration `0018_drive_oauth` stores hashed unpredictable state/session references,
 actor/business binding, expiry, consumed status and an opaque encrypted-verifier reference.
 State expires after five minutes and is consumed before code exchange, including denial.
 PKCE S256 binds the exchange. Wrong business/session, membership removal, forged/expired/
