@@ -96,7 +96,7 @@ class _ReceiptOperationsMixin:
         folder_id = self._valid_folder_id(folder_id)
         file_id = self._valid_folder_id(file_id)
         response = self._request('GET', f'{DRIVE_API_ROOT}/files/{file_id}', params={
-            'fields': 'id,name,mimeType,trashed,size,appProperties,parents',
+            'fields': 'id,name,mimeType,trashed,size,description,appProperties,parents',
             'supportsAllDrives': 'true',
         })
         file = dict(_json_response(response))
