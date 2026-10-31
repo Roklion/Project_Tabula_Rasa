@@ -207,6 +207,54 @@ def test_superseded_request_and_disconnect_cannot_be_replayed(database, tmp_path
     exchange.assert_not_called()
 
 
+def test_provider_setup_allows_bookkeeping_key_locks_and_rejects_overlapping_setup(database, tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    _, manager, _, exchange, alpha, _, sessions = fixture(database, tmp_path)
+    state = begin(manager, alpha, sessions[0])
+    original = exchange.side_effect
+
+    def during_provider(*args, **kwargs):
+        # Separate physical connection: this is the FK lock taken by child inserts.
+        with database.engine.begin() as connection:
+            connection.execute(text("SELECT id FROM business_entities WHERE id='alpha' FOR KEY SHARE NOWAIT"))
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            competing = executor.submit(begin, manager, alpha, sessions[0])
+            with pytest.raises(IdentityError, match='concurrent_write'):
+                competing.result(timeout=5)
+        return original(*args, **kwargs)
+
+    exchange.side_effect = during_provider
+    assert finish(manager, alpha, sessions[0], state)
+    exchange.assert_called_once()
+
+
+@pytest.mark.parametrize('outcome', ['denied', 'scope', 'account'])
+def test_callback_explicitly_redirects_unsuccessful_consent_to_failure(database, tmp_path, outcome):
+    _, manager, _, exchange, _, _, _ = fixture(database, tmp_path)
+    client, auth, _ = client_for(database)
+    with client:
+        client.app.state.runtime.connections = manager
+        token, _ = auth.sessions.issue(verified())
+        client.cookies.set(auth.session_cookie, token)
+        info = client.get('/api/v1/session').json()
+        headers = {'origin': auth.settings.public_origin, 'x-csrf-token': info['csrf_token']}
+        path = '/api/v1/entities/alpha/connections/google-drive/authorize'
+        revision = 0
+        if outcome == 'account':
+            start = client.post(path, json={'revision': revision}, headers=headers)
+            state = parse_qs(urlsplit(start.json()['authorization_url']).query)['state'][0]
+            assert client.get(CALLBACK_PATH, params={'state': state, 'code': 'alpha'}, follow_redirects=False).headers['location'] == '/data'
+            revision = 1
+        if outcome == 'scope':
+            exchange.side_effect = lambda *args, **kwargs: {**google_grant(), 'scopes': ['broad-drive']}
+        start = client.post(path, json={'revision': revision}, headers=headers)
+        state = parse_qs(urlsplit(start.json()['authorization_url']).query)['state'][0]
+        params = {'state': state, **({'error': 'access_denied'} if outcome == 'denied' else {'code': 'different'})}
+        response = client.get(CALLBACK_PATH, params=params, follow_redirects=False)
+        assert response.status_code == 303 and response.headers['location'] == '/data?drive=failed'
+        assert response.headers['referrer-policy'] == 'no-referrer'
+
+
 def test_new_oauth_binding_composes_existing_document_adapter_and_preserves_receipt(database, tmp_path, monkeypatch):
     from hashlib import sha256
     from tabula_rasa.application.documents import DocumentUpload

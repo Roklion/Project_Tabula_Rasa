@@ -46,7 +46,7 @@ def complete_drive_authorization(request: Request):
         raise TransportError('unavailable')
     session = auth.authenticated(request)
     try:
-        connections.oauth.complete(context, session, request.query_params.get('state', ''),
+        success = connections.oauth.complete(context, session, request.query_params.get('state', ''),
             request.query_params.get('code', ''), denied='error' in request.query_params,
             reauthenticate=lambda: auth.sessions.validate(request.cookies.get(auth.session_cookie, '')))
     except IdentityError:
@@ -56,7 +56,7 @@ def complete_drive_authorization(request: Request):
         # Invalid state/authorization still receives a denial through the service boundary.
         response = RedirectResponse('/data?drive=failed', status_code=303)
     else:
-        response = RedirectResponse('/data', status_code=303)
+        response = RedirectResponse('/data' if success else '/data?drive=failed', status_code=303)
     response.headers['Referrer-Policy'] = 'no-referrer'
     return response
 

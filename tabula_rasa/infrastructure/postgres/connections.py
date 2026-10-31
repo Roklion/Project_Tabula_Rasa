@@ -25,6 +25,13 @@ def require_recent_authentication(authenticated_at):
         raise IdentityError('forbidden')
 
 
+def lock_connection_entity(connection, entity_id):
+    # Serialize connection setup without blocking foreign-key KEY SHARE locks
+    # used by bookkeeping writes. Competing setup must not queue behind Google.
+    connection.execute(text('SELECT id FROM business_entities WHERE id=:id FOR NO KEY UPDATE NOWAIT'),
+                       {'id': entity_id})
+
+
 class PostgresConnections:
     def __init__(self, database):
         self.database = database
@@ -80,7 +87,7 @@ class PostgresConnections:
         require_recent_authentication(authenticated_at)
         with identity_operation(self.database) as connection:
             authorized_entity(connection, context, 'connections_manage')
-            connection.execute(text('SELECT id FROM business_entities WHERE id=:id FOR UPDATE'), {'id': context.entity_id})
+            lock_connection_entity(connection, context.entity_id)
             row = self._row(connection, context, lock=True)
             if row is None:
                 raise IdentityError('unavailable')
@@ -114,7 +121,7 @@ class PostgresConnections:
         from tabula_rasa.google_drive import DRIVE_SCOPE
         # Entity lock also serializes exact first registration.
         if not dry_run:
-            connection.execute(text('SELECT id FROM business_entities WHERE id=:id FOR UPDATE'), {'id': entity_id})
+            lock_connection_entity(connection, entity_id)
         owner = connection.scalar(text("""SELECT e.entity_id FROM organization_entities e
             JOIN organizations o ON o.id=e.organization_id AND o.state='active'
             WHERE e.entity_id=:entity AND e.organization_id=:org AND e.state='active'"""),

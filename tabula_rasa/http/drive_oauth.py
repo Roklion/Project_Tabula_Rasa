@@ -14,7 +14,7 @@ from tabula_rasa.google_drive import DRIVE_SCOPE, GoogleDriveClient, load_oauth_
 from tabula_rasa.google_drive.errors import AUTHORIZATION_ENDPOINT
 from tabula_rasa.google_drive.oauth import exchange_authorization_code
 from tabula_rasa.infrastructure.postgres.control_plane import identity_operation
-from tabula_rasa.infrastructure.postgres.connections import authorized_entity
+from tabula_rasa.infrastructure.postgres.connections import authorized_entity, lock_connection_entity
 
 CALLBACK_PATH = '/api/v1/connections/google-drive/callback'
 
@@ -73,8 +73,7 @@ class CustomerDriveOAuth:
         state, verifier = secrets.token_urlsafe(32), secrets.token_urlsafe(48)
         with identity_operation(self.manager.repository.database) as connection:
             authorized_entity(connection, context, 'connections_manage')
-            connection.execute(text('SELECT id FROM business_entities WHERE id=:id FOR UPDATE'),
-                               {'id': context.entity_id})
+            lock_connection_entity(connection, context.entity_id)
             row = self.manager.repository._row(connection, context, lock=True)
             if (row['revision'] if row else 0) != revision:
                 raise IdentityError('concurrent_write')
@@ -108,8 +107,7 @@ class CustomerDriveOAuth:
             return False
         # Serialize folder setup and connection writes with the existing entity lock.
         with identity_operation(self.manager.repository.database) as connection:
-            connection.execute(text('SELECT id FROM business_entities WHERE id=:id FOR UPDATE'),
-                               {'id': context.entity_id})
+            lock_connection_entity(connection, context.entity_id)
             authorized_entity(connection, context, 'connections_manage')
             current = self.manager.repository._row(connection, context, lock=True)
             if (current['revision'] if current else 0) != attempt['expected_revision']:
