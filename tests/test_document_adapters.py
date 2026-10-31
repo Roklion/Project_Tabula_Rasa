@@ -78,8 +78,14 @@ def test_service_reconciles_drive_upload_with_canonical_filename(filename, canon
 
 
 def test_drive_fetch_and_delete_require_current_profile_folder_membership_and_checksum():
+    from tabula_rasa.google_drive import GoogleDriveAccessError
     client = Mock()
     client.list_profile_receipts.return_value = [drive_file()]
+    def metadata(**kwargs):
+        if kwargs['file_id'] != 'receiptfile12345':
+            raise GoogleDriveAccessError("The receipt is not in this profile's selected receipt folder.")
+        return drive_file()
+    client.receipt_file.side_effect = metadata
     client.download_file.return_value = b"receipt"
     store = GoogleDriveDocumentStore("north", "folder123456", lambda: client)
     assert store.fetch("north", "receiptfile12345") == b"receipt"
@@ -91,6 +97,7 @@ def test_drive_fetch_and_delete_require_current_profile_folder_membership_and_ch
     client.delete_file.assert_not_called()
     store.delete("north", "receiptfile12345")
     client.delete_file.assert_called_once_with("receiptfile12345")
+    client.list_profile_receipts.assert_not_called()
 
 
 def test_drive_inventory_rejects_cross_profile_responses_and_retains_integrity_warnings():

@@ -66,6 +66,9 @@ version, scope, diagnostics, SHA-256/file sizes and an attachment map from docum
 IDs/original names to safe generated paths. Checksums detect corruption, not
 authorship. Separate CSV downloads supply readable transaction and journal tables.
 This ZIP is not an automatic restore format or a database/document backup.
+Generated attachment paths retain only allowlisted receipt extensions (PDF,
+PNG, JPG/JPEG, WEBP and HEIC), so extracted files open normally without accepting
+user-controlled path components.
 
 Documents-inclusive requires a working scoped DocumentStore and includes all
 canonical documents plus verified unlinked provider-inventory files, marked
@@ -77,6 +80,10 @@ metadata requires explicit backfill; disconnected providers, missing/deleted or
 changed bytes, unverified inventory and quota failures stop delivery before any
 ZIP bytes are returned. Metadata-only contains no receipt bytes. Provider URLs
 are not portable attachments or guaranteed future access.
+ReceiptService resolves the scoped association/provider inventory once per
+package. Byte reads reuse those references; Drive checks each file's current
+profile/folder membership with a targeted metadata GET, and managed storage
+retains its version-pin checks. Neither path rescans the full inventory per file.
 
 Audit events are explicitly **excluded**, including read-only and import-batch
 events. Identity, grants, secrets, jobs and operational policies are excluded too.

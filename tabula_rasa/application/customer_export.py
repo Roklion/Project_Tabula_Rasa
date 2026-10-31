@@ -6,6 +6,7 @@ from time import monotonic
 from zipfile import ZipFile, ZIP_STORED
 
 from .entity_export import ExportError
+from .documents import RECEIPT_UPLOAD_TYPES
 from tabula_rasa.bookkeeping_export.format import canonical_json, validate_artifact
 
 MAX_EXPORT_BYTES = 200 * 1024 * 1024
@@ -43,12 +44,13 @@ class CustomerExportService:
             raise ExportError('export_limit')
         documents = list(artifact['domains']['documents'])
         canonical_ids = {row['id'] for row in documents}
+        references = {}
         if include_documents and self.receipts is None:
             raise ExportError('documents_unavailable')
         if include_documents:
             # Uploads survive failed links in the scoped provider inventory and
             # may not yet have a canonical SQL row. Preserve those recovery files.
-            inventory = self.receipts.unreferenced(fresh=True)
+            inventory = self.receipts.export_inventory()
             if inventory.unverified_storage_keys:
                 raise ExportError('document_integrity_unavailable')
             seen = set(canonical_ids)
@@ -56,6 +58,7 @@ class CustomerExportService:
                 metadata = reference.metadata
                 if reference.profile_key != self.receipts.profile_key:
                     raise ExportError('entity_scope')
+                references[metadata.document_id] = reference
                 if metadata.document_id not in seen:
                     seen.add(metadata.document_id)
                     documents.append({'id': metadata.document_id, 'byte_size': metadata.byte_size,
@@ -88,14 +91,18 @@ class CustomerExportService:
                     for index, row in enumerate(documents):
                         if self.clock() >= deadline:
                             raise ExportError('export_limit')
-                        reference, content = self.receipts.download(row['id'])
+                        if row['id'] not in references:
+                            raise ExportError('documents_unavailable')
+                        reference, content = self.receipts.download_reference(references[row['id']])
                         if (reference.metadata.document_id != row['id']
                                 or reference.profile_key != self.receipts.profile_key
                                 or len(content) != row['byte_size']
                                 or sha256(content).hexdigest() != row['sha256']):
                             raise ExportError('document_integrity')
                         # Never use user/provider names as ZIP paths.
-                        path = f'documents/{index:06d}'
+                        extension = row['original_filename'].rsplit('.', 1)[-1].lower()
+                        suffix = '.' + extension if extension in RECEIPT_UPLOAD_TYPES else ''
+                        path = f'documents/{index:06d}{suffix}'
                         add(archive, path, content)
                         attachments.append({'document_id': row['id'], 'path': path,
                                             'origin': 'canonical' if row['id'] in canonical_ids else 'unlinked_inventory',

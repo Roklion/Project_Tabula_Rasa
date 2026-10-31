@@ -90,10 +90,13 @@ class GoogleDriveDocumentStore:
         return ReceiptInventory(tuple(documents), tuple(missing_integrity))
 
     def metadata(self, profile_key: str, storage_key: str) -> DocumentReference:
-        matches = [item for item in self.inventory(profile_key, fresh=True).documents if item.storage_key == storage_key]
-        if len(matches) != 1:
-            raise DocumentError("The receipt is not in this profile's selected receipt folder.")
-        return matches[0]
+        try:
+            file = self._client(profile_key).receipt_file(
+                profile_key=profile_key, folder_id=self.folder_id, file_id=storage_key)
+            reference = receipt_reference_from_drive_file(file)
+        except (GoogleDriveError, ReceiptManifestError) as error:
+            raise DocumentError(str(error)) from error
+        return document_from_receipt_reference(profile_key, reference)
 
     def fetch(self, profile_key: str, storage_key: str) -> bytes:
         document = self.metadata(profile_key, storage_key)

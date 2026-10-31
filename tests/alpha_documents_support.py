@@ -47,6 +47,14 @@ class SyntheticDrive:
         assert profile_key == self.profile and folder_id == self.profile + "-receipt_folder"
         return list(self.files.values())
 
+    def receipt_file(self, *, profile_key, folder_id, file_id):
+        from tabula_rasa.google_drive import GoogleDriveAccessError
+        assert profile_key == self.profile
+        assert folder_id == getattr(self, 'folder', self.profile + '-receipt_folder')
+        if getattr(self, 'fail', False) or file_id not in self.files:
+            raise GoogleDriveAccessError('The receipt is not in this selected receipt folder.')
+        return self.files[file_id]
+
     def upload_receipt(self, *, profile_key, folder_id, original_name, content, mime_type, receipt_id):
         self.list_profile_receipts(profile_key=profile_key, folder_id=folder_id, _force_refresh=True)
         self.uploads += 1
