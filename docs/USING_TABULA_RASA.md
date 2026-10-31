@@ -77,7 +77,18 @@ Data & backup provides the supported CSV/QuickBooks imports and PostgreSQL expor
 Transactions offers Download selected ledger CSV, Download transactions CSV and
 Download journal postings CSV. They preserve business scope, whole journal grouping
 and literal formula-leading text. Complete canonical exports retain all supported
-collections and history; they are distinct from these financial CSV downloads.
+bookkeeping collections and provenance; audit history is excluded.
+
+**Accountant handoff** lets Owner, Admin and Accountant download the selected
+business's complete bookkeeping ZIP, instructions and checksum manifest. Choose
+bookkeeping with all receipt files (default), or metadata only. Full handoff
+includes verified unlinked uploads; missing or unverifiable receipt bytes prevent
+delivery. Reconnect/recover receipts before retrying, or explicitly choose the
+metadata-only financial archive. Audit history, credentials and operational
+policies are excluded; records predating audit activation have no complete
+mutation history. The page explains package/time limits. Nothing is retained as
+a download link: save the ZIP privately; a retry requires current access and
+reads a fresh snapshot. See the [handoff contract](browser/IMPORTS_EXPORTS_AND_INTEGRATIONS.md#customer-bookkeeping-and-accountant-handoff).
 
 Operational PostgreSQL/database and document-byte backups follow
 [NAS backup](operations/NAS_BACKUP.md) and [receipt recovery](storage/RECEIPT_RECOVERY.md).

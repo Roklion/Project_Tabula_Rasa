@@ -54,6 +54,7 @@ def configure_audit(connection, context, operation_id):
 
 # Key inventories match the audited canonical tables, never caller SQL names.
 AUDITED_KEYS = {
+    'customer_export_actions': ('id',),
     'support_actions': ('id',),
     'accounting_period_policy': ('entity_id',), 'accounting_periods': ('period_start',),
     'entry_corrections': ('id',), 'recurring_generation_policy': ('entity_id',),
@@ -80,7 +81,9 @@ def audited_keys(revision):
     This changes no startup/migration or normal write behavior.
     """
     if revision in {'0013_accounting_controls', '0014_document_locations'}:
-        return {table: keys for table, keys in AUDITED_KEYS.items() if table != 'support_actions'}
+        return {table: keys for table, keys in AUDITED_KEYS.items() if table not in {'support_actions', 'customer_export_actions'}}
+    if revision in {'0015_support_controls', '0016_business_tenancy'}:
+        return {table: keys for table, keys in AUDITED_KEYS.items() if table != 'customer_export_actions'}
     return AUDITED_KEYS
 
 

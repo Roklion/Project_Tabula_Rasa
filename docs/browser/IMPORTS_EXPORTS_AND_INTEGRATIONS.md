@@ -50,6 +50,70 @@ October 11 correction. Complete recovery export remains complete entity export; 
 portability remains customer data export under external release and customer lifecycle.
 These CSVs are not alternate live ledgers.
 
+## Customer bookkeeping and accountant handoff
+
+Data & backup → **Accountant handoff** offers a ZIP to Owner, Admin and Accountant
+members (`bookkeeping:read` + `bookkeeping:export`). Editor and Read-only retain
+ordinary CSV downloads. `POST /api/v1/entities/{entity_id}/exports/handoff` requires
+the named session, current selected-business membership, Origin and CSRF. Its
+body chooses `scope: documents_inclusive` (the UI default) or `metadata_only`.
+Extra fields and arbitrary audit scopes are refused.
+
+`bookkeeping.json` is the unchanged, validated 26-collection canonical export.
+`README.txt` explains the handoff. `manifest.json` is
+`tabula-rasa-customer-handoff` version 1: business, snapshot time, canonical
+version, scope, diagnostics, SHA-256/file sizes and an attachment map from document
+IDs/original names to safe generated paths. Checksums detect corruption, not
+authorship. Separate CSV downloads supply readable transaction and journal tables.
+This ZIP is not an automatic restore format or a database/document backup.
+
+Documents-inclusive requires a working scoped DocumentStore and includes all
+canonical documents plus verified unlinked provider-inventory files, marked
+`unlinked_inventory` in the attachment map. Such uploads may not yet have a SQL
+row; their attachment metadata lives in the handoff manifest. Canonical JSON is
+unchanged. ReceiptService/DocumentStore retain authorization and provider retry
+ownership. Every file must match its known size/digest. Missing integrity
+metadata requires explicit backfill; disconnected providers, missing/deleted or
+changed bytes, unverified inventory and quota failures stop delivery before any
+ZIP bytes are returned. Metadata-only contains no receipt bytes. Provider URLs
+are not portable attachments or guaranteed future access.
+
+Audit events are explicitly **excluded**, including read-only and import-batch
+events. Identity, grants, secrets, jobs and operational policies are excluded too.
+The manifest records audit activation and states that pre-activation history is
+unavailable; existing records are never represented as having complete mutation
+history. This preserves the restricted AuditReader policy. Customers cannot
+request arbitrary audit scopes or another business's history through export.
+
+Preparation is synchronous: at most 50,000 canonical records, 50,000 attachments,
+200 MiB of uncompressed package content and five minutes of file preparation,
+with at most two preparations/deliveries per API process. Unsupported sizes fail without
+truncation or automatic retry. The UI shows progress/error states and suggests
+checking receipt access/integrity and limits before explicit retry. A retry reads
+a new coherent ledger snapshot; receipts are checked against that snapshot and
+fresh scoped inventory. These supported limits avoid requiring an export queue.
+
+Archives use an anonymous OS temporary file: owner-only on POSIX, inherited
+service-account temporary-directory ACL on Windows. Deploy with a private,
+encrypted ephemeral temp volume and adequate quota, outside public/static/shared
+directories. The handle closes on failure, stream completion/cancellation or
+process termination. No persistent URL, retained server copy or reusable link
+exists, so no link-expiry or cleanup job is needed. Each request authenticates
+anew; expired sessions and revoked members are denied. Session, selection and
+capability are rechecked after provider reads and before streaming. Bytes already
+handed off cannot be recalled. Private no-store responses and shared browser
+abort/blob-URL cleanup protect navigation and business changes.
+
+Append-only `customer_export_actions` reuse the existing audit capture writer
+with named actor, business, correlation and source `customer_export`. `requested`
+commits before preparation; `available` commits before streaming and means the
+authorized response was released, **not proof the browser saved every byte**.
+`failed` is recorded when database/membership still allow it; otherwise a lone
+request remains unconfirmed. Export data, filenames, provider errors and
+credentials never enter evidence or application logs. Apply the forward schema
+migration before deployment; startup never migrates. This implementation grants
+no beta admission, production activation or private-export publication authority.
+
 ## Mixed-use source receipts
 
 Choose **Receipts** on a saved mixed-use source detail. The ordinary receipt screen owns
