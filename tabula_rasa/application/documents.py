@@ -246,17 +246,34 @@ class ReceiptService:
             raise DocumentValidationError("The receipt belongs to a different business profile.")
 
     def unreferenced(self, *, fresh: bool = False) -> ReceiptInventory:
-        associations = self.repository.associations(self.profile_key, fresh=fresh)
-        for association in associations:
-            self._check_profile(association.document)
+        associations, inventory = self._inventory(fresh=fresh)
         referenced = {item.document.storage_key for item in associations}
-        inventory = self.documents.inventory(self.profile_key, fresh=fresh)
-        for document in inventory.documents:
-            self._check_profile(document)
         return ReceiptInventory(
             tuple(item for item in inventory.documents if item.storage_key not in referenced),
             tuple(key for key in inventory.unverified_storage_keys if key not in referenced),
         )
+
+    def _inventory(self, *, fresh):
+        associations = self.repository.associations(self.profile_key, fresh=fresh)
+        for association in associations:
+            self._check_profile(association.document)
+        inventory = self.documents.inventory(self.profile_key, fresh=fresh)
+        for document in inventory.documents:
+            self._check_profile(document)
+        return associations, inventory
+
+    def export_inventory(self) -> ReceiptInventory:
+        """Resolve one scoped batch; linked retained versions keep their pins."""
+        associations, inventory = self._inventory(fresh=True)
+        documents = {}
+        for document in (*[item.document for item in associations], *inventory.documents):
+            documents.setdefault(document.metadata.document_id, document)
+        return ReceiptInventory(tuple(documents.values()), inventory.unverified_storage_keys)
+
+    def download_reference(self, document: DocumentReference) -> tuple[DocumentReference, bytes]:
+        """Read a server-resolved scoped reference without another inventory scan."""
+        self._check_profile(document)
+        return document, self.documents.fetch(self.profile_key, document.storage_key)
 
     def upload(self, document_id: str, filename: str, content: bytes) -> DocumentReference:
         """Upload independently of linking; a confirmed file remains recoverable."""
@@ -299,7 +316,7 @@ class ReceiptService:
 
     def download(self, document_id: str) -> tuple[DocumentReference, bytes]:
         document = self.document(document_id)
-        return document, self.documents.fetch(self.profile_key, document.storage_key)
+        return self.download_reference(document)
 
     def link_document(self, transaction_id: str, document_id: str) -> Any:
         return self.link(transaction_id, self.document(document_id))

@@ -78,8 +78,14 @@ def test_service_reconciles_drive_upload_with_canonical_filename(filename, canon
 
 
 def test_drive_fetch_and_delete_require_current_profile_folder_membership_and_checksum():
+    from tabula_rasa.google_drive import GoogleDriveAccessError
     client = Mock()
     client.list_profile_receipts.return_value = [drive_file()]
+    def metadata(**kwargs):
+        if kwargs['file_id'] != 'receiptfile12345':
+            raise GoogleDriveAccessError("The receipt is not in this profile's selected receipt folder.")
+        return drive_file()
+    client.receipt_file.side_effect = metadata
     client.download_file.return_value = b"receipt"
     store = GoogleDriveDocumentStore("north", "folder123456", lambda: client)
     assert store.fetch("north", "receiptfile12345") == b"receipt"
@@ -91,6 +97,36 @@ def test_drive_fetch_and_delete_require_current_profile_folder_membership_and_ch
     client.delete_file.assert_not_called()
     store.delete("north", "receiptfile12345")
     client.delete_file.assert_called_once_with("receiptfile12345")
+    client.list_profile_receipts.assert_not_called()
+
+
+def test_targeted_drive_reads_preserve_description_filename_for_recovery():
+    from tabula_rasa.application.document_recovery import verify_entity_documents
+    from tabula_rasa.google_drive import GoogleDriveClient
+    from tests.google_drive._support import DriveSession, FakeResponse, drive_settings, oauth_config
+
+    file = drive_file()
+    file.update(name='receipt (2).pdf', description='original.pdf', parents=['folder123456'])
+    # Retained receipts may rely on description rather than the optional property.
+    del file['appProperties']['tabulaRasaOriginalName']
+
+    class FieldMaskSession(DriveSession):
+        def request(self, method, url, **kwargs):
+            response = super().request(method, url, **kwargs)
+            if url.endswith('/files/receiptfile12345') and 'fields' in kwargs.get('params', {}):
+                response.payload = {field: file[field] for field in kwargs['params']['fields'].split(',') if field in file}
+            return response
+
+    session = FieldMaskSession([FakeResponse(200, {'files': [file]}),
+        FakeResponse(200, file), FakeResponse(200, file), FakeResponse(200, content=b'receipt')])
+    client = GoogleDriveClient(oauth_config(), drive_settings(), session=session, sleeper=lambda _: None)
+    store = GoogleDriveDocumentStore('north', 'folder123456', lambda: client)
+    document = store.inventory('north', fresh=True).documents[0]
+    assert document.metadata.stored_filename == 'receipt (2).pdf'
+    assert document.metadata.original_filename == 'original.pdf'
+    repository = SimpleNamespace(entity_id='north', retained_documents=lambda: (document,))
+    verify_entity_documents(repository, store)
+    assert len(session.requests) == 4
 
 
 def test_drive_inventory_rejects_cross_profile_responses_and_retains_integrity_warnings():

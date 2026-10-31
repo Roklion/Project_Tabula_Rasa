@@ -14,9 +14,10 @@ Revision `0012_operations` adds private job/audit history, excluded from ordinar
 exports. Revision `0013_accounting_controls` adds restricted recurring/period policy and
 correction relationships/reasons outside v1. Reversing journals remain ordinary portable
 entries/postings. A v1 snapshot alone does not restore period or correction immutability
-controls; use full database recovery for those guarantees. Authorized audit export
-remains owned by customer data export; see [jobs and audit
-operations](../operations/JOBS_AND_AUDIT.md). Existing v1 exports from
+controls; use full database recovery for those guarantees. Customer delivery
+wraps this exporter without changing its format; its [handoff contract](../browser/IMPORTS_EXPORTS_AND_INTEGRATIONS.md#customer-bookkeeping-and-accountant-handoff)
+explicitly excludes audit history. Revision `0017_customer_exports` adds only
+content-free delivery evidence outside canonical v1. Existing v1 exports from
 `0004_mileage_order` remain valid; the exporter reports the observed supported revision
 and validates the same exact collection/field coverage. Migrated document ID mappings
 are included in provenance validation. The [cutover guide](CUTOVER.md) owns verification
