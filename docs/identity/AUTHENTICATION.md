@@ -168,6 +168,66 @@ record cookies, codes, token/claim values, email, provider subject, callback
 queries or screenshots/network exports containing them. Keep operational
 incident notes and provider-specific investigation in approved private custody.
 
+### Bounded operator identity-dependency launcher
+
+Normal startup remains `python -m tabula_rasa.http.serve`. An explicitly approved
+staging operator may instead select the following alternate command in a fresh
+process. It installs a process-local CPython resolver audit hook, verifies its
+registration without DNS, then calls the normal single-worker serve entry point:
+
+```sh
+python -m tabula_rasa.http.identity_rehearsal --expected-origin https://APPROVED_STAGE_ORIGIN --expected-issuer https://APPROVED_ISSUER --expected-release EXACT_40_HEX_SHA --deadline-utc YYYY-MM-DDTHH:MM:SSZ --max-seconds 300 --acknowledge-staging-cold-discovery approved
+```
+
+Replace every placeholder from the separately approved private operator packet.
+The command requires named-user staging, the exact canonical public origin and
+configured issuer, and the exact configured release. Missing/invalid configuration,
+production, mismatched bindings, absent acknowledgement, expired UTC deadlines,
+and windows longer than the supplied maximum (at most 300 seconds) refuse startup.
+The issuer, client, secret, callback and session generation are never changed.
+Arguments contain no credentials; fixed diagnostics print no target hostnames,
+callback material or database URLs. Keep actual target bindings in private custody.
+
+The hook denies only `socket.getaddrinfo` for the issuer's normalized hostname
+(Requests-prepared IDNA, case and trailing-dot normalization) and effective HTTPS
+port. Requests continues using `trust_env=False`, TLS verification and existing endpoint checks.
+The real discovery failure reaches the unchanged OIDC adapter and login route:
+new login fails closed with `unavailable` / `login_start`; no fallback or session
+issuance is added. Existing durable sessions retain the normal outage policy.
+The launcher does not touch memberships, grants, database resolution or telemetry
+configuration. Other hostnames and ports continue resolving, including another
+hostname on the same server. Any other process component resolving the exact
+same hostname and port is also affected: inspect that overlap before approval.
+
+Resolution is automatically permitted at the earlier of the absolute UTC
+deadline and the monotonic lifetime cap. Once observed expired, the hook stays
+inactive. No operator presence or timer thread is needed; clocks are never changed.
+Restart after the absolute deadline refuses to arm. This restores resolution,
+not provider health, successful login or notification delivery. The hook remains
+registered until process exit. Remove the startup override through a separately
+approved deployment to return to ordinary startup.
+
+Interpret only a **fresh-process cold discovery** attempt as the demonstrated
+case. Discovery/JWKS caches last 300 seconds and are not cleared; populated
+caches and already-open sockets may avoid resolution. Native clients can bypass
+this boundary. Audit hooks are trusted-process diagnostics, not a security
+sandbox ([Python audit hooks](https://docs.python.org/3.12/library/sys.html#sys.addaudithook),
+[resolver audit event](https://docs.python.org/3.12/library/audit_events.html)).
+Do not apply this mechanism to database/session-store faults or claim all identity
+traffic is blocked. Do not use proxy environment settings to represent this fault.
+
+The commercial Dockerfile already copies the package and uses CMD, without an
+ENTRYPOINT. A new image build is required to include the launcher; its ordinary
+CMD, user 10001, headers, access-log policy and defaults remain unchanged. A local
+source-mounted transport test is not proof that a future published image includes
+the module. Verify the exact immutable built image before any hosted approval.
+Local loopback TLS tests use an explicitly trusted synthetic CA without altering
+machine trust, real credentials, external requests or a database. They establish
+transport feasibility and HTTP failure semantics, not hosted acceptance.
+
+The [incident rehearsal preconditions](../operations/INCIDENT_RESPONSE.md#identity-dependency-rehearsal-preconditions)
+own hosted approval, current alert verification and the sanitized evidence packet.
+
 ### Provider-backed verification
 
 Signed synthetic provider, disposable PostgreSQL and compiled-browser tests cover

@@ -178,6 +178,52 @@ the workflow deliberately rejects a superseded development image. Production
 restoration requires its separately authorized operator procedure, never the
 staging workflow. Rollback changes code, not bookkeeping, receipt bytes or schema.
 
+## Identity-dependency rehearsal preconditions
+
+The [bounded identity launcher](../identity/AUTHENTICATION.md#bounded-operator-identity-dependency-launcher)
+is an operator-only alternate process command, not authority to deploy or execute
+a hosted fault. Before use, obtain separate approval naming the exact immutable
+image (including all other changes it contains), staging service, database and
+identity bindings, startup override, absolute UTC window and maximum lifetime,
+real synthetic login/MFA checks, independent telemetry and removal procedure.
+Confirm the expected image is actually serving: a failed replacement deployment
+may leave the healthy retained instance running and proves no provider outage.
+No client, callback, account, secret, role or alert change is part of this command.
+
+Before any identity fault, the provider-side operator must GET the actual saved
+identity alert and truthfully disposition notification readiness. A historical
+export showing query period 60 seconds, aggregation 300 seconds and threshold 3
+is context only; it proves neither current settings nor delivery. Do not PATCH
+the alert to fit the drill or treat a <=300-second fault as guaranteed to notify.
+If saved alert/readback, routing, notification readiness or exact target approval
+is unresolved, hold hosted execution. Local synthetic transport tests do not
+satisfy these preconditions.
+
+Keep a sanitized packet in the owning incident/PR discussion, with private
+bindings stored separately:
+
+- Approval reference, exact image/index/runtime digest, release/schema, stage,
+  approved startup command and separately approved removal command/window.
+- Current saved-alert GET time and safe settings, notification precondition
+  disposition, independent observer and private routing custody reference.
+- Process start and first login UTC times, unchanged identity-configuration
+  attestation, initially empty discovery/JWKS caches and the actual failing
+  discovery call. Record only its safe classification and request reference.
+- Same-IP/port unrelated-host control and unaffected dependency checks, existing
+  session policy observations, failed new-login event and no session issuance.
+- Absolute UTC deadline, monotonic cap, first successful post-expiry resolution,
+  real login/MFA recovery and independently observed telemetry/notifications,
+  each marked observed, failed or unverified. Never manufacture missing signals.
+- Override removal confirmation and residual limits: warm caches/open sockets,
+  native-client bypass, shared-host overlap, no guaranteed notification and no
+  claim that local evidence proves hosted acceptance.
+
+Public packets must omit hostnames, credentials, callbacks, DSNs, identities,
+business data and raw provider responses. Automatic expiry permits future
+resolution; it does not remove the deployment override, repair a real outage or
+complete the recovery checks. Do not repeat a hosted fault while notification
+preconditions remain unresolved.
+
 ## Database recovery and safe service binding
 
 Prefer a reviewed forward repair for code/schema faults where committed data is
