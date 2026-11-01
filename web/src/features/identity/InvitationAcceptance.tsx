@@ -42,6 +42,7 @@ export function InvitationAcceptance({ session }: { session: SessionState }) {
     finally { setPreview(undefined); submitting.current = false; setPending(false); }
   }
   return <section className="surface"><h2>Respond to an invitation</h2>
+    <p>Beta invitations require separate operator approval for your named account and this business. Invitations expire after 48 hours; expired, declined or revoked offers need a new approval and invitation. A pause does not remove existing authorized access.</p>
     <p>Sign in with the invited account, then paste the credential shared privately by the business administrator. A recent sign-in is required.</p>
     <form onSubmit={event => { event.preventDefault(); if (preview) void respond(true); else void review(); }}>
       <Field id="invitation-credential" label="Invitation credential"><input id="invitation-credential" type="password" autoComplete="off" spellCheck={false}

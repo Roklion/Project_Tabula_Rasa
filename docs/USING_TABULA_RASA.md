@@ -175,3 +175,16 @@ ordinary page loads do not generate occurrences or mutate books. Failed authoriz
 profile binding or source validation fails closed. Private ledger values and provider
 credentials never belong in logs or error payloads. Supported correction and recovery
 procedures preserve historical identities, audit records and source artifacts.
+
+## Invitation-only beta enrollment
+
+New external businesses and named collaborators require individual operator
+approval. Create Business may record a pending request without creating books;
+keep the original name, country and request, then retry after approval. Offers
+expire after 48 hours and need a new approval/invitation after expiry or withdrawal.
+An admission pause preserves existing authorized business access and export.
+U.S. books use USD; Canadian CAD requests remain on hold pending currency-safe
+product verification. My Businesses shows beta status and limitations. See the
+[admission procedure](operations/BETA_ADMISSION.md) for supported scope and release
+requirements. Customer-owned Google Drive is required for beta receipts; reviewed
+policies and the actual support channel must be provided before enrollment.

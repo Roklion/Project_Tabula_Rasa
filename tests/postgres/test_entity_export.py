@@ -84,7 +84,9 @@ def test_complete_native_export_retains_every_domain_and_reproduces_accounting(d
         assert all(artifact["manifest"]["counts"].values())
         assert validate_artifact(artifact, entity_id=scope) == artifact
         Draft202012Validator(json_schema(), format_checker=FormatChecker()).validate(artifact)
-        payload = canonical_json(artifact)
+        assert artifact["manifest"]["entity_id"] == scope
+        # Schema revision names are deployment metadata, not tenant identifiers.
+        payload = canonical_json(artifact["domains"])
         assert other not in payload
         assert artifact["domains"]["mileage_records"][0]["miles"] == "1.2"
         assert artifact["domains"]["mixed_use_sources"][0]["business_use_percentage"] == "33.33333"

@@ -20,6 +20,7 @@ from tests.postgres._support import entity
 from tests.postgres.test_identity import verified
 from tests.postgres.test_identity_http import client_for
 from tests.postgres.test_workspaces import context, create
+from tests.postgres.historical_identity import legacy_business, legacy_invitation
 
 
 def old_schema(database):
@@ -42,8 +43,8 @@ def test_ambiguous_legacy_upgrade_is_repeatably_blocked_without_data_changes(emp
     old_schema(database)
     _, _, owner = context(database)
     service = WorkspaceService(PostgresWorkspaceRepository(database))
-    business = create(service, owner)
-    invitation = service.invite(owner, business['organization_id'], 'invitee@example.test', 'read_only')
+    business = legacy_business(database, owner)
+    invitation = legacy_invitation(database, owner, business['organization_id'], 'invitee@example.test', 'read_only')
     with database.transaction() as connection:
         entity(connection, 'retained-legacy-business')
         connection.execute(text('''INSERT INTO organization_entities(entity_id,organization_id,state)
@@ -65,7 +66,7 @@ def test_ambiguous_legacy_upgrade_is_repeatably_blocked_without_data_changes(emp
     assert PostgresIdentityRepository(database).allowed_entities(owner.user_id) == ()
     with pytest.raises(IdentityError, match='forbidden'):
         service.members(owner, business['organization_id'])
-    with pytest.raises(IdentityError, match='forbidden'):
+    with pytest.raises(IdentityError, match='unavailable'):
         service.revoke_invitation(owner, business['organization_id'], invitation.id)
 
 
@@ -76,10 +77,10 @@ def test_forward_upgrade_preserves_sessions_invitations_defaults_and_receipt_rep
     _, _, recipient = context(database, 'recipient')
     service = WorkspaceService(PostgresWorkspaceRepository(database))
     key = uuid4().hex
-    business = service.bootstrap(owner, key, 'Private container', 'Business A')
-    other = create(service, owner, 'Business B')
+    business = legacy_business(database, owner, key, 'Private container', 'Business A')
+    other = legacy_business(database, owner, workspace='Business B')
     sessions.select(raw, business['entity_id'])
-    invitation = service.invite(owner, business['organization_id'], recipient.verified_email, 'read_only')
+    invitation = legacy_invitation(database, owner, business['organization_id'], recipient.verified_email, 'read_only')
     # A historical addition receipt for the canonical business must remain
     # recoverable, without authorizing any new addition after rollout.
     legacy_key = uuid4().hex
@@ -100,7 +101,7 @@ def test_forward_upgrade_preserves_sessions_invitations_defaults_and_receipt_rep
     assert [item.entity_id for item in sessions.identity.allowed_entities(recipient.user_id)] == [business['entity_id']]
     assert other['organization_id'] != business['organization_id']
     with database.transaction(read_only=True) as connection:
-        assert current_revision(connection) == '0018_drive_oauth'
+        assert current_revision(connection) == '0019_beta_admission'
 
 
 def test_upgrade_preserves_two_claimed_ledgers_provenance_documents_and_provider_bindings(empty_database, monkeypatch):

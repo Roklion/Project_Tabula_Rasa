@@ -12,7 +12,7 @@ from tabula_rasa.application.identity import IdentityError, capabilities
 from ..models.workspaces import (
     BusinessCreateRequest, BusinessCreateResult, BootstrapRequest, BootstrapResult, MemberChange, MemberList, InviteRequest,
     InviteIssued, InvitationList, InvitationResponse, InvitationOutcome, OwnershipGrant,
-    InvitationPreview, InvitationPreviewRequest,
+    InvitationPreview, InvitationPreviewRequest, BetaStatus, BetaOperatorCommand,
 )
 
 router = APIRouter(responses=ERROR_RESPONSES, tags=['Business access'])
@@ -40,7 +40,7 @@ def business_workflow(request, business_id):
 @router.post('/api/v1/businesses', response_model=BusinessCreateResult, operation_id='create_business', tags=['Businesses'])
 def create_business(body: BusinessCreateRequest, request: Request):
     service, session = workflow(request)
-    result = service.create_business(session, body.request_id, body.business_name)
+    result = service.create_business(session, body.request_id, body.business_name, country=body.country, currency=body.currency)
     return BusinessCreateResult(state=result['state'], entity_id=result.get('entity_id'))
 
 
@@ -102,7 +102,7 @@ def preview_invitation(body: InvitationPreviewRequest, request: Request):
 @router.post('/api/v1/workspaces/bootstrap', response_model=BootstrapResult, operation_id='bootstrap_workspace', deprecated=True)
 def bootstrap_workspace(body: BootstrapRequest, request: Request):
     service, session = workflow(request)
-    return service.bootstrap(session, body.request_id, body.workspace_name, body.business_name)
+    return service.bootstrap(session, body.request_id, body.workspace_name, body.business_name, country=body.country, currency=body.currency)
 
 
 @router.get('/api/v1/workspaces/bootstrap/{request_id}', response_model=BootstrapResult, operation_id='bootstrap_status', deprecated=True)
@@ -114,7 +114,7 @@ def bootstrap_status(request_id: Annotated[str, Path(pattern=BOOTSTRAP_ID_PATTER
 @router.post('/api/v1/workspaces/{organization_id}/businesses', response_model=BootstrapResult, operation_id='bootstrap_business', deprecated=True)
 def bootstrap_business(organization_id: str, body: BootstrapRequest, request: Request):
     service, session = workflow(request)
-    return service.bootstrap(session, body.request_id, body.workspace_name, body.business_name, organization_id)
+    return service.bootstrap(session, body.request_id, body.workspace_name, body.business_name, organization_id, country=body.country, currency=body.currency)
 
 
 @router.get('/api/v1/workspaces/{organization_id}/members', response_model=MemberList, operation_id='list_members', deprecated=True)
@@ -162,3 +162,17 @@ def revoke_invitation(organization_id: str, invitation_id: str, request: Request
 def respond_invitation(body: InvitationResponse, request: Request):
     service, session = workflow(request)
     return service.respond(session, body.credential.get_secret_value(), body.accept)
+
+
+@router.get('/api/v1/beta/status', response_model=BetaStatus, operation_id='beta_status')
+def beta_status(request: Request):
+    _, session = workflow(request)
+    return request.app.state.runtime.beta.status(session.user_id)
+
+
+@router.post('/api/v1/beta/operator', operation_id='beta_operator')
+def beta_operator(body: BetaOperatorCommand, request: Request):
+    workflow(request)
+    runtime = request.app.state.runtime
+    return runtime.beta.operate(runtime.identity.sessions,
+        request.cookies.get(runtime.identity.session_cookie, ''), body.model_dump())

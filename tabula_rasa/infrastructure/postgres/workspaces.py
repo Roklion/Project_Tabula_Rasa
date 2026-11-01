@@ -16,6 +16,7 @@ from tabula_rasa.application.workspaces import (
 from .control_plane import ENTITY_ACCESS_SQL, PostgresIdentityRepository, identity_operation
 from .reference_data import PostgresLedgerSetupRepository
 from .sessions import credential_hash
+from . import beta
 from .audit import AuditContext, audit_context
 
 
@@ -56,16 +57,20 @@ class PostgresWorkspaceRepository:
         require_capability(role, 'members:manage')
         return role
 
-    def bootstrap(self, actor, request_id, workspace_name, business_name, organization_id=None):
+    def bootstrap(self, actor, request_id, workspace_name, business_name, organization_id=None, *, country="US", currency="USD"):
         require_bootstrap_id(request_id)
         names = [workspace_name, business_name]
         if any(not isinstance(name, str) or not name.strip() or len(name) > 160 for name in names):
             raise IdentityError('validation')
         workspace_name, business_name = [name.strip() for name in names]
-        payload = sha256(json.dumps([workspace_name, business_name, organization_id]).encode()).hexdigest()
+        values = [workspace_name, business_name, organization_id]
+        if (country, currency) != ('US', 'USD'):
+            values += [country, currency]
+        payload = sha256(json.dumps(values).encode()).hexdigest()
         entity_id = uuid4().hex
         with audit_context(self.database, AuditContext('user', actor, 'workspace.bootstrap', entity_id,
                            operation_id='bootstrap:' + request_id)), identity_operation(self.database) as connection:
+            beta.lock_program(connection)
             self._users(connection, actor)
             previous = connection.execute(text('''SELECT * FROM workspace_bootstraps
                 WHERE user_id=:user AND request_id=:request'''), {'user': actor, 'request': request_id}).mappings().first()
@@ -77,6 +82,9 @@ class PostgresWorkspaceRepository:
             # new business to an existing permission container.
             if organization_id is not None:
                 raise IdentityError('forbidden')
+            pending = beta.prepare_business(connection, actor, request_id, business_name, country, currency)
+            if pending is not None:
+                return pending
             org = self.identity.create_organization(actor, workspace_name)
             ledger = PostgresLedgerSetupRepository.create_entity(self.database, entity_id, business_name)
             self.identity.bind_entity(org, entity_id)
@@ -84,6 +92,7 @@ class PostgresWorkspaceRepository:
             connection.execute(text('''INSERT INTO workspace_bootstraps
                 (user_id,request_id,payload_hash,organization_id,entity_id) VALUES (:user,:request,:payload,:org,:entity)'''),
                 {'user': actor, 'request': request_id, 'payload': payload, 'org': org, 'entity': entity_id})
+            beta.activate_business(connection, actor, request_id, org)
             return {'state': 'ready', 'organization_id': org, 'entity_id': entity_id}
 
     def _bootstrap_result(self, connection, actor, row, *, legacy=False):
@@ -102,7 +111,10 @@ class PostgresWorkspaceRepository:
             row = connection.execute(text('''SELECT * FROM workspace_bootstraps
                 WHERE user_id=:user AND request_id=:request'''), {'user': actor, 'request': request_id}).mappings().first()
             if row is None:
-                return {'state': 'not_started', 'organization_id': None, 'entity_id': None}
+                admission = connection.execute(text("""SELECT CASE WHEN state='approved' AND expires_at<=clock_timestamp()
+                    THEN 'expired' ELSE state END FROM beta_admissions WHERE user_id=:user AND request_id=:request"""),
+                    {'user': actor, 'request': request_id}).scalar()
+                return {'state': admission or 'not_started', 'organization_id': None, 'entity_id': None}
             return self._bootstrap_result(connection, actor, row)
 
     def business_operation(self, session, business_id, operation, *args):
@@ -133,6 +145,7 @@ class PostgresWorkspaceRepository:
 
     def change_member(self, actor, org, target, role, active, version, *, session=None, ownership=False):
         with identity_operation(self.database) as connection:
+            beta.lock_program(connection)
             acting_role = self._manage(connection, actor, org, target)
             current = connection.execute(text('''SELECT role,state,authorization_version FROM memberships
                 WHERE organization_id=:org AND user_id=:user'''), {'org': org, 'user': target}).mappings().first()
@@ -152,19 +165,40 @@ class PostgresWorkspaceRepository:
                 raise IdentityError('forbidden')
             if ownership or current['role'] == 'owner' and (role != 'owner' or not active):
                 self._require_fresh(session)
+            if active and current['state'] != 'active':
+                grant = beta.invitation_grant(connection, actor, org, user=target)
+                if grant:
+                    connection.execute(text("UPDATE beta_named_users SET state='active',ever_active=true WHERE admission_id=:id AND user_id=:user"),
+                                       {'id': grant['admission_id'], 'user': target})
+                    beta.event(connection, actor, 'member_readmitted', grant['admission_id'], user_id=target)
+            if not active:
+                admission = connection.scalar(text('SELECT id FROM beta_admissions WHERE organization_id=:org'), {'org':org})
+                if admission:
+                    connection.execute(text("UPDATE beta_named_users SET state='withdrawn' WHERE admission_id=:id AND user_id=:user"),
+                                       {'id':admission,'user':target})
+                    beta.event(connection,actor,'member_withdrawn',admission,user_id=target)
             self.identity.set_membership(org, target, role, active=active)
 
     def invite(self, actor, org, email, role):
         raw, invitation_id = secrets.token_urlsafe(32), uuid4().hex
         with identity_operation(self.database) as connection:
+            beta.lock_program(connection)
             acting_role = self._manage(connection, actor, org)
             if not grant_allowed(acting_role, role):
                 raise IdentityError('forbidden')
+            grant = beta.invitation_grant(connection, actor, org, email=normalized_email(email))
             connection.execute(text('''INSERT INTO workspace_invitations
                 (id,credential_hash,organization_id,email_key,role,inviter_id,expires_at)
                 VALUES (:id,:hash,:org,:email,:role,:actor,:expiry)'''),
                 {'id': invitation_id, 'hash': credential_hash(raw), 'org': org, 'email': normalized_email(email),
                  'role': role, 'actor': actor, 'expiry': self.clock() + timedelta(hours=48)})
+            if grant:
+                connection.execute(text("""UPDATE beta_named_users SET state='invited',invitation_id=:invitation,
+                    expires_at=LEAST(expires_at,:expiry),membership_version=(SELECT authorization_version FROM memberships
+                    WHERE organization_id=:org AND user_id=:user) WHERE admission_id=:id AND user_id=:user"""),
+                    {'invitation':invitation_id,'expiry':self.clock()+timedelta(hours=48),'org':org,
+                     'id':grant['admission_id'],'user':grant['user_id']})
+                beta.event(connection,actor,'invited',grant['admission_id'],user_id=grant['user_id'])
         return InvitationCredential(invitation_id, raw)
 
     def invitations(self, actor, org):
@@ -177,17 +211,20 @@ class PostgresWorkspaceRepository:
 
     def revoke_invitation(self, actor, org, invitation_id):
         with identity_operation(self.database) as connection:
+            beta.lock_program(connection)
             acting_role = self._manage(connection, actor, org)
             row = connection.execute(text('''SELECT role FROM workspace_invitations
                 WHERE id=:id AND organization_id=:org FOR UPDATE'''), {'id': invitation_id, 'org': org}).mappings().first()
             if row is None or not grant_allowed(acting_role, row['role']):
                 raise IdentityError('forbidden')
             connection.execute(text("UPDATE workspace_invitations SET state='revoked' WHERE id=:id AND state='pending'"), {'id': invitation_id})
+            beta.release_invitation(connection, actor, invitation_id)
 
     def respond(self, session, credential, accept):
         self._require_fresh(session)
         hashed = credential_hash(credential)
         with identity_operation(self.database) as connection:
+            beta.lock_program(connection)
             # Discover only internally, then use the standard user/org lock order.
             row = self._recipient_invitation(connection, session, hashed)
             self._users(connection, session.user_id, row['inviter_id'])
@@ -198,10 +235,24 @@ class PostgresWorkspaceRepository:
             if not grant_allowed(acting_role, row['role']):
                 raise IdentityError('forbidden')
             if accept:
+                # Internal invite authority is the explicitly retained operator,
+                # whereas beta offers bind the exact approved recipient identity.
+                grant = beta.invitation_grant(connection, row['inviter_id'], row['organization_id'],
+                    user=session.user_id, invitation=row['id'], email=normalized_email(session.verified_email))
+                if grant:
+                    version = connection.scalar(text('SELECT authorization_version FROM memberships WHERE organization_id=:org AND user_id=:user'),
+                        {'org':row['organization_id'],'user':session.user_id})
+                    if version != grant['membership_version']:
+                        raise IdentityError('beta_pending')
+                    connection.execute(text("UPDATE beta_named_users SET state='active',ever_active=true WHERE admission_id=:id AND user_id=:user"),
+                                       {'id':grant['admission_id'],'user':session.user_id})
+                    beta.event(connection,session.user_id,'invitation_accepted',grant['admission_id'])
                 existing = connection.scalar(text('''SELECT state FROM memberships
                     WHERE organization_id=:org AND user_id=:user'''), {'org': row['organization_id'], 'user': session.user_id})
                 if existing != 'active':
                     self.identity.set_membership(row['organization_id'], session.user_id, row['role'])
+            if not accept:
+                beta.release_invitation(connection, session.user_id, row['id'])
             connection.execute(text('UPDATE workspace_invitations SET state=:state,responded_by=:user WHERE id=:id'),
                 {'id': row['id'], 'user': session.user_id, 'state': 'accepted' if accept else 'declined'})
             return {'state': 'accepted' if accept else 'declined'}

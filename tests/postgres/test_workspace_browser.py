@@ -127,6 +127,8 @@ def test_first_ledger_retry_refresh_repeat_visit_and_two_entity_switch(named_ser
         page.get_by_role('link', name='Sign in', exact=True).click()
         expect(page.get_by_role('button', name='Create your first business', exact=True)).to_be_visible()
         actor = context.request.get(origin + '/api/v1/session').json()['actor_id']
+        from tests.postgres.test_workspaces import approve_internal
+        approve_internal(repo.database, actor)
         page.get_by_role('button', name='Create your first business', exact=True).click()
         page.get_by_label('Business name').fill(first_name)
         page.get_by_role('button', name='Review defaults').focus()
@@ -419,3 +421,66 @@ def test_same_name_businesses_remain_distinct_through_selection(named_server, wi
         expect(businesses.get_by_text('Selected business', exact=True)).to_be_visible()
         assert_accessible(page)
         assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+
+
+@pytest.mark.parametrize('engine', ['chromium', 'firefox', 'webkit'])
+@pytest.mark.parametrize('width', [1440, 390])
+def test_beta_pending_operator_approval_and_pause_preserve_business(named_server, engine, width, native_browser):
+    from tabula_rasa.infrastructure.postgres.beta import PostgresBeta
+
+    origin, repo, _, _, _, _, claims, info = named_server
+    claims['sub'] = info['sub'] = 'beta-applicant'
+    with repo.database.transaction(read_only=True) as c:
+        configuration = c.scalar(text("SELECT configuration_hash FROM identity_environments WHERE environment='test'"))
+    sessions = PostgresSessionRepository(repo.database, 'test', configuration)
+    raw, operator = sessions.issue(verified('beta-operator'))
+    with repo.database.transaction() as c:
+        c.execute(text("""INSERT INTO beta_operator_grants VALUES
+            (:user,'test',clock_timestamp()+interval '1 hour','synthetic-browser')"""), {'user':operator.user_id})
+    beta = PostgresBeta(repo.database)
+    def command(operation, **fields):
+        revision = beta.operate(sessions, raw, {'operation':'inspect'})['program']['revision']
+        return beta.operate(sessions, raw, dict(operation=operation, revision=revision,
+            reason='synthetic-browser', approval_reference='synthetic-only', **fields))
+    with native_browser(engine) as browser:
+        context = browser.new_context(viewport={'width':width,'height':1000})
+        configure_login(context, origin, claims)
+        page = context.new_page()
+        page.goto(origin)
+        page.get_by_role('link', name='Sign in', exact=True).click()
+        expect(page.get_by_role('heading',name='Invitation-only free beta')).to_be_visible()
+        page.get_by_role('button',name='Create your first business',exact=True).click()
+        page.get_by_label('Business name').fill('Synthetic beta business')
+        page.get_by_role('button',name='Review defaults').click()
+        page.get_by_role('button',name='Create business',exact=True).click()
+        expect(page.get_by_text('Enrollment: pending.',exact=False)).to_be_visible()
+        assert_accessible(page)
+        state = beta.operate(sessions,raw,{'operation':'inspect'})
+        admission = state['admissions'][0]['id']
+        assert state['counts']=={'businesses':0,'users':0}
+        command('approve',admission_id=admission)
+        command('configure',stage='initial',business_cap=3,user_cap=None,
+                creation_paused=False,invitations_paused=False,suspended=False)
+        page.reload()
+        page.get_by_role('button',name='Create your first business',exact=True).click()
+        expect(page.get_by_text('Enrollment: approved.',exact=False)).to_be_visible()
+        page.get_by_label('Business name').fill('Synthetic beta business')
+        page.get_by_role('button',name='Review defaults').click()
+        page.get_by_role('button',name='Create business',exact=True).click()
+        expect(page.get_by_role('heading',name='Your ledger is ready')).to_be_visible()
+        command('configure',stage='initial',business_cap=3,user_cap=None,
+                creation_paused=True,invitations_paused=True,suspended=False)
+        page.goto(origin+'/businesses')
+        expect(page.get_by_text('New admissions are paused.',exact=False)).to_be_visible()
+        expect(page.get_by_role('region',name='Available businesses').get_by_role('listitem')).to_have_count(1)
+        assert_accessible(page)
+        if evidence_root := os.environ.get('TABULA_RASA_BROWSER_EVIDENCE'):
+            target=Path(evidence_root)
+            target.mkdir(parents=True,exist_ok=True)
+            page.screenshot(path=str(target/f'{engine}-{width}-beta-paused.png'),full_page=True)
+        session=context.request.get(origin+'/api/v1/session').json()
+        ledger=context.request.get(origin+'/api/v1/entities/'+session['entity']['id']+'/accounts')
+        assert ledger.status==200
+        handoff=context.request.post(origin+'/api/v1/entities/'+session['entity']['id']+'/exports/handoff',
+            headers={'Origin':origin,'X-CSRF-Token':session['csrf_token']},data={'scope':'metadata_only'})
+        assert handoff.status==200

@@ -576,8 +576,8 @@ edition.
   without an active business see My Businesses and choose Create your first business,
   Join an invited business, or existing
   Sheets migration. Existing members go directly to their authorized ledger.
-- Fresh setup collects only a business name, then reviews the one supported
-  standard bookkeeping default. Back preserves the name. Create business opens
+- Fresh setup collects a business name and country/currency, then reviews the one supported
+  standard bookkeeping default. Back preserves the details. After enrollment approval, Create business opens
   Dashboard with account review, first transaction and ledger next actions.
   The server creates a private backing organization and grants the creator Owner;
   no workspace name or organization selector appears in setup. Each new business
@@ -605,7 +605,8 @@ edition.
   private credential is pasted after login and never included in a link.
   Confirmed acceptance also signals peer tabs to clear stale setup or ledger scope.
 - Invitations are optional and available through the supported private delivery
-  flow; external connections are optional through Data & backup . Existing live
+  flow; connections for internal use are optional through Data & backup; beta receipts
+  require customer-owned Google Drive. Existing live
   migration requires the explicit operator cutover process. First-use setup
   does not import or claim existing Sheets books.
 - Shared tokens, controls, labels and touch targets support narrow screens and
@@ -1108,3 +1109,26 @@ a multi-file drop; disabled workflows ignore drops. File-type/size validation,
 read-only preparation, explicit import/upload commands and recovery stay with
 the existing workflow owners. Selection never starts a ledger write or receipt
 upload. Maps lookup buttons retain an 8px gap below their input.
+
+## Invitation-only beta enrollment
+
+**Current behavior:** My Businesses and first-use onboarding include the shared
+beta notice after the page header, using existing surfaces and status text.
+Scope and service limitations sit in a keyboard-accessible disclosure. Business setup collects
+U.S./USD or Canada/CAD; Canadian admission is held pending currency-safe product
+verification. Create Business can return pending without creating a ledger. The
+form preserves the exact request for explicit retry after approval, including
+refresh recovery, and never treats a pending result as successful creation.
+Named collaborators need separate operator approval and retain the existing
+recipient-bound 48-hour invitation/fresh-login workflow. Customer messages explain
+expiry, reapproval, capacity and pauses without exposing private cohort IDs.
+
+Enrollment freezes do not remove existing business selection, membership-derived
+access, customer export or closure rights. Notices state noncharging/invitation-only
+scope, customer-owned Drive for beta receipts, excluded specialist features,
+sensitive-data boundaries, best-effort support and unverified recovery targets.
+Reviewed Terms/privacy, acceptance version and contact/retention policy remain
+separate release requirements; no legal acceptance or mailbox is invented.
+Operator controls have no tenant role or paid-plan UI. The
+[admission procedure](docs/operations/BETA_ADMISSION.md) owns program state and
+release handoff; it does not authorize external enrollment.

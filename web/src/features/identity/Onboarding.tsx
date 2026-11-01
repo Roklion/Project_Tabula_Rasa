@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api, ApiError, type Schemas, type SessionState } from '../../api/client';
 import { ErrorNotice, Field, LoadingState } from '../../components/States';
 import { ActionButton, PageHeader } from '../../components/VisualPrimitives';
+import { BetaNotice } from './BetaNotice';
 import { InvitationAcceptance } from './InvitationAcceptance';
 import { notifyPeerScopeChange } from '../../app/authSignals';
 
@@ -14,6 +15,8 @@ export function LedgerSetup({ session }: { session: SessionState }) {
   const key = receiptKey(session);
   const [step, setStep] = useState(1);
   const [business, setBusiness] = useState('');
+  const [country, setCountry] = useState<'US' | 'CA'>('US');
+  const [admission, setAdmission] = useState<string>();
   const [pending, setPending] = useState(false);
   const [checking, setChecking] = useState(true);
   const [interrupted, setInterrupted] = useState(false);
@@ -58,7 +61,7 @@ export function LedgerSetup({ session }: { session: SessionState }) {
             setAttempted(true); setStep(2);
             await finish(result);
           }
-          else setInterrupted(true);
+          else { setInterrupted(true); if (result.state !== 'not_started') setAdmission(result.state); }
         }
       } catch (failure) { if (!controller.signal.aborted) setError(failure); }
       finally { if (!controller.signal.aborted) setChecking(false); }
@@ -80,7 +83,7 @@ export function LedgerSetup({ session }: { session: SessionState }) {
         sessionStorage.setItem(key, id);
         request.current = id;
       }
-      submitted.current ??= { request_id: request.current, business_name: business.trim() };
+      submitted.current ??= { request_id: request.current, business_name: business.trim(), country, currency: country === 'CA' ? 'CAD' : 'USD' };
       setAttempted(true);
       let result: Schemas['BusinessCreateResult'];
       try {
@@ -92,8 +95,8 @@ export function LedgerSetup({ session }: { session: SessionState }) {
         if (status.state !== 'ready') throw failure;
         result = status;
       }
-      confirmed.current = result;
-      if (mounted.current) await finish(result);
+      if (result.state === 'ready') { confirmed.current = result; if (mounted.current) await finish(result); }
+      else if (mounted.current) setAdmission(result.state);
     } catch (failure) { if (mounted.current) setError(failure); }
     finally { if (mounted.current) setPending(false); }
   }
@@ -102,16 +105,23 @@ export function LedgerSetup({ session }: { session: SessionState }) {
   return <section className="workflowSections" aria-label="Create business">
     <h2>{session.state === 'needs_setup' ? 'Create your first business' : 'Create another business'}</h2>
     <p role="status">Step {step} of 2 · {step === 1 ? 'Name your business' : 'Review bookkeeping defaults'}</p>
+    {admission && <p role="status">Enrollment: {admission}. {admission === 'approved'
+      ? 'Re-enter the original details and retry the same setup to create your approved business.'
+      : 'Your business has not been created. Ask your operator to review this request; retry the same setup after approval. Expired, denied or withdrawn requests require explicit reapproval.'}</p>}
     {interrupted && <p>Setup was interrupted. Re-enter the same business name to resume. Your original request will be reused.</p>}
     <form onSubmit={event => { event.preventDefault(); if (step === 1) setStep(2); else void create(); }}>
       {step === 1 ? <>
         <Field id="setup-business" label="Business name"><input id="setup-business" required maxLength={160} value={business}
           onChange={event => setBusiness(event.target.value)} /></Field>
+        <Field id="setup-country" label="Business country and currency"><select id="setup-country" value={country}
+          onChange={event => setCountry(event.target.value as 'US' | 'CA')}>
+          <option value="US">United States · USD</option><option value="CA">Canada · CAD (admission on hold)</option>
+        </select></Field>
       </> : <>
         <p>{business.trim() ? `Business: ${business.trim()}` : 'Your business was created. Retry to open its ledger.'}</p>
         <Field id="setup-defaults" label="Bookkeeping defaults"><select id="setup-defaults" defaultValue="standard"><option value="standard">Standard basic bookkeeping</option></select></Field>
         <p>Start with the supported chart of accounts and Income/Expense categories. Opening balances start at zero. Review accounts before recording your first transaction.</p>
-        <p>External connections are optional. Connect Google Drive later from Data &amp; backup, or invite collaborators later from business settings.</p>
+        <p>Beta receipts require customer-owned Google Drive. Connect Google Drive later from Data &amp; backup, or invite collaborators later from business settings.</p>
         {!attempted && <ActionButton disabled={pending} onClick={() => setStep(1)}>Back</ActionButton>}
       </>}
       <div className="actions"><ActionButton tone="primary" type="submit" pending={pending}
@@ -126,6 +136,7 @@ export function LedgerSetup({ session }: { session: SessionState }) {
 export function Onboarding({ session }: { session: SessionState }) {
   const [path, setPath] = useState<'choose' | 'fresh' | 'invite' | 'migration'>(() => window.location.pathname === '/invitations' ? 'invite' : 'choose');
   return <div className="workflowSections"><PageHeader title={path === 'invite' ? 'Join an invited business' : 'My Businesses'} description="You do not have an active business yet. Create one, join an invitation, or move existing books with your operator." />
+    <BetaNotice />
     {path === 'choose' && <div className="actions">
       {session.business_creation_available && <ActionButton tone="primary" onClick={() => setPath('fresh')}>Create your first business</ActionButton>}
       <ActionButton onClick={() => setPath('invite')}>Join an invited business</ActionButton>

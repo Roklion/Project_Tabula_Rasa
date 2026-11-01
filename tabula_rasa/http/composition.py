@@ -48,6 +48,8 @@ class PostgresRuntime:
         from tabula_rasa.infrastructure.postgres.support import PostgresSupport
         from .identity import NamedIdentity
         self.support = PostgresSupport(database, identity.sessions) if isinstance(identity, NamedIdentity) else None
+        from tabula_rasa.infrastructure.postgres.beta import PostgresBeta
+        self.beta = PostgresBeta(database) if identity is not None else None
         from tabula_rasa.application.workspaces import WorkspaceService
         from tabula_rasa.infrastructure.postgres.workspaces import PostgresWorkspaceRepository
         self.workspaces = (WorkspaceService(PostgresWorkspaceRepository(database), bootstrap_enabled=workspace_bootstrap)

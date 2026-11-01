@@ -13,6 +13,10 @@ from tabula_rasa.application.documents import DocumentError, DocumentNotFoundErr
 
 
 ERRORS = {
+    'beta_pending': (403, 'Invitation-only beta approval is required for this business and named user. Ask your operator to review enrollment.'),
+    'beta_paused': (409, 'New beta admissions are paused. Existing authorized access and export remain available. Retry after your operator resumes admissions.'),
+    'beta_capacity': (409, 'The approved beta cohort is at capacity. Ask your operator to review enrollment before retrying.'),
+    'beta_eligibility': (422, 'Beta eligibility requires U.S./USD or Canada/CAD. Canadian admission is on hold until currency-safe product verification is approved.'),
     'period_closed': (409, 'This accounting period is closed. Use an authorized reversal in an open month or ask the owner to unlock it.'),
     'reauthentication_required': (403, 'Sign in again to continue. Re-enter any invitation credential after login.'),
     'invitation_invalid': (403, 'This invitation is unavailable for this signed-in user.'),

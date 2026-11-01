@@ -74,6 +74,7 @@ export function createApi(fetcher: typeof fetch = (...args) => fetch(...args)) {
       if (!result.response.ok) throw new ApiError(result.error?.error.code ?? 'unavailable');
     }),
     entities: (signal?: AbortSignal) => safe(async () => unwrap(await client.GET('/api/v1/businesses', { signal, headers: headers() }))),
+    betaStatus: (signal?: AbortSignal) => safe(async () => unwrap(await client.GET('/api/v1/beta/status', { signal, headers: headers() }))),
     createBusiness: (s: SessionState, body: Schemas['BusinessCreateRequest']) => safe(async () => unwrap(await client.POST('/api/v1/businesses', { body, headers: headers(s.csrf_token) }))),
     bootstrapStatus: (request_id: string, signal?: AbortSignal) => safe(async () => unwrap(await client.GET('/api/v1/businesses/creation/{request_id}', { params: { path: { request_id } }, signal, headers: headers() }))),
     members: (s: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET('/api/v1/businesses/{business_id}/members', { params: { path: { business_id: s.entity.id } }, signal, headers: headers() }))),
