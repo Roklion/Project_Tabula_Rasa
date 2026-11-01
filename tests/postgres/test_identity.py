@@ -16,15 +16,15 @@ def verified(subject='alice', issuer='https://id.example.test', now=None):
     return VerifiedIdentity(issuer, subject, 'shared@example.test', 'Synthetic', now or datetime.now(timezone.utc))
 
 
-def setup(database):
+def setup(database, *, currencies=("USD", "USD")):
     repo = PostgresIdentityRepository(database)
     alice, bob = repo.resolve_user(verified()), repo.resolve_user(verified('bob'))
     from tests.postgres.test_workspaces import approve_internal
     approve_internal(database, alice.id, bob.id)
     a, b = repo.create_organization(alice.id, 'A'), repo.create_organization(bob.id, 'B')
     with database.transaction() as connection:
-        entity(connection, 'alpha')
-        entity(connection, 'beta')
+        entity(connection, 'alpha', currency=currencies[0])
+        entity(connection, 'beta', currency=currencies[1])
     repo.bind_entity(a, 'alpha')
     repo.bind_entity(b, 'beta')
     return repo, alice, bob, a, b

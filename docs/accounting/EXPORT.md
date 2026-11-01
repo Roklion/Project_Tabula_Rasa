@@ -77,6 +77,25 @@ broken required references or unrepresentable accounting records fail before
 publication. Fix the cause or inspect the source locally; never edit validation
 requirements to obtain a success result.
 
+## Fixed book currency and compatibility
+
+`business_entities.currency_code` identifies every amount in the selected
+business's artifact. CAD and USD preserve the same exact decimal strings,
+signs, scales, identities and 26-domain inventory; no FX is performed. Forward
+schema `0020_book_currency` changes the allowed currency, not the export field
+shape or encoding, so canonical format remains version 1. The validator accepts
+both currencies and the new database revision; older supported USD revisions
+remain valid. Older validators may reject CAD or the newer database revision;
+upgrade the validator rather than relabeling currency or bypassing checksums.
+Unknown currency codes fail validation. The customer ZIP embeds this same
+validated canonical metadata and checksum unchanged. Its version 1 manifest and
+document-integrity checks remain unchanged; the canonical root owns currency.
+
+Financial CSV columns and numeric cells remain compatible. Delivery labels and
+filenames identify the selected book currency; API CSV responses also carry
+`X-Book-Currency`. Currency-free CSVs must be kept with that delivery context;
+they do not independently prove their source currency.
+
 ## Version 1 format
 
 The artifact is UTF-8 JSON with two objects: `manifest` and `domains`. It uses
@@ -101,7 +120,7 @@ Every listed collection is required, even when empty:
 
 | Included collections | Preserved content |
 | --- | --- |
-| `business_entities` | Ledger identity, name and current bookkeeping currency setting (USD) |
+| `business_entities` | Ledger identity, name and immutable book currency (USD or CAD) |
 | `accounts`, `categories`, `payees`, `tags` | Hierarchies, signed opening balances, classification/kind, names and inactive historical references |
 | `entries`, `postings`, `entry_tags` | Simple and advanced entries, complete ordered canonical postings, payee references, source ownership and tags |
 | `mixed_use_sources`, `mixed_use_tags` | Full costs, exact percentages/allocations, expected projection identities, relationship states and source tags |

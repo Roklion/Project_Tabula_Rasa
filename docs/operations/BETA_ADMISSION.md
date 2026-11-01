@@ -68,12 +68,16 @@ is valid; shared approval in another business continues to count after one offer
 expires or is withdrawn. Changes below allocated totals fail atomically. There
 is no date-triggered expansion or automatic 20-user initial entitlement.
 
-Eligible request pairs are US/USD and CA/CAD. The current canonical business
-schema and product support only USD. Canada/CAD requests are retained pending,
-but approval/creation fails closed; they cannot be interpreted as USD. Before
-Canadian admission, the [fixed-currency CAD capability follow-up](https://github.com/Roklion/Project_Tabula_Rasa/issues/440)
-and selected-release verification of creation, display, import/export and reports are required. No FX
-or consolidated cross-currency accounting is introduced here.
+Eligible request pairs are US/USD and CA/CAD. Forward migration
+`0020_book_currency` supports independent CAD books. Approval binds the exact
+country/currency/name; explicit retry creates the fixed currency in the same
+transaction as defaults, membership, admission activation and creation receipt.
+Both countries share the same aggregate program caps, named-user approvals and
+freezes. Existing internal USD operations remain unchanged; the internal-user
+creation exemption remains US/USD only. No tenant operation changes an existing
+book's currency. There is no FX, redenomination or cross-currency consolidation.
+Actual Canadian enrollment still requires selected-release verification and
+written cohort GO; implementation removes the code hold, not the release gate.
 
 ## Operator access and commands
 

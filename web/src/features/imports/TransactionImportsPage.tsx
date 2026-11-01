@@ -79,6 +79,7 @@ function ImportWorkflow({ quickbooks = false, onDirtyChange }: { quickbooks?: bo
       ? 'Upload a QuickBooks Online Transaction Detail by Account CSV, or a QuickBooks Self-Employed General ledger XLSX or ZIP export. Review the results before importing.'
       : 'Required columns: Date, Type, Amount, Account, Category. Optional columns: Payee, Description, Reference. Type must be Income or Expense.'} />
     <p className="muted">Selected business: {session.entity.name}. Each file is limited to 25 MB and 1,000 rows; split larger sources into batches.</p>
+    <p>Currency-free source amounts are interpreted as {session.entity.currency_code} in {session.entity.name}. Explicit source currency must match. No conversion is performed; do not import USD source books into CAD books.</p>
     <fieldset disabled={mutation.isPending || uncertain}>
       <FilePicker id={quickbooks ? 'quickbooks-transactions-file' : 'tabula-transactions-file'}
         label={quickbooks ? 'QuickBooks export' : 'Transaction CSV file'} accept={quickbooks ? '.csv,.xlsx,.zip' : '.csv'}

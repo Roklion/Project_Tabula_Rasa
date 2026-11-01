@@ -3,7 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 
 test('accountant handoff scope, safe failure and explicit retry are accessible', async ({ page }) => {
   const session = { state: 'ready', actor_id: 'synthetic-owner', organization_id: 'synthetic-org',
-    entity: { id: 'alpha', name: 'Alpha demonstration' }, capabilities: ['bookkeeping:read', 'bookkeeping:export'],
+    entity: { currency_code: 'CAD', id: 'alpha', name: 'Alpha demonstration' }, capabilities: ['bookkeeping:read', 'bookkeeping:export'],
     cache_scope: 'handoff-alpha', csrf_token: 'synthetic-csrf', trusted_development: false };
   await page.route('**/api/v1/session', route => route.fulfill({ json: session }));
   await page.route('**/api/v1/businesses', route => route.fulfill({ json: { items: [session.entity] } }));
@@ -33,6 +33,6 @@ test('accountant handoff scope, safe failure and explicit retry are accessible',
   await page.screenshot({ path: test.info().outputPath('customer-handoff.png'), fullPage: true });
   const download = page.waitForEvent('download');
   await panel.getByRole('button', { name: 'Download handoff ZIP' }).click();
-  expect((await download).suggestedFilename()).toBe('tabula-rasa-handoff.zip');
+  expect((await download).suggestedFilename()).toBe('tabula-rasa-handoff-CAD.zip');
   expect(attempts).toBe(2);
 });

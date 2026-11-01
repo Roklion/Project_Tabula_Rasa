@@ -162,8 +162,13 @@ Every numeric column also has `CHECK (value <> 'NaN'::numeric)` (substituting
 its column name, allowing NULL only where specified). Fixed precision rejects
 infinities; positivity alone does not reject PostgreSQL numeric NaN. See
 [numeric types](https://www.postgresql.org/docs/current/datatype-numeric.html).
-Keep v1 single-currency ledger behavior (USD); multi-currency/FX is outside this
-model. Entity currency is immutable once accounting data exists.
+The baseline defines USD-only books. Forward revision `0020_book_currency`
+extends the check to USD/CAD and prevents every currency change after creation,
+including empty books. New Canadian admission uses CAD; existing USD rows and
+identities remain unchanged. Each business still has a single fixed unit;
+FX, redenomination and consolidated cross-currency accounting remain excluded.
+The table inventory below records the frozen baseline; this forward amendment
+owns the expanded currency constraint.
 
 For accounts, `name_key = clean_text(name).casefold()`; uniqueness covers the
 whole entity. Categories use the same key unique within `(entity_id, kind)`.

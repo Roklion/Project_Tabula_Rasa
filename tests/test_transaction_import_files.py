@@ -23,6 +23,29 @@ def csv_bytes(rows):
     return output.getvalue().encode("utf-8-sig")
 
 
+@pytest.mark.parametrize('currencies', [('CAD', 'CAD'), ('USD', 'CAD')])
+def test_general_ledger_conversion_retains_explicit_currency_on_both_sides(currencies):
+    from openpyxl import load_workbook
+    from tabula_rasa.application.imports import validate_source_currency
+
+    workbook = load_workbook(io.BytesIO(general_ledger_bytes()))
+    sheet = workbook['General Ledger']
+    sheet.cell(1, 10, 'Currency')
+    for row, currency in enumerate(currencies, 2):
+        sheet.cell(row, 10, currency)
+    output = io.BytesIO()
+    workbook.save(output)
+    workbook.close()
+    prepared = prepare_quickbooks_import('General_ledger.xlsx', output.getvalue())
+    assert not prepared.conversion_errors
+    if len(set(currencies)) == 1:
+        assert prepared.rows[0]['Currency'] == 'CAD'
+        validate_source_currency(prepared.rows, 'CAD')
+    else:
+        with pytest.raises(StorageValidationError, match='Source currency'):
+            validate_source_currency(prepared.rows, 'CAD')
+
+
 def general_ledger_bytes(*, broken=False):
     workbook = Workbook()
     sheet = workbook.active

@@ -30,12 +30,14 @@ def reference_record(row, table):
 
 class PostgresLedgerSetupRepository(EntityRepository):
     @classmethod
-    def create_entity(cls, database, entity_id, name):
+    def create_entity(cls, database, entity_id, name, *, currency="USD"):
+        if currency not in {"USD", "CAD"}:
+            raise StorageValidationError("Use USD or CAD for a new book.")
         repository = cls(database, entity_id)
         with repository.operation() as connection:
             insert(connection, 'business_entities', {
                 'id': repository.entity_id, 'name': clean_text(name, 'Ledger name', required=True),
-                'incarnation_id': str(uuid4()),
+                'incarnation_id': str(uuid4()), 'currency_code': currency,
             })
         return repository
 
@@ -48,6 +50,16 @@ class PostgresLedgerSetupRepository(EntityRepository):
                 from tabula_rasa.errors import StorageNotFoundError
                 raise StorageNotFoundError('The selected business entity does not exist.')
             return row.name
+
+    @property
+    def ledger_currency(self):
+        with self.operation(read_only=True) as connection:
+            currency = connection.scalar(text('SELECT currency_code FROM business_entities WHERE id=:scope'),
+                                         {'scope': self.entity_id})
+            if currency is None:
+                from tabula_rasa.errors import StorageNotFoundError
+                raise StorageNotFoundError('The selected business entity does not exist.')
+            return currency
 
     def ensure_defaults(self):
         from tabula_rasa.ledger_defaults import DEFAULT_ACCOUNTS, DEFAULT_CATEGORIES

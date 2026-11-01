@@ -84,7 +84,7 @@ it('clears an existing private scope on cross-tab logout', async () => {
 });
 
 it('preserves the private scope after a failed switch and replaces it only after confirmation', async () => {
-  const beta = { ...session, entity: { id: 'beta', name: 'Beta' } };
+  const beta = { ...session, entity: { currency_code: 'USD' as const, id: 'beta', name: 'Beta' } };
   vi.spyOn(api, 'session').mockResolvedValue(session);
   vi.spyOn(api, 'entities').mockResolvedValue({ items: [session.entity, beta.entity] });
   const select = vi.spyOn(api, 'selectEntity').mockRejectedValueOnce(new ApiError('unavailable')).mockResolvedValue(beta);
@@ -147,8 +147,8 @@ it('unmounts named private data while a switch is pending and after an uncertain
 
 it.each([true, false])('resets record navigation only for named-user switching (trusted=%s)', async trusted => {
   vi.spyOn(api, 'session').mockResolvedValue({ ...session, trusted_development: trusted });
-  vi.spyOn(api, 'entities').mockResolvedValue({ items: [session.entity, { id: 'beta', name: 'Beta' }] });
-  vi.spyOn(api, 'selectEntity').mockResolvedValue({ ...session, trusted_development: trusted, entity: { id: 'beta', name: 'Beta' } });
+  vi.spyOn(api, 'entities').mockResolvedValue({ items: [session.entity, { currency_code: 'USD' as const, id: 'beta', name: 'Beta' }] });
+  vi.spyOn(api, 'selectEntity').mockResolvedValue({ ...session, trusted_development: trusted, entity: { currency_code: 'USD' as const, id: 'beta', name: 'Beta' } });
   const resetRoute = vi.fn();
   function Feature() {
     const current = useEntity();
@@ -219,7 +219,7 @@ it('refreshes permitted choices when another workspace is revoked without changi
   const listeners = vi.spyOn(window, 'addEventListener');
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
   vi.spyOn(api, 'session').mockResolvedValue({ ...session, trusted_development: false });
-  vi.spyOn(api, 'entities').mockResolvedValueOnce({ items: [session.entity, { id: 'beta', name: 'Beta' }] })
+  vi.spyOn(api, 'entities').mockResolvedValueOnce({ items: [session.entity, { currency_code: 'USD' as const, id: 'beta', name: 'Beta' }] })
     .mockResolvedValue({ items: [session.entity] });
   function Choices() {
     const selection = useContext(EntitySelectionContext)!;
@@ -252,8 +252,8 @@ it('replaces private scope when validation recovers to another authorized busine
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
   vi.spyOn(api, 'session').mockResolvedValueOnce({ ...session, trusted_development: false })
     .mockResolvedValue({ ...session, organization_id: 'other-org',
-      entity: { id: 'beta', name: 'Beta' }, trusted_development: false });
-  vi.spyOn(api, 'entities').mockResolvedValue({ items: [session.entity, { id: 'beta', name: 'Beta' }] });
+      entity: { currency_code: 'USD' as const, id: 'beta', name: 'Beta' }, trusted_development: false });
+  vi.spyOn(api, 'entities').mockResolvedValue({ items: [session.entity, { currency_code: 'USD' as const, id: 'beta', name: 'Beta' }] });
   const caches: QueryClient[] = [];
   function Feature() {
     const cache = useQueryClient();
@@ -313,7 +313,7 @@ it('offers logout bootstrap on an initial outage without composing private UI', 
 it.each([true, false])('broadcasts successful scope changes only for named users (trusted=%s)', async trusted => {
   const channels = authChannel();
   const initial = { ...session, trusted_development: trusted };
-  const beta = { ...initial, entity: { id: 'beta', name: 'Beta' }, cache_scope: 'beta-scope' };
+  const beta = { ...initial, entity: { currency_code: 'USD' as const, id: 'beta', name: 'Beta' }, cache_scope: 'beta-scope' };
   vi.spyOn(api, 'session').mockResolvedValue(initial);
   vi.spyOn(api, 'entities').mockResolvedValue({ items: [initial.entity, beta.entity] });
   vi.spyOn(api, 'selectEntity').mockResolvedValue(beta);

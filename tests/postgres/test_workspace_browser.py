@@ -17,6 +17,60 @@ from tests.postgres.browser_quality_support import assert_accessible
 from tests.test_oidc import oidc as oidc
 
 
+@pytest.mark.parametrize('named_server', [('USD', 'CAD')], indirect=True)
+@pytest.mark.parametrize('engine', ['chromium', 'firefox', 'webkit'])
+@pytest.mark.parametrize('width', [1440, 390])
+def test_fixed_currency_switching_reports_and_downloads(named_server, engine, width, native_browser):
+    from tests.postgres._support import account, category
+
+    origin, repo, alice, _, _, b, _, _ = named_server
+    repo.set_membership(b, alice.id, 'read_only')
+    with repo.database.transaction() as c:
+        configuration = c.scalar(text("SELECT configuration_hash FROM identity_environments WHERE environment='test'"))
+        for scope in ('alpha', 'beta'):
+            account(c, scope, 'cash')
+            category(c, scope, 'sales', kind='Income')
+    for scope, amount in [('alpha', '9.01'), ('beta', '123.45')]:
+        services = create_postgres_services(repo.database, scope)
+        services.transactions.create(transaction_id='local', txn_date='2026-10-05', kind='Income',
+            amount=amount, account_id='cash', category_id='sales')
+    sessions = PostgresSessionRepository(repo.database, 'test', configuration)
+    raw, _ = sessions.issue(verified())
+    sessions.select(raw, 'alpha')
+    with native_browser(engine) as browser:
+        context = browser.new_context(viewport={'width': width, 'height': 1000})
+        context.add_cookies([{'name': 'tabula_dev_session', 'value': raw, 'url': origin,
+                             'httpOnly': True, 'sameSite': 'Lax'}])
+        page = context.new_page()
+        # Isolate explicit selection from unrelated foreground authority refresh.
+        page.add_init_script("Object.defineProperty(document, 'visibilityState', {get: () => 'hidden'})")
+        page.goto(origin)
+        for scope, currency, role in [('beta', 'CAD', 'Read-only'), ('alpha', 'USD', 'Owner'), ('beta', 'CAD', 'Read-only')]:
+            page.get_by_label('Select business', exact=True).select_option(scope)
+            page.get_by_role('button', name='Discard draft and switch').click()
+            expect(page.get_by_text('Book currency: ' + currency, exact=True)).to_be_visible()
+            expect(page.get_by_text('Role: ' + role, exact=True)).to_be_visible()
+            expect(page.locator('header').first).to_contain_text(currency)
+            session = context.request.get(origin + '/api/v1/session').json()
+            assert session['entity']['currency_code'] == currency
+            page.goto(origin + '/reports')
+            expect(page.get_by_text('All monetary amounts are in ' + currency + '.', exact=False)).to_be_visible()
+            assert_accessible(page)
+            page.goto(origin + '/data')
+            with page.expect_download() as downloading:
+                page.get_by_role('button', name='Download transactions CSV', exact=True).click()
+            assert downloading.value.suggested_filename.endswith('-' + currency + '.csv')
+            assert context.request.get(origin + '/api/v1/entities/' + ('alpha' if scope == 'beta' else 'beta')
+                                       + '/exports/transactions.csv').status == 403
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            assert_accessible(page)
+        # Read-only CAD membership cannot write even when a selector claims USD.
+        response = context.request.post(origin + '/api/v1/entities/beta/accounts',
+            headers={'Origin': origin, 'X-CSRF-Token': session['csrf_token'], 'X-Currency': 'USD'},
+            data={'name': 'Forbidden', 'type': 'Bank'})
+        assert response.status == 403
+
+
 @pytest.mark.parametrize('engine', ['chromium', 'firefox', 'webkit'])
 @pytest.mark.parametrize('width', [1440, 390, 320])
 def test_independent_roles_flat_navigation_and_shared_invitee(named_server, engine, width, native_browser):
@@ -399,8 +453,8 @@ def test_same_name_businesses_remain_distinct_through_selection(named_server, wi
         page.add_init_script("Object.defineProperty(document, 'visibilityState', {get: () => 'hidden'})")
         page.goto(origin)
         selector = page.get_by_label('Select business')
-        expect(selector.locator('option[value="alpha"]')).to_have_text(name.strip() + ' (reference: alpha) · Owner')
-        expect(selector.locator('option[value="beta"]')).to_have_text(name.strip() + ' (reference: beta) · Read-only')
+        expect(selector.locator('option[value="alpha"]')).to_have_text(name.strip() + ' (reference: alpha) · USD · Owner')
+        expect(selector.locator('option[value="beta"]')).to_have_text(name.strip() + ' (reference: beta) · USD · Read-only')
         selector.select_option('beta')
         dialog = page.get_by_role('alertdialog', name='Switch business')
         expect(dialog).to_be_visible()
@@ -425,7 +479,8 @@ def test_same_name_businesses_remain_distinct_through_selection(named_server, wi
 
 @pytest.mark.parametrize('engine', ['chromium', 'firefox', 'webkit'])
 @pytest.mark.parametrize('width', [1440, 390])
-def test_beta_pending_operator_approval_and_pause_preserve_business(named_server, engine, width, native_browser):
+@pytest.mark.parametrize('country,currency', [('US','USD'), ('CA','CAD')])
+def test_beta_pending_operator_approval_and_pause_preserve_business(named_server, engine, width, native_browser, country, currency):
     from tabula_rasa.infrastructure.postgres.beta import PostgresBeta
 
     origin, repo, _, _, _, _, claims, info = named_server
@@ -451,6 +506,7 @@ def test_beta_pending_operator_approval_and_pause_preserve_business(named_server
         expect(page.get_by_role('heading',name='Invitation-only free beta')).to_be_visible()
         page.get_by_role('button',name='Create your first business',exact=True).click()
         page.get_by_label('Business name').fill('Synthetic beta business')
+        page.get_by_label('Business country and currency').select_option(country)
         page.get_by_role('button',name='Review defaults').click()
         page.get_by_role('button',name='Create business',exact=True).click()
         expect(page.get_by_text('Enrollment: pending.',exact=False)).to_be_visible()
@@ -465,9 +521,11 @@ def test_beta_pending_operator_approval_and_pause_preserve_business(named_server
         page.get_by_role('button',name='Create your first business',exact=True).click()
         expect(page.get_by_text('Enrollment: approved.',exact=False)).to_be_visible()
         page.get_by_label('Business name').fill('Synthetic beta business')
+        page.get_by_label('Business country and currency').select_option(country)
         page.get_by_role('button',name='Review defaults').click()
         page.get_by_role('button',name='Create business',exact=True).click()
         expect(page.get_by_role('heading',name='Your ledger is ready')).to_be_visible()
+        expect(page.get_by_text('Book currency: ' + currency, exact=True)).to_be_visible()
         command('configure',stage='initial',business_cap=3,user_cap=None,
                 creation_paused=True,invitations_paused=True,suspended=False)
         page.goto(origin+'/businesses')

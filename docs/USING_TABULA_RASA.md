@@ -183,7 +183,8 @@ approval. Create Business may record a pending request without creating books;
 keep the original name, country and request, then retry after approval. Offers
 expire after 48 hours and need a new approval/invitation after expiry or withdrawal.
 An admission pause preserves existing authorized business access and export.
-U.S. books use USD; Canadian CAD requests remain on hold pending currency-safe
+U.S. books use USD; Canadian books use CAD with a fixed currency selected at creation.
+Canadian enrollment still requires selected-release currency-safe
 product verification. My Businesses shows beta status and limitations. See the
 [admission procedure](operations/BETA_ADMISSION.md) for supported scope and release
 requirements. Customer-owned Google Drive is required for beta receipts; reviewed

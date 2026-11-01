@@ -49,6 +49,7 @@ class EntityAccess:
     role: str
     authorization_version: int
     organization_name: str = ''
+    currency_code: str = 'USD'
 
 
 @dataclass(frozen=True)

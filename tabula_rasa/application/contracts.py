@@ -187,6 +187,9 @@ class LedgerSetupRepository(Protocol):
     @property
     def ledger_name(self) -> str: ...
 
+    @property
+    def ledger_currency(self) -> str: ...
+
     def ensure_defaults(self) -> dict[str, int]:
         """Return counts of created accounts/categories, or fail."""
         ...

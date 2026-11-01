@@ -1638,6 +1638,15 @@
       "BusinessInfo": {
         "additionalProperties": false,
         "properties": {
+          "currency_code": {
+            "default": "USD",
+            "enum": [
+              "USD",
+              "CAD"
+            ],
+            "title": "Currency Code",
+            "type": "string"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -2175,6 +2184,15 @@
       "EntityInfo": {
         "additionalProperties": false,
         "properties": {
+          "currency_code": {
+            "default": "USD",
+            "enum": [
+              "USD",
+              "CAD"
+            ],
+            "title": "Currency Code",
+            "type": "string"
+          },
           "id": {
             "title": "Id",
             "type": "string"

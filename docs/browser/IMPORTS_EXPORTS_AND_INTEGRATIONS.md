@@ -7,6 +7,23 @@ mutation boundary. Financial CSVs do not replace the
 [complete recovery export](../accounting/EXPORT.md). Live use requires configured
 dependencies and the separate [cutover procedure](../accounting/CUTOVER.md).
 
+## Fixed-currency source interpretation
+
+Each business has immutable USD or CAD books. The shell, forms and reports show
+the server-selected book currency; imports never infer a target from a filename,
+locale, dollar symbol or browser header. A currency-free source is interpreted
+in that book's currency. Verify the source book before committing; a retained
+USD Sheets source must not be imported as CAD or relabeled to bypass conversion.
+
+CSV and QuickBooks imports recognize optional `Currency`, `Currency Code` and
+`currency_code` columns (case-insensitive). Every nonblank explicit code must
+match the selected book. Contradictory/unsupported codes fail both preview and
+fresh commit validation, including completed-batch replays. XLSX/ZIP General
+Ledger conversion retains explicit currency from both paired rows rather than
+dropping it. Import identity, duplicate prevention, reference creation and batch
+atomicity keep their existing per-business owners. No FX or cross-business merge
+is supported. Historical Sheets migration/reconciliation remains USD-only.
+
 ## Financial CSV actions
 
 Transactions offers **Export selected**. Checkboxes select logical entries only;
@@ -33,7 +50,8 @@ hierarchical display paths, mixed-use/recurring labels and receipt indicators.
 Existing numeric presentation is preserved, including signed values and blank
 opposite-side cells. UTF-8 CSV quoting preserves commas, quotes and multiline
 text. Formula-leading text receives an apostrophe; numeric cells keep their
-signs. Downloads neither mutate stored values nor require a DocumentStore.
+signs. Filenames include `USD` or `CAD`, and API responses include
+`X-Book-Currency`; the existing CSV columns stay unchanged. Downloads neither mutate stored values nor require a DocumentStore.
 
 The three read-capability endpoints are `GET .../exports/transactions.csv`,
 `GET .../exports/journal-postings.csv` and `GET .../ledger/selected.csv` beneath

@@ -86,7 +86,8 @@ class CustomerExportService:
             attachments = []
             with ZipFile(stream, 'w', compression=ZIP_STORED) as archive:
                 add(archive, 'bookkeeping.json', canonical_json(artifact).encode('utf-8'))
-                add(archive, 'README.txt', INSTRUCTIONS.encode('utf-8'))
+                currency = artifact['domains']['business_entities'][0]['currency_code']
+                add(archive, 'README.txt', (INSTRUCTIONS + f'Book currency: {currency}. All monetary amounts use this fixed unit; no FX is performed.\n').encode('utf-8'))
                 if include_documents:
                     for index, row in enumerate(documents):
                         if self.clock() >= deadline:

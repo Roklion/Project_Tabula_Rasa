@@ -26,14 +26,14 @@ from tests.test_application_documents import FakeDocumentStore
 
 
 @pytest.fixture
-def named_server(database, oidc):
+def named_server(database, oidc, request):
     dist = Path(__file__).resolve().parents[2] / 'web/dist'
     if not (dist / 'index.html').is_file():
         import os
         if os.environ.get('TABULA_RASA_REQUIRE_BROWSER_TESTS') == '1':
             pytest.fail('Build web before required named-user browser tests.')
         pytest.skip('Build web to run named-user browser tests.')
-    repo, alice, bob, a, b = setup(database)
+    repo, alice, bob, a, b = setup(database, currencies=getattr(request, "param", ("USD", "USD")))
     provider, _, claims, info, _ = oidc
     listener = socket.socket()
     listener.bind(('127.0.0.1', 0))

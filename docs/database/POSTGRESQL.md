@@ -745,6 +745,12 @@ reset an operator database or silently upgrade an old revision identifier.
 
 Repository code alone need not introduce a revision. Any later schema/constraint
 change uses a new forward revision, coordinated to keep one Alembic head.
+`0020_book_currency` follows admission revision `0019_beta_admission`, permits
+USD/CAD on new entities and prevents updating currency on any existing entity.
+It preserves existing rows/default USD, memberships, source archives and identity.
+Deploy a currency-aware compatible image after the explicit migration; rollback
+must retain CAD interpretation and admission enforcement. Do not downgrade the
+schema, relabel CAD rows or use an older USD-only export validator.
 The deployed baseline and its retained forward history remain immutable.
 
 See [the migration operator guide](../accounting/SHEETS_MIGRATION.md) for dry-run,

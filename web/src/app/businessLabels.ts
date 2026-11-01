@@ -9,5 +9,5 @@ export function businessLabel(business: Schemas['EntityInfo'], choices: Schemas[
 
 export function businessChoiceLabel(business: Schemas['EntityInfo'], choices: Schemas['EntityInfo'][]) {
   const role = roleLabel(business.role);
-  return businessLabel(business, choices) + (role ? ' · ' + role : '');
+  return businessLabel(business, choices) + ' · ' + business.currency_code + (role ? ' · ' + role : '');
 }

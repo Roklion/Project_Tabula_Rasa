@@ -112,8 +112,7 @@ def test_closed_default_pending_identity_binding_and_eligibility(database, cohor
     with pytest.raises(IdentityError, match="conflict"):
         service.create_business(alice, key, "Changed")
     ca, _ = request(alice, "Canadian", country="CA", currency="CAD")
-    with pytest.raises(IdentityError, match="beta_eligibility"):
-        command("approve", admission_id=ca)
+    command("approve", admission_id=ca)
     for country, currency in [("US", "CAD"), ("CA", "USD"), ("FR", "USD")]:
         with pytest.raises(IdentityError, match="beta_eligibility"):
             service.create_business(

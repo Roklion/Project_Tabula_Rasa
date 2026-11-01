@@ -28,6 +28,7 @@ class TransactionImportContext:
     payees: Sequence[ImportRow]
     transactions: Sequence[ImportRow]
     import_fingerprints: Sequence[str] = ()
+    currency_code: str = "USD"
 
 
 class TransactionImportRepository(Protocol):
@@ -39,6 +40,9 @@ class TransactionImportRepository(Protocol):
     No worksheet positions, batches, or provider requests cross this port.
     """
 
+    @property
+    def currency_code(self) -> str: ...
+
     def quickbooks_context(self) -> TransactionImportContext: ...
 
     def import_csv(self, rows: Iterable[ImportRow]) -> list[dict[str, str]]: ...
@@ -46,6 +50,19 @@ class TransactionImportRepository(Protocol):
     def import_quickbooks(
         self, rows: Iterable[ImportRow], *, auto_create: bool = False
     ) -> list[dict[str, str]]: ...
+
+
+CURRENCY_COLUMNS = frozenset({'currency', 'currency code', 'currency_code'})
+
+
+def validate_source_currency(rows, currency_code):
+    """Currency-free sources use the selected book's unit; explicit units must match."""
+    for row in rows:
+        for key, value in row.items():
+            if str(key).strip().casefold() in CURRENCY_COLUMNS:
+                code = '' if value is None else str(value).strip().upper()
+                if code and code != currency_code:
+                    raise StorageValidationError('Source currency must match the selected book. No currency conversion is supported.')
 
 
 def preview_quickbooks(
@@ -56,6 +73,7 @@ def preview_quickbooks(
 ) -> dict[str, Any]:
     """Apply the existing mapping, reference proposals, and duplicate rules."""
     source_rows = list(rows)
+    validate_source_currency(source_rows, context.currency_code)
     accounts = {str(item["id"]): dict(item) for item in context.accounts}
     categories = {str(item["id"]): dict(item) for item in context.categories}
     new_accounts, new_categories = missing_references(
@@ -154,6 +172,9 @@ class TransactionImportService:
         return preview_quickbooks(
             rows, self._repository.quickbooks_context(), auto_create=auto_create
         )
+
+    def validate_source(self, rows):
+        validate_source_currency(rows, self._repository.currency_code)
 
     def import_csv(self, rows: Iterable[ImportRow]) -> list[dict[str, str]]:
         return self._repository.import_csv(rows)

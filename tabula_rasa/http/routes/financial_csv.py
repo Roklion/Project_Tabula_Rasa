@@ -18,10 +18,15 @@ CSV_RESPONSE = {200: {"content": {"text/csv": {"schema": {"type": "string", "for
 router = APIRouter(prefix="/api/v1/entities/{entity_id}", tags=["Financial CSV"], responses=ERROR_RESPONSES)
 
 
-def csv_response(content, filename):
+def book_currency(request, context):
+    return request.app.state.runtime.services(context).ledger.get_info().currency_code
+
+
+def csv_response(content, filename, currency):
     return Response(content, media_type="text/csv", headers={
-        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Content-Disposition": f'attachment; filename="{filename[:-4]}-{currency}.csv"',
         "X-Content-Type-Options": "nosniff",
+        "X-Book-Currency": currency,
     })
 
 
@@ -30,7 +35,7 @@ def csv_response(content, filename):
 def transactions_csv(entity_id: str, request: Request, context: Context):
     with service_operation(request, context, "reporting") as service:
         content = financial_csv_exports(service.read_ledger(force_refresh=True))["transactions"]
-        return csv_response(content, f"tabula-rasa-{date.today()}.csv")
+        return csv_response(content, f"tabula-rasa-{date.today()}.csv", book_currency(request, context))
 
 
 @router.get("/exports/journal-postings.csv", operation_id="download_journal_postings_csv",
@@ -38,7 +43,7 @@ def transactions_csv(entity_id: str, request: Request, context: Context):
 def journal_postings_csv(entity_id: str, request: Request, context: Context):
     with service_operation(request, context, "reporting") as service:
         content = financial_csv_exports(service.read_ledger(force_refresh=True))["journals"]
-        return csv_response(content, f"tabula-rasa-journals-{date.today()}.csv")
+        return csv_response(content, f"tabula-rasa-journals-{date.today()}.csv", book_currency(request, context))
 
 
 @router.get("/ledger/selected.csv", operation_id="download_selected_ledger_csv",
@@ -56,7 +61,7 @@ def selected_csv(entity_id: str, request: Request, context: Context,
             account_ids=tuple(account_ids or ()), category_ids=tuple(category_ids or ()),
             tag_ids=tuple(tag_ids or ())), force_refresh=True)
         return csv_response(selected_ledger_csv(query, entry_ids or ()),
-                            f"tabula-rasa-selected-{date.today()}.csv")
+                            f"tabula-rasa-selected-{date.today()}.csv", book_currency(request, context))
 
 
 class SelectedLedgerCsvRequest(DTO):

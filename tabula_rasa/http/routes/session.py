@@ -11,7 +11,7 @@ router = APIRouter(responses=ERROR_RESPONSES)
 def list_businesses(request: Request):
     # Public business choices carry no backing-container claims. The retained
     # entities endpoint is compatibility for old clients and restricted alpha.
-    return BusinessList(items=[BusinessInfo(id=item.id, name=item.name, role=item.role)
+    return BusinessList(items=[BusinessInfo(id=item.id, name=item.name, role=item.role, currency_code=item.currency_code)
                             for item in list_entities(request).items])
 
 
@@ -30,7 +30,7 @@ def context_info(request, context):
         info = runtime.services(context).ledger.get_info()
         return SessionInfo(
             actor_id=context.actor_id, organization_id=context.organization_id,
-            entity=EntityInfo(id=context.entity_id, name=info.name),
+            entity=EntityInfo(id=context.entity_id, name=info.name, currency_code=info.currency_code),
             capabilities=sorted(context.capabilities), cache_scope=context.cache_scope,
             csrf_token=context.csrf_token, trusted_development=context.trusted_development,
         )
@@ -47,13 +47,14 @@ def list_entities(request: Request):
     runtime = request.app.state.runtime
     if getattr(runtime, "identity", None) is not None:
         session = runtime.identity.authenticated(request)
-        return EntityList(items=[EntityInfo(id=item.entity_id, name=item.name,
+        return EntityList(items=[EntityInfo(id=item.entity_id, name=item.name, currency_code=item.currency_code,
                                     organization_id=item.organization_id, organization_name=item.organization_name, role=item.role)
                                 for item in runtime.identity.sessions.identity.allowed_entities(session.user_id)])
     context = resolve_context(request)
     with runtime.operation():
-        return EntityList(items=[EntityInfo(id=item.entity_id, name=runtime.services(item).ledger.get_info().name)
-                                 for item in available_contexts(request, context)])
+        return EntityList(items=[EntityInfo(id=item.entity_id, name=info.name, currency_code=info.currency_code)
+            for item in available_contexts(request, context)
+            for info in (runtime.services(item).ledger.get_info(),)])
 
 
 @router.post('/api/v1/session/entity', response_model=SessionInfo, tags=['Session'], operation_id='select_entity')

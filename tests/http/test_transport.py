@@ -36,7 +36,7 @@ class FakeRuntime:
         self.accounts.list.return_value = [RECORD]
         self.accounts.create.return_value = RECORD
         self.services = Mock(return_value=SimpleNamespace(
-            accounts=self.accounts, ledger=SimpleNamespace(get_info=lambda: SimpleNamespace(name="Alpha")),
+            accounts=self.accounts, ledger=SimpleNamespace(get_info=lambda: SimpleNamespace(name="Alpha", currency_code="USD")),
         ))
         self.healthy = True
         self.closed = False
@@ -219,7 +219,7 @@ def test_request_id_logging_allowlist_and_host_policy(client, runtime, caplog):
 def test_session_and_health_lifecycle(runtime):
     with TestClient(create_app(settings=SETTINGS, runtime_factory=lambda settings: runtime)) as client:
         session = client.get("/api/v1/session").json()
-        assert session["entity"] == {"id": "alpha", "name": "Alpha"}
+        assert session["entity"] == {"id": "alpha", "name": "Alpha", "currency_code": "USD"}
         assert session["csrf_token"] == "test-csrf"
         assert session["business_creation_available"] is False
         assert client.get("/health/live").json() == {"status": "live"}

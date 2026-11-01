@@ -115,11 +115,12 @@ export function LedgerSetup({ session }: { session: SessionState }) {
           onChange={event => setBusiness(event.target.value)} /></Field>
         <Field id="setup-country" label="Business country and currency"><select id="setup-country" value={country}
           onChange={event => setCountry(event.target.value as 'US' | 'CA')}>
-          <option value="US">United States · USD</option><option value="CA">Canada · CAD (admission on hold)</option>
+          <option value="US">United States · USD</option><option value="CA">Canada · CAD</option>
         </select></Field>
       </> : <>
         <p>{business.trim() ? `Business: ${business.trim()}` : 'Your business was created. Retry to open its ledger.'}</p>
         <Field id="setup-defaults" label="Bookkeeping defaults"><select id="setup-defaults" defaultValue="standard"><option value="standard">Standard basic bookkeeping</option></select></Field>
+        <p>Book currency: {country === 'CA' ? 'CAD' : 'USD'}. Currency is fixed when the business is created and cannot be changed. No conversion is performed.</p>
         <p>Start with the supported chart of accounts and Income/Expense categories. Opening balances start at zero. Review accounts before recording your first transaction.</p>
         <p>Beta receipts require customer-owned Google Drive. Connect Google Drive later from Data &amp; backup, or invite collaborators later from business settings.</p>
         {!attempted && <ActionButton disabled={pending} onClick={() => setStep(1)}>Back</ActionButton>}

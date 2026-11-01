@@ -8,7 +8,7 @@ import { createPrivateCache, resourceKey, useCreateAccount } from './query';
 it('qualifies cache by both server session scope and entity', () => {
   const cache = createPrivateCache();
   cache.setQueryData(resourceKey(session, 'accounts'), { private: 'alpha' });
-  expect(cache.getQueryData(resourceKey({ ...session, entity: { id: 'beta', name: 'Beta' } }, 'accounts'))).toBeUndefined();
+  expect(cache.getQueryData(resourceKey({ ...session, entity: { currency_code: 'USD' as const, id: 'beta', name: 'Beta' } }, 'accounts'))).toBeUndefined();
   expect(cache.getQueryData(resourceKey({ ...session, cache_scope: 'session-2' }, 'accounts'))).toBeUndefined();
   expect(cache.getDefaultOptions().mutations?.retry).toBe(false);
 });
@@ -16,7 +16,7 @@ it('qualifies cache by both server session scope and entity', () => {
 it('invalidates the affected scope after success and uncertain failure, with no automatic save retry', async () => {
   const cache = createPrivateCache();
   const alpha = resourceKey(session, 'accounts');
-  const beta = resourceKey({ ...session, entity: { id: 'beta', name: 'Beta' } }, 'accounts');
+  const beta = resourceKey({ ...session, entity: { currency_code: 'USD' as const, id: 'beta', name: 'Beta' } }, 'accounts');
   cache.setQueryData(alpha, { items: [] });
   cache.setQueryData(beta, { items: [] });
   const create = vi.spyOn(api, 'createAccount').mockRejectedValue(new ApiError('unavailable'));

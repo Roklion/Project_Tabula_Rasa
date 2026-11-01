@@ -64,6 +64,7 @@ class Version(DTO):
 class EntityInfo(DTO):
     id: str
     name: str
+    currency_code: Literal["USD", "CAD"] = "USD"
     organization_id: str | None = None
     organization_name: str | None = None
     role: str | None = None
@@ -80,6 +81,7 @@ class EntityList(DTO):
 class BusinessInfo(DTO):
     id: str
     name: str
+    currency_code: Literal["USD", "CAD"] = "USD"
     role: str | None = None
 
 

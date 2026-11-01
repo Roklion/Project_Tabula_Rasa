@@ -245,6 +245,7 @@ from tabula_rasa.errors import StorageValidationError
 
 class Repository:
     ledger_name = 'Synthetic ledger'
+    ledger_currency = 'USD'
     def __init__(self):
         self.calls = []
     def ensure_defaults(self):

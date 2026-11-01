@@ -1,5 +1,5 @@
 export const session = {
-  actor_id: 'synthetic', organization_id: 'synthetic', entity: { id: 'alpha', name: 'Alpha demonstration' },
+  actor_id: 'synthetic', organization_id: 'synthetic', entity: { currency_code: 'USD', id: 'alpha', name: 'Alpha demonstration' },
   capabilities: ['bookkeeping:read', 'bookkeeping:write', 'bookkeeping:import'], cache_scope: 'core-alpha', csrf_token: 'synthetic', trusted_development: true,
 };
 export const longName = 'Operating account with a deliberately long synthetic label for field and table wrapping';

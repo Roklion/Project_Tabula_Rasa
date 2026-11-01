@@ -73,7 +73,7 @@ for (const scenario of ['success', 'wrong-release', 'wrong-business', 'same-acto
               actor_id: isB && scenario !== 'same-actor-control' ? 'SENTINEL-B' : changedActor ? 'SENTINEL-changed' : 'SENTINEL-A',
               cache_scope: scenario === 'same-session' && index === 1 ? 'SENTINEL-cache-0' : `SENTINEL-cache-${index}`,
               organization_id: isB ? t.controlOrganization : t.organization,
-              entity: { id: scenario === 'wrong-business' ? 'wrong' : isB ? t.controlBusiness : t.business,
+              entity: { currency_code: 'USD', id: scenario === 'wrong-business' ? 'wrong' : isB ? t.controlBusiness : t.business,
                 organization_id: isB ? t.controlOrganization : t.organization, role: 'owner' },
               csrf_token: `SENTINEL-csrf-${index}`, capabilities: [] } });
           };
