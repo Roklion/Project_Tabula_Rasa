@@ -507,3 +507,101 @@ def test_stale_operator_revision_old_session_and_regular_business_roles_cannot_e
     auth.sessions.clock = lambda: previous() + timedelta(minutes=6)
     with pytest.raises(IdentityError, match="reauthentication_required"):
         beta.operate(auth.sessions, raw, {"operation": "inspect"})
+
+
+def test_invitation_deadline_matches_approval_in_inventory_preview_and_acceptance(
+    database, cohort
+):
+    from datetime import timedelta
+
+    _, auth, _, person, _, _, _, command, configure, service, _, admit = cohort
+    configure()
+    _, owner = person("owner")
+    _, guest = person("guest")
+    admission, _, business = admit(owner)
+    command("approve_user", admission_id=admission, user_id=guest.user_id)
+    with database.transaction() as connection:
+        deadline = connection.scalar(
+            text("""UPDATE beta_named_users
+            SET expires_at=clock_timestamp()+interval '30 seconds'
+            WHERE admission_id=:id AND user_id=:user RETURNING expires_at"""),
+            {"id": admission, "user": guest.user_id},
+        )
+    invitation = service.invite(
+        owner, business["organization_id"], guest.verified_email, "read_only"
+    )
+    assert (
+        service.invitations(owner, business["organization_id"])[0]["expires_at"]
+        == deadline
+    )
+    assert (
+        service.preview_invitation(guest, invitation.credential)["expires_at"]
+        == deadline
+    )
+    with database.transaction(read_only=True) as connection:
+        assert (
+            connection.scalar(
+                text("SELECT expires_at FROM workspace_invitations WHERE id=:id"),
+                {"id": invitation.id},
+            )
+            == deadline
+        )
+        assert (
+            connection.scalar(
+                text(
+                    "SELECT expires_at FROM beta_named_users WHERE admission_id=:id AND user_id=:user"
+                ),
+                {"id": admission, "user": guest.user_id},
+            )
+            == deadline
+        )
+    service.repository.clock = lambda: deadline + timedelta(seconds=1)
+    assert (
+        service.invitations(owner, business["organization_id"])[0]["state"] == "expired"
+    )
+    for operation in (
+        lambda: service.preview_invitation(guest, invitation.credential),
+        lambda: service.respond(guest, invitation.credential, True),
+    ):
+        with pytest.raises(IdentityError, match="invitation_expired"):
+            operation()
+    assert auth.sessions.identity.allowed_entities(guest.user_id) == ()
+
+
+def test_named_operator_commands_require_target_and_do_not_audit_silent_withdrawals(
+    database, cohort
+):
+    client, auth, _, person, raw, operator, beta, command, configure, _, _, admit = (
+        cohort
+    )
+    configure()
+    _, owner = person("owner")
+    _, stranger = person("stranger")
+    admission, _, _ = admit(owner)
+    before = beta.operate(auth.sessions, raw, {"operation": "inspect"})
+    with client:
+        client.cookies.set(auth.session_cookie, raw, domain="127.0.0.1", path="/")
+        headers = {
+            "origin": auth.settings.public_origin,
+            "x-csrf-token": operator.csrf_token,
+        }
+        for operation in ("approve_user", "withdraw_user"):
+            body = {
+                "operation": operation,
+                "revision": before["program"]["revision"],
+                "admission_id": admission,
+                "reason": "synthetic",
+                "approval_reference": "synthetic",
+            }
+            for target in ({}, {"user_id": None}, {"user_id": ""}):
+                result = client.post(
+                    "/api/v1/beta/operator", headers=headers, json={**body, **target}
+                )
+                assert (
+                    result.status_code == 422
+                    and result.json()["error"]["code"] == "validation"
+                )
+        with pytest.raises(IdentityError, match="not_found"):
+            command("withdraw_user", admission_id=admission, user_id=stranger.user_id)
+    after = beta.operate(auth.sessions, raw, {"operation": "inspect"})
+    assert after == before

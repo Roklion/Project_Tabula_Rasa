@@ -102,7 +102,7 @@ comparison trims and ignores case without plus-tag or dot rewriting. Stable
 issuer/subject mapping remains the identity key; matching emails never link users.
 
 **Review invitation** first shows the offered business name, stable reference and
-effective role to the verified recipient. Preview is read-only and grants no
+effective role and exact expiration deadline to the verified recipient. Preview is read-only and grants no
 membership or discovery of sibling businesses. Editing the credential discards
 that preview. Accept/decline revalidates all guards and consumes the credential
 once; preview cannot reserve or extend it. Confirmed acceptance selects that
@@ -114,7 +114,8 @@ Only the hash is stored with invitation lifecycle/recipient metadata. The native
 transaction rechecks recipient, current inviter grant authority, expiry and
 pending state, consumes once and creates/reactivates unique membership. An
 existing active membership keeps its role. Concurrent/replayed acceptance grants
-access once; later requests report already used. Expired (48 hours), revoked,
+access once; later requests report already used. Invitations last at most 48 hours;
+beta offers also expire at their approval deadline. Expired, revoked,
 declined, invalid-recipient and reauthentication-required states offer safe
 guidance. On required reauthentication, the form clears the credential; paste it
 again after signing in. Pending invitations confer no discovery or ledger access.
