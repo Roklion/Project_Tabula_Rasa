@@ -13,6 +13,8 @@ import sys
 import time
 from urllib.parse import urlsplit
 
+import requests
+
 from tabula_rasa.http.config import HttpSettings
 from tabula_rasa.infrastructure.oidc import OidcSettings
 
@@ -24,12 +26,15 @@ class ResolverDenied(OSError):
 def _hostname(value):
     if isinstance(value, bytes):
         value = value.decode('ascii')
-    return value.rstrip('.').encode('idna').decode('ascii').lower()
+    return value.rstrip('.').lower()
 
 
 class ResolverGate:
     def __init__(self, issuer, deadline, maximum_seconds):
-        parsed = urlsplit(issuer)
+        # Prepare without sending, using the transport's own IDNA handling.
+        # Python's built-in IDNA codec can select a different DNS hostname.
+        prepared = requests.Request('GET', issuer + '/.well-known/openid-configuration').prepare()
+        parsed = urlsplit(prepared.url)
         self.host = _hostname(parsed.hostname)
         self.port = parsed.port if parsed.port is not None else 443
         if not 1 <= self.port <= 65535 or any(character.isspace() for character in self.host):

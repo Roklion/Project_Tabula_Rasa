@@ -5,8 +5,10 @@ from pathlib import Path
 import subprocess
 import sys
 from unittest.mock import Mock
+from urllib.parse import urlsplit
 
 import pytest
+import requests
 
 from tabula_rasa.http import identity_rehearsal as rehearsal
 
@@ -38,6 +40,22 @@ def test_bindings_preserved_and_matching_normalized(arguments, monkeypatch):
     gate('socket.getaddrinfo', ('other.example.test', 443))
     gate('socket.connect', ('id.example.test', 443))
     assert rehearsal.os.environ['TABULA_RASA_OIDC_ISSUER'] == arguments[3]
+
+
+@pytest.mark.parametrize('issuer', ['https://faß.example', 'https://faß.example:8443',
+                                  'https://xn--fa-hia.example', 'https://[::1]:8443'])
+def test_gate_matches_hostname_prepared_by_requests(arguments, monkeypatch, issuer):
+    monkeypatch.setenv('TABULA_RASA_OIDC_ISSUER', issuer)
+    arguments[3] = issuer
+    gate = rehearsal.prepare(arguments)
+    prepared = requests.Request('GET', issuer + '/.well-known/openid-configuration').prepare()
+    target = urlsplit(prepared.url)
+    port = target.port or 443
+    with pytest.raises(rehearsal.ResolverDenied):
+        gate('socket.getaddrinfo', (target.hostname, port, 0, 0, 0))
+    gate('socket.getaddrinfo', (target.hostname, port + 1, 0, 0, 0))
+    gate('socket.getaddrinfo', ('unrelated.example', port, 0, 0, 0))
+    assert rehearsal.os.environ['TABULA_RASA_OIDC_ISSUER'] == issuer
 
 
 @pytest.mark.parametrize('key,value', [('ENVIRONMENT', 'production'), ('ENVIRONMENT', ''),

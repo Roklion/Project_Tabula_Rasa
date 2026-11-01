@@ -189,8 +189,8 @@ Arguments contain no credentials; fixed diagnostics print no target hostnames,
 callback material or database URLs. Keep actual target bindings in private custody.
 
 The hook denies only `socket.getaddrinfo` for the issuer's normalized hostname
-(IDNA, case and trailing-dot normalization) and effective HTTPS port. Requests
-continues using `trust_env=False`, TLS verification and existing endpoint checks.
+(Requests-prepared IDNA, case and trailing-dot normalization) and effective HTTPS
+port. Requests continues using `trust_env=False`, TLS verification and existing endpoint checks.
 The real discovery failure reaches the unchanged OIDC adapter and login route:
 new login fails closed with `unavailable` / `login_start`; no fallback or session
 issuance is added. Existing durable sessions retain the normal outage policy.
