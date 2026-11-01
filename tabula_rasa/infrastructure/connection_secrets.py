@@ -32,10 +32,34 @@ class ConnectionSecrets:
     @classmethod
     def from_environment(cls, environment):
         directory = environment.get('TABULA_RASA_CONNECTION_SECRETS_DIR', '')
+        database_url = environment.get('TABULA_RASA_CONNECTION_SECRETS_DATABASE_URL', '')
         key = environment.get('TABULA_RASA_CONNECTION_SECRETS_KEY', '')
+        if database_url:
+            if directory:
+                raise IdentityError('unavailable')
+            from .postgres.connection_secrets import PostgresConnectionSecrets
+            return PostgresConnectionSecrets(database_url, key)
         if not directory and not key:
             return None
         return cls(directory, key)
+
+    def _write_ciphertext(self, reference, content):
+        descriptor = os.open(self._path(reference), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, 'wb') as output:
+            output.write(content)
+
+    def _read_ciphertext(self, reference):
+        flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0)
+        descriptor = os.open(self._path(reference, reading=True), flags)
+        try:
+            source = os.fdopen(descriptor, 'rb')
+        except Exception:
+            os.close(descriptor)
+            raise
+        with source:
+            if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
+                raise ValueError
+            return source.read(131073)
 
     def _path(self, reference, *, reading=False):
         if not isinstance(reference, str) or not re.fullmatch('[0-9a-f]{32}', reference):
@@ -62,9 +86,9 @@ class ConnectionSecrets:
             reference = uuid4().hex
         try:
             content = self._cipher.encrypt(json.dumps(payload).encode())
-            descriptor = os.open(self._path(reference), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(descriptor, 'wb') as output:
-                output.write(content)
+            if len(content) > 131072:
+                raise ValueError
+            self._write_ciphertext(reference, content)
             return reference
         except Exception:
             pass
@@ -72,17 +96,9 @@ class ConnectionSecrets:
 
     def get(self, reference, *, environment, organization_id, entity_id, provider):
         try:
-            flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0)
-            descriptor = os.open(self._path(reference, reading=True), flags)
-            try:
-                source = os.fdopen(descriptor, 'rb')
-            except Exception:
-                os.close(descriptor)
-                raise
-            with source:
-                if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
-                    raise ValueError
-                content = source.read(131073)
+            if not isinstance(reference, str) or not re.fullmatch('[0-9a-f]{32}', reference):
+                raise ValueError
+            content = self._read_ciphertext(reference)
             if len(content) > 131072:
                 raise ValueError
             payload = json.loads(self._cipher.decrypt(content))

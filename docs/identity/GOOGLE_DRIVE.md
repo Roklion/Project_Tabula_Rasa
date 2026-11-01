@@ -71,12 +71,15 @@ not authorize live project, consent, credential or hosted-environment changes.
 
    Never commit the filled file. `TABULA_RASA_PUBLIC_ORIGIN` must match the registered
    origin. The secret stays server-side; incomplete/mismatched configuration fails closed.
-6. Inject the existing `TABULA_RASA_CONNECTION_SECRETS_DIR` and environment-specific
-   `TABULA_RASA_CONNECTION_SECRETS_KEY`. Customer OAuth needs a durable private **writable
-   shared volume** across all API replicas. Read-only Render secret-file mounts alone cannot
-   persist grants. Establish approved custody before enabling the feature; no infrastructure
-   purchase is implied. Retain key/ciphertext backups separately. Failed/interrupted
-   registration can leave encrypted unreferenced files for approved inspection; there is
+6. Inject the environment-specific `TABULA_RASA_CONNECTION_SECRETS_KEY` and choose either
+   `TABULA_RASA_CONNECTION_SECRETS_DIR` on a durable private **writable shared volume**,
+   or `TABULA_RASA_CONNECTION_SECRETS_DATABASE_URL` for the
+   [dedicated shared ciphertext backend](CONNECTIONS_AND_CLAIMS.md#shared-encrypted-custody).
+   All replicas need the same selected store/key. Read-only Render secret-file mounts alone
+   cannot persist grants. Preserve existing references/key through the approved copy procedure
+   before switching a configured environment. Establish approved custody before enabling the
+   feature; no infrastructure purchase is implied. Retain key/ciphertext backups separately.
+   Failed/interrupted registration can leave encrypted unreferenced records for inspection; there is
    no automatic deletion. OAuth records/grants are excluded from bookkeeping exports.
 7. Apply forward migrations through the approved deployment procedure before startup.
    Omitting this optional config retains operator-assisted activation and existing grants.
