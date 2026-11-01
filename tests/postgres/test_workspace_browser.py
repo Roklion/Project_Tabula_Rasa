@@ -504,6 +504,7 @@ def test_beta_pending_operator_approval_and_pause_preserve_business(named_server
         page.goto(origin)
         page.get_by_role('link', name='Sign in', exact=True).click()
         expect(page.get_by_role('heading',name='Invitation-only free beta')).to_be_visible()
+        expect(page.get_by_text('New admissions are paused.',exact=False)).to_be_visible()
         page.get_by_role('button',name='Create your first business',exact=True).click()
         page.get_by_label('Business name').fill('Synthetic beta business')
         page.get_by_label('Business country and currency').select_option(country)
@@ -518,6 +519,8 @@ def test_beta_pending_operator_approval_and_pause_preserve_business(named_server
         command('configure',stage='initial',business_cap=3,user_cap=None,
                 creation_paused=False,invitations_paused=False,suspended=False)
         page.reload()
+        expect(page.get_by_role('region',name='Beta enrollment').get_by_text(
+            f'Synthetic beta business: approved. Book currency: {currency}.',exact=True)).to_be_visible()
         page.get_by_role('button',name='Create your first business',exact=True).click()
         expect(page.get_by_text('Enrollment: approved.',exact=False)).to_be_visible()
         page.get_by_label('Business name').fill('Synthetic beta business')

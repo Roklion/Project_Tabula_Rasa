@@ -1127,7 +1127,8 @@ cannot change after creation. Canadian admission requires separate release/cohor
 form preserves the exact request for explicit retry after approval, including
 refresh recovery, and never treats a pending result as successful creation.
 Named collaborators need separate operator approval and retain the existing
-recipient-bound 48-hour invitation/fresh-login workflow. Customer messages explain
+recipient-bound invitation/fresh-login workflow. An invitation lasts at most 48
+hours, cannot outlive its approval, and displays its exact deadline during review. Customer messages explain
 expiry, reapproval, capacity and pauses without exposing private cohort IDs.
 
 Enrollment freezes do not remove existing business selection, membership-derived

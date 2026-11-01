@@ -181,7 +181,8 @@ procedures preserve historical identities, audit records and source artifacts.
 New external businesses and named collaborators require individual operator
 approval. Create Business may record a pending request without creating books;
 keep the original name, country and request, then retry after approval. Offers
-expire after 48 hours and need a new approval/invitation after expiry or withdrawal.
+last up to 48 hours, bounded by their approval deadline shown during review, and
+need a new approval/invitation after expiry or withdrawal.
 An admission pause preserves existing authorized business access and export.
 U.S. books use USD; Canadian books use CAD with a fixed currency selected at creation.
 Canadian enrollment still requires selected-release currency-safe

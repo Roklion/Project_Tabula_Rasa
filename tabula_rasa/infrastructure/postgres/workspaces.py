@@ -187,16 +187,19 @@ class PostgresWorkspaceRepository:
             if not grant_allowed(acting_role, role):
                 raise IdentityError('forbidden')
             grant = beta.invitation_grant(connection, actor, org, email=normalized_email(email))
+            expiry = self.clock() + timedelta(hours=48)
+            if grant:
+                expiry = min(expiry, grant['expires_at'])
             connection.execute(text('''INSERT INTO workspace_invitations
                 (id,credential_hash,organization_id,email_key,role,inviter_id,expires_at)
                 VALUES (:id,:hash,:org,:email,:role,:actor,:expiry)'''),
                 {'id': invitation_id, 'hash': credential_hash(raw), 'org': org, 'email': normalized_email(email),
-                 'role': role, 'actor': actor, 'expiry': self.clock() + timedelta(hours=48)})
+                 'role': role, 'actor': actor, 'expiry': expiry})
             if grant:
                 connection.execute(text("""UPDATE beta_named_users SET state='invited',invitation_id=:invitation,
-                    expires_at=LEAST(expires_at,:expiry),membership_version=(SELECT authorization_version FROM memberships
+                    expires_at=:expiry,membership_version=(SELECT authorization_version FROM memberships
                     WHERE organization_id=:org AND user_id=:user) WHERE admission_id=:id AND user_id=:user"""),
-                    {'invitation':invitation_id,'expiry':self.clock()+timedelta(hours=48),'org':org,
+                    {'invitation':invitation_id,'expiry':expiry,'org':org,
                      'id':grant['admission_id'],'user':grant['user_id']})
                 beta.event(connection,actor,'invited',grant['admission_id'],user_id=grant['user_id'])
         return InvitationCredential(invitation_id, raw)

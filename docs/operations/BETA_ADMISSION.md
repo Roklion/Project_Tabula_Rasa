@@ -111,7 +111,9 @@ business names, approval documents or response inventories.
   `invitations_paused` flags and program `suspended` flag. Program suspension is
   an enrollment freeze, not global authentication or tenant revocation.
 
-Every mutation requires the current `revision`, a reason and an
+Named-user commands require an explicit existing `user_id`; withdrawal of an unknown
+approval fails without recording a successful action. Every mutation requires
+the current `revision`, a reason and an
 `approval_reference`; stale revisions fail. Read the new snapshot before retrying.
 Actor and timestamp come from the server session/database. State and immutable
 event history commit together. Operators must verify a separate written exact

@@ -300,6 +300,10 @@ class PostgresBeta:
                 for v in (reason, approval)
             ):
                 raise IdentityError("validation")
+            if operation in {"approve_user", "withdraw_user"} and not command.get(
+                "user_id"
+            ):
+                raise IdentityError("validation")
             target = command.get("admission_id") or "program"
             if operation == "configure":
                 stage = command["stage"]
@@ -398,12 +402,14 @@ class PostgresBeta:
                         },
                     )
                 elif operation == "withdraw_user":
-                    connection.execute(
+                    withdrawn = connection.scalar(
                         text(
-                            "UPDATE beta_named_users SET state='withdrawn' WHERE admission_id=:id AND user_id=:user"
+                            "UPDATE beta_named_users SET state='withdrawn' WHERE admission_id=:id AND user_id=:user RETURNING user_id"
                         ),
                         {"id": target, "user": command["user_id"]},
                     )
+                    if withdrawn is None:
+                        raise IdentityError("not_found")
                 else:
                     raise IdentityError("validation")
             current = (

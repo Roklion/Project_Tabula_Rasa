@@ -36,6 +36,7 @@ export const receipt = { id: longId, filename: 'synthetic-receipt-with-a-deliber
 
 export function secondaryResponse(url: URL, capabilities = session.capabilities) {
     const path = url.pathname;
+    if (path === '/api/v1/beta/status') return { paused: true, invitations_paused: true, internal: true, requests: [] };
     // Every request stays intercepted. Unmatched reads are empty synthetic lists;
     // mutation tests below replace only the endpoint they explicitly exercise.
     const json = path.endsWith('/session') ? { ...session, capabilities } : path === '/api/v1/businesses' ? { items: [session.entity] }

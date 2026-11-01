@@ -268,3 +268,14 @@ it('keeps Canadian eligibility explicit and reviews the fixed CAD currency', asy
   await screen.findByText(/Enrollment: pending/);
   expect(create.mock.calls[0][1]).toMatchObject({ country: 'CA', currency: 'CAD' });
 });
+
+
+it('shows the server invitation deadline before acceptance', async () => {
+  const expires = '2026-11-02T15:00:00Z';
+  vi.spyOn(api, 'previewInvitation').mockResolvedValue({ business_id: 'invited', business_name: 'Invited books', role: 'read_only', expires_at: expires });
+  render(<InvitationAcceptance session={setup} />);
+  fireEvent.change(screen.getByLabelText('Invitation credential'), { target: { value: 'synthetic-private-invitation' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Review invitation' }));
+  expect(await screen.findByText('Invitation expires: ' + new Date(expires).toLocaleString() + '.')).toBeVisible();
+  expect(screen.getByText(/cannot outlive their approval/)).toBeVisible();
+});
