@@ -20,6 +20,7 @@ from tabula_rasa.http.identity_rehearsal import ResolverGate
 
 ROOT = Path(tempfile.gettempdir())
 server = None
+thread = None
 clients = []
 phase = "source_identity"
 directory = tempfile.TemporaryDirectory(prefix="oidc-loopback-feasibility-", dir=ROOT)
@@ -235,8 +236,11 @@ finally:
     for client in clients:
         client.close()
     if server is not None:
-        server.shutdown()
+        # shutdown() requires a running serve_forever loop; TLS setup can fail
+        # before that loop starts. Always release the bound socket afterward.
+        if thread is not None and thread.is_alive():
+            server.shutdown()
+            thread.join(timeout=2)
         server.server_close()
-        thread.join(timeout=2)
     assert fixture.is_relative_to(ROOT.resolve())
     directory.cleanup()

@@ -119,6 +119,18 @@ def test_real_tls_resolver_boundary_in_fresh_process():
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_tls_setup_failure_exits_without_cleanup_hang():
+    result = subprocess.run([sys.executable, '-c',
+        "import runpy, ssl; from unittest.mock import patch; "
+        "failure = patch.object(ssl.SSLContext, 'load_cert_chain', side_effect=ValueError('synthetic setup failure')); "
+        "failure.start(); runpy.run_module('tests._identity_rehearsal_scenario', run_name='__main__')"],
+        cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True, timeout=10)
+    assert result.returncode == 1
+    assert 'synthetic_TLS_fixture' in result.stdout
+    assert '"error_types": ["ValueError"]' in result.stdout
+    assert not result.stderr
+
+
 def test_normal_startup_does_not_import_rehearsal():
     result = subprocess.run([sys.executable, '-c',
         "import sys; import tabula_rasa.http.serve; "
