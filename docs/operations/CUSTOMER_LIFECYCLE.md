@@ -144,6 +144,17 @@ accidentally fall through to removal.
 
 ## Production and release approval
 
+Provision runtime privileges separately from migration ownership. Named-session
+readers need SELECT on `customer_lifecycle_requests` because access resolution
+checks closure expiry and lifecycle version even when serving other workflows.
+Ledger-writer and worker roles also need that SELECT for the SQL closure guard.
+The lifecycle command adapter additionally needs INSERT/UPDATE on that request
+table, SELECT/INSERT on `customer_lifecycle_events` and USAGE on its identity
+sequence, alongside its existing scoped identity/session privileges. It needs no
+DELETE/TRUNCATE or table ownership. A support-only adapter does not need these
+lifecycle mutation/event grants. The migration grants none automatically; verify
+the approved runtime role with synthetic sessions before exposing the feature.
+
 No real production deletion, provider retention change, archive disposal or legal
 publication is authorized by implementation or migration. Before enabling such
 an operation, the owner and appropriate legal reviewer must approve the applicable
