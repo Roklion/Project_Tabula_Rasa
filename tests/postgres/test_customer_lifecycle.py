@@ -51,6 +51,9 @@ def test_reversible_closure_preserves_rows_exports_and_other_business(database, 
     _, second = auth.sessions.issue(verified('bob'))
     cancelled = PostgresCustomerLifecycle(database).change(second, request['id'], 'cancel', 2)
     assert cancelled['state'] == 'cancelled'
+    assert cancelled['confirmed_at'] == closed['confirmed_at']
+    assert cancelled['recover_until'] == closed['recover_until']
+    assert auth.info(auth.sessions.validate(raw)).cache_scope != fresh.cache_scope
     assert auth.sessions.validate(raw).selected.closure_expires_at is None
     with database.transaction() as c:
         c.execute(text("UPDATE business_entities SET name='Reopened' WHERE id='alpha'"))
@@ -110,6 +113,7 @@ def test_http_csrf_cross_tenant_and_disabled_identity(database, lifecycle):
         body = {'request_id': uuid4().hex, 'kind': 'business_closure', 'entity_id': 'alpha'}
         assert client.post(base, json=body).status_code == 403
         assert client.post(base, json={**body, 'entity_id': 'beta'}, headers=headers).status_code == 403
+        assert client.post(base, json={**body, 'kind': 'privacy_erasure'}, headers=headers).status_code == 422
         response = client.post(base, json=body, headers=headers)
         assert response.status_code == 200 and response.headers['cache-control'] == 'no-store'
         record = response.json()
@@ -122,6 +126,30 @@ def test_http_csrf_cross_tenant_and_disabled_identity(database, lifecycle):
         repo.set_user_state(alice.id, 'disabled')
         assert client.get(base).status_code == 401
     factory.assert_not_called()
+
+
+def test_privacy_cases_are_personal_unique_and_survive_membership_revocation(database, lifecycle):
+    repo, alice, bob, a, _, _, auth, _, _, session, service = lifecycle
+    repo.set_membership(a, bob.id, 'owner')
+    _, other = auth.sessions.issue(verified('bob'))
+    with pytest.raises(IdentityError, match='validation'):
+        service.request(session, uuid4().hex, 'privacy_erasure', 'alpha')
+    with pytest.raises(DatabaseError, match='invariant'), database.transaction() as c:
+        c.execute(text('''INSERT INTO customer_lifecycle_requests(id,requester_id,entity_id,kind,policy_version)
+            VALUES (:id,:actor,'alpha','privacy_erasure','customer-lifecycle-v1')'''),
+            {'id': uuid4().hex, 'actor': alice.id})
+    case = service.request(session, uuid4().hex, 'privacy_erasure')
+    assert service.request(session, case['id'], 'privacy_erasure') == case
+    with pytest.raises(IdentityError, match='duplicate'):
+        service.request(session, uuid4().hex, 'privacy_erasure')
+    assert service.status(other, 'alpha')['requests'] == []
+    for action in ('confirm', 'cancel'):
+        with pytest.raises(IdentityError, match='forbidden'):
+            service.change(other, case['id'], action, 1)
+    repo.set_membership(a, alice.id, 'owner', active=False)
+    assert service.status(session)['requests'][0]['id'] == case['id']
+    assert service.change(session, case['id'], 'confirm', 1)['state'] == 'confirmed'
+    assert service.change(session, case['id'], 'cancel', 2)['state'] == 'cancelled'
 
 
 def test_login_closure_rechecks_last_owner_and_revokes_all_sessions(database, lifecycle):

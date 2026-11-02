@@ -10,7 +10,7 @@ CREATE TABLE customer_lifecycle_requests (
     confirmed_at timestamptz,
     recover_until timestamptz,
     CHECK ((kind='business_closure' AND entity_id IS NOT NULL) OR kind<>'business_closure'),
-    CHECK (kind<>'account_closure' OR entity_id IS NULL),
+    CHECK (kind='business_closure' OR entity_id IS NULL),
     CHECK ((kind='business_closure' AND confirmed_at IS NOT NULL) = (recover_until IS NOT NULL))
 );
 CREATE UNIQUE INDEX one_business_closure ON customer_lifecycle_requests(entity_id)

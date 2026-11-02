@@ -37,6 +37,16 @@ it('allows cancellation in the window and retains expired status with a support 
   expect(screen.getByText(/contact your service operator through your existing private support channel/)).toBeVisible();
 });
 
+it('keeps cancelled closure history without displaying a running recovery deadline', async () => {
+  vi.spyOn(api, 'lifecycleStatus').mockResolvedValue({ ...status, requests: [{ ...record,
+    state: 'cancelled', effective_state: 'cancelled', confirmed_at: '2026-11-02T00:00:00Z',
+    recover_until: '2027-01-01T00:00:00Z' }] });
+  render(<CustomerLifecycle session={session} businessId="alpha" />);
+  expect(await screen.findByText('Cancelled')).toBeVisible();
+  expect(screen.queryByText(/Export\/recovery window ends:/)).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Request business closure' })).toBeEnabled();
+});
+
 it('preserves request identity after an uncertain response and aborts status reads on unmount', async () => {
   const load = vi.spyOn(api, 'lifecycleStatus').mockResolvedValue({ ...status, requests: [] });
   const request = vi.spyOn(api, 'requestLifecycle').mockRejectedValue(new ApiError('unavailable'));

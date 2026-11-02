@@ -80,7 +80,7 @@ export function CustomerLifecycle({ session, businessId }: { session: SessionSta
         <div><strong>{labels[row.kind]}</strong><p role="status">{states[row.effective_state] ?? row.effective_state}</p>
           {row.entity_id && <p>Business reference: <code>{row.entity_id}</code></p>}
           <p>Request reference: <code>{row.id}</code></p>
-          {row.recover_until && <p>Export/recovery window ends: {new Date(row.recover_until).toLocaleString()}</p>}
+          {row.state === 'confirmed' && row.recover_until && <p>Export/recovery window ends: {new Date(row.recover_until).toLocaleString()}</p>}
           {row.kind === 'privacy_erasure' && row.state === 'confirmed' && <p>Awaiting case-specific operator/legal review; no erasure is scheduled.</p>}
           <ul>{row.events.map(event => <li key={event.action}>{event.action} · {new Date(event.occurred_at).toLocaleString()}</li>)}</ul>
           <div className="actions">

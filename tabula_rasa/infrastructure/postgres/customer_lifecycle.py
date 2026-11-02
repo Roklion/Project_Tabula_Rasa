@@ -74,7 +74,7 @@ class PostgresCustomerLifecycle:
 
     def request(self, session, request_id, kind, entity=None):
         require_bootstrap_id(request_id)
-        if kind not in KINDS or kind == 'business_closure' and not entity or kind == 'account_closure' and entity:
+        if kind not in KINDS or kind == 'business_closure' and not entity or kind != 'business_closure' and entity is not None:
             raise IdentityError('validation')
         with identity_operation(self.database) as c:
             self._authorize(c, session, entity, lock=bool(entity))
