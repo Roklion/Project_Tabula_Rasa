@@ -10,8 +10,11 @@ from .repository import EntityRepository, insert
 
 
 class PostgresPeriodRepository(EntityRepository):
-    def gate(self, connection):
-        connection.execute(text('SELECT pg_advisory_xact_lock(336,hashtext(:scope))'), {'scope': self.entity_id})
+    def gate(self, connection, *, shared=False):
+        # Closure must drain period commands before they lock named authority.
+        connection.execute(text('SELECT pg_advisory_xact_lock_shared(346,hashtext(:scope))'), {'scope': self.entity_id})
+        function = 'pg_advisory_xact_lock_shared' if shared else 'pg_advisory_xact_lock'
+        connection.execute(text(f'SELECT {function}(336,hashtext(:scope))'), {'scope': self.entity_id})
 
     def configure(self, *, enabled, reason):
         """Explicit trusted operator only. Existing periods survive disabling."""
@@ -62,7 +65,7 @@ class PostgresPeriodRepository(EntityRepository):
         journal = PostgresJournalRepository(self.database, self.entity_id)
         with self.operation() as connection:
             # Acquire the shared accounting gate before root/reference locks.
-            connection.execute(text('SELECT pg_advisory_xact_lock_shared(336,hashtext(:scope))'), {'scope': self.entity_id})
+            self.gate(connection, shared=True)
             connection.execute(text("SELECT require_period_authority(:scope,'correct')"), {'scope': self.entity_id})
             journal.references(connection, lock=True, entry_ids=[original_entry_id])
             row = journal.get_row(connection, 'entries', original_entry_id)

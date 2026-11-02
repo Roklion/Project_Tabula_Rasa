@@ -2,7 +2,7 @@
 
 from urllib.parse import urlsplit
 
-from tabula_rasa.application.identity import AuthenticatedSession, IdentityError, capabilities
+from tabula_rasa.application.identity import AuthenticatedSession, IdentityError, access_capabilities
 
 from .context import RequestContext
 from .models.common import EntityInfo, SessionInfo, SetupSessionInfo
@@ -32,12 +32,12 @@ class NamedIdentity:
             raise IdentityError("forbidden")
         selected = session.selected
         return RequestContext(session.user_id, selected.organization_id, selected.entity_id,
-                              capabilities(selected.role), self.scope(session), session.csrf_token)
+                              access_capabilities(selected), self.scope(session), session.csrf_token)
 
     @staticmethod
     def scope(session):
         selected = session.selected
-        return session.cache_id + (":" + str(selected.authorization_version) if selected else ":setup")
+        return session.cache_id + (":" + str(selected.authorization_version) + ':' + str(selected.lifecycle_version) if selected else ":setup")
 
     def info(self, session, *, business_creation_available=False):
         common = dict(actor_id=session.user_id, cache_scope=self.scope(session), csrf_token=session.csrf_token,
@@ -49,7 +49,7 @@ class NamedIdentity:
                            entity=EntityInfo(id=selected.entity_id, name=selected.name, currency_code=selected.currency_code,
                                organization_id=selected.organization_id, organization_name=selected.organization_name,
                                role=selected.role),
-                           capabilities=sorted(capabilities(selected.role)))
+                           capabilities=sorted(access_capabilities(selected)), closure_expires_at=selected.closure_expires_at)
 
     def set_cookie(self, response, name, value, max_age):
         response.set_cookie(name, value, max_age=max_age, httponly=True, secure=self.secure,

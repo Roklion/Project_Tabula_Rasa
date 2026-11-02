@@ -25,6 +25,13 @@ are included in provenance validation. The [cutover guide](CUTOVER.md) owns veri
 of this export before authority switching; this export does not replace managed
 backup/PITR.
 
+Revision `0021_customer_lifecycle` adds customer closure requests and their
+minimized transition history outside canonical v1. The 26 financial collections
+and export encoding remain unchanged. During the 60-day closure window an Owner
+can still obtain a handoff; closure requires acknowledgement that needed exports
+were saved. The [lifecycle guide](../operations/CUSTOMER_LIFECYCLE.md) defines access
+expiry and retention; customer exports do not include lifecycle or audit history.
+
 The application-owned export service reads one explicitly selected entity
 through a PostgreSQL adapter, without Sheets access, page initialization or
 document downloads. It does not activate PostgreSQL as a live ledger.

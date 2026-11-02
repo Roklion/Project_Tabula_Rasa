@@ -1,4 +1,5 @@
 from enum import StrEnum
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, model_serializer
@@ -107,6 +108,7 @@ class SessionInfo(DTO):
     csrf_token: str
     trusted_development: bool
     business_creation_available: bool = False
+    closure_expires_at: datetime | None = None
 
 
 class SetupSessionInfo(DTO):

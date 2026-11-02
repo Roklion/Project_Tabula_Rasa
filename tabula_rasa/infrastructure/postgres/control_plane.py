@@ -22,12 +22,19 @@ def identity_operation(database, *, read_only=False):
 
 
 ENTITY_ACCESS_SQL = '''SELECT e.entity_id, e.organization_id, b.name, b.currency_code, m.role,
-    m.authorization_version, o.name AS organization_name FROM organization_entities e
+    m.authorization_version, o.name AS organization_name,
+    (SELECT recover_until FROM customer_lifecycle_requests WHERE entity_id=e.entity_id
+        AND kind='business_closure' AND state='confirmed') AS closure_expires_at,
+    COALESCE((SELECT sum(CASE WHEN confirmed_at IS NOT NULL THEN version ELSE 0 END)::bigint
+        FROM customer_lifecycle_requests WHERE entity_id=e.entity_id
+        AND kind='business_closure'),0) AS lifecycle_version FROM organization_entities e
     JOIN business_entities b ON b.id=e.entity_id
     JOIN organizations o ON o.id=e.organization_id AND o.state='active'
     JOIN memberships m ON m.organization_id=o.id AND m.user_id=:user AND m.state='active'
     JOIN identity_users u ON u.id=m.user_id AND u.state='active'
     WHERE e.state='active'
+    AND NOT EXISTS (SELECT 1 FROM customer_lifecycle_requests closed WHERE closed.entity_id=e.entity_id
+        AND closed.kind='business_closure' AND closed.state='confirmed' AND closed.recover_until<=clock_timestamp())
     AND NOT EXISTS (SELECT 1 FROM organization_entities other
         WHERE other.organization_id=e.organization_id AND other.entity_id<>e.entity_id) '''
 

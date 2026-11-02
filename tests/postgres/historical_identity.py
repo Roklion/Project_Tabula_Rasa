@@ -4,6 +4,8 @@ Normal runtime requires current schema; historical records are seeded directly.
 """
 
 from datetime import datetime, timedelta, timezone
+from contextlib import contextmanager
+from unittest.mock import patch
 from hashlib import sha256
 import json
 import secrets
@@ -18,6 +20,26 @@ from tabula_rasa.infrastructure.postgres.reference_data import (
     PostgresLedgerSetupRepository,
 )
 from tabula_rasa.infrastructure.postgres.sessions import credential_hash
+
+
+@contextmanager
+def historical_access():
+    """Frozen access query only while seeding a pre-lifecycle migration source.
+
+    Current runtime always requires the current schema. Exit before testing the
+    upgraded runtime so new lifecycle authorization is never stubbed there.
+    """
+    query = '''SELECT e.entity_id,e.organization_id,b.name,b.currency_code,m.role,
+        m.authorization_version,o.name AS organization_name FROM organization_entities e
+        JOIN business_entities b ON b.id=e.entity_id
+        JOIN organizations o ON o.id=e.organization_id AND o.state='active'
+        JOIN memberships m ON m.organization_id=o.id AND m.user_id=:user AND m.state='active'
+        JOIN identity_users u ON u.id=m.user_id AND u.state='active'
+        WHERE e.state='active' AND NOT EXISTS (SELECT 1 FROM organization_entities other
+            WHERE other.organization_id=e.organization_id AND other.entity_id<>e.entity_id) '''
+    with patch('tabula_rasa.infrastructure.postgres.control_plane.ENTITY_ACCESS_SQL', query), \
+            patch('tabula_rasa.infrastructure.postgres.workspaces.ENTITY_ACCESS_SQL', query):
+        yield
 
 
 def legacy_business(database, actor, request=None, workspace="Workspace", name=None):

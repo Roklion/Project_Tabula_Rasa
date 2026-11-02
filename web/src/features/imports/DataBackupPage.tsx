@@ -7,6 +7,7 @@ import { MileageImport } from './MileageImport';
 import { FinancialCsvExports } from '../exports/FinancialCsvExports';
 import { CustomerExport } from '../exports/CustomerExport';
 import { ConnectionsPanel } from '../documents/ConnectionsPanel';
+import { CustomerLifecycle } from '../identity/CustomerLifecycle';
 
 export function DataBackupPage() {
   const session = useEntity();
@@ -15,6 +16,8 @@ export function DataBackupPage() {
   return <><PageHeader title="Data & backup" description={<>Imports and downloads for {session.entity.name}.</>} />
     <FinancialCsvExports embedded />
     <CustomerExport />
+    {!session.trusted_development && <CustomerLifecycle key={session.cache_scope + session.entity.id} session={session}
+      businessId={session.entity.role === 'owner' ? session.entity.id : undefined} />}
     {session.capabilities.includes('connections:manage') && !session.trusted_development && <ConnectionsPanel />}
     <UnsavedChanges dirty={transactionDirty || mileageDirty} />
     {['bookkeeping:read', 'bookkeeping:write', 'bookkeeping:import'].every(capability => session.capabilities.includes(capability)) ? <>

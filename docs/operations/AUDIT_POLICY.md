@@ -5,6 +5,11 @@ This contract applies to application-mediated PostgreSQL history described in
 It defines retention and operator access; customer closure, erasure, cleanup and
 audit export require separate policy and implementation.
 
+[Customer lifecycle](CUSTOMER_LIFECYCLE.md) records the owner's desired direction
+of finite audit/lifecycle retention, with the duration left to counsel. This is
+a proposal: the indefinite interim policy, immutable history and no-prune controls
+below remain effective. Business or login closure does not authorize erasure.
+
 ## Decision and approval record
 
 On **2026-10-19**, the repository owner explicitly approved the **interim operator

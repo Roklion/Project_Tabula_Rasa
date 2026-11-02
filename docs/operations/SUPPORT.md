@@ -120,7 +120,10 @@ no grants and changes no tenant role or bookkeeping field.
    forward migration in the approved maintenance window and deploy compatible
    API code. The runtime needs SELECT on support_grants and support_actions,
    INSERT on support_actions and its existing scoped identity/session DML and audit
-   SELECT permissions. Grant no support-grant writes, audit-event writes or table
+   SELECT permissions. Named-session validation also needs SELECT on
+   customer_lifecycle_requests for business closure expiry and private cache scope;
+   support inspection needs no lifecycle mutation or lifecycle-event grant.
+   Grant no support-grant writes, audit-event writes or table
    ownership to the runtime; its support INSERT policy requires the trusted
    entity/operator context. Provisioning uses the separate database administrator.
    Do not treat this documentation as provisioning authorization.
