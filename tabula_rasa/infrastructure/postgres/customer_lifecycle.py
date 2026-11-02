@@ -63,8 +63,9 @@ class PostgresCustomerLifecycle:
             rows = c.execute(text('''SELECT * FROM customer_lifecycle_requests WHERE
                 (entity_id=:entity AND :entity IS NOT NULL) OR
                 (:entity IS NULL AND entity_id IN (SELECT e.entity_id FROM organization_entities e
+                    JOIN organizations o ON o.id=e.organization_id AND o.state='active'
                     JOIN memberships m ON m.organization_id=e.organization_id
-                    WHERE m.user_id=:actor AND m.role='owner' AND m.state='active')) OR
+                    WHERE m.user_id=:actor AND m.role='owner' AND m.state='active' AND e.state='active')) OR
                 (entity_id IS NULL AND requester_id=:actor) ORDER BY created_at,id'''),
                 {'actor': session.user_id, 'entity': entity}).mappings().all()
             return {'policy_version': POLICY_VERSION, 'recovery_days': RECOVERY_WINDOW.days,

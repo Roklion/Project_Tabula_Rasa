@@ -154,6 +154,33 @@ def test_privacy_cases_are_personal_unique_and_survive_membership_revocation(dat
     assert service.change(session, case['id'], 'cancel', 2)['state'] == 'cancelled'
 
 
+@pytest.mark.parametrize('inactive_target', ['organization', 'binding'])
+def test_unselected_status_excludes_inactive_businesses_but_keeps_personal_cases(database, lifecycle, inactive_target):
+    repo, alice, _, org, other_org, _, _, _, _, session, service = lifecycle
+    repo.set_membership(other_org, alice.id, 'owner')
+    closure = service.request(session, uuid4().hex, 'business_closure', 'alpha')
+    other = service.request(session, uuid4().hex, 'business_closure', 'beta')
+    personal = service.request(session, uuid4().hex, 'privacy_erasure')
+    assert {r['id'] for r in service.status(session)['requests']} == {closure['id'], other['id'], personal['id']}
+    with database.transaction() as c:
+        if inactive_target == 'organization':
+            c.execute(text("UPDATE organizations SET state='suspended' WHERE id=:org"), {'org': org})
+        else:
+            c.execute(text("UPDATE organization_entities SET state='inactive' WHERE entity_id='alpha'"))
+    assert {r['id'] for r in service.status(session)['requests']} == {other['id'], personal['id']}
+    with pytest.raises(IdentityError, match='forbidden'):
+        service.status(session, 'alpha')
+    with pytest.raises(IdentityError, match='forbidden'):
+        service.change(session, closure['id'], 'confirm', 1, export_saved=True)
+    assert service.change(session, personal['id'], 'confirm', 1)['state'] == 'confirmed'
+    with database.transaction() as c:
+        if inactive_target == 'organization':
+            c.execute(text("UPDATE organizations SET state='active' WHERE id=:org"), {'org': org})
+        else:
+            c.execute(text("UPDATE organization_entities SET state='active' WHERE entity_id='alpha'"))
+    assert {r['id'] for r in service.status(session)['requests']} == {closure['id'], other['id'], personal['id']}
+
+
 def test_login_closure_rechecks_last_owner_and_revokes_all_sessions(database, lifecycle):
     repo, alice, bob, a, _, _, auth, _, raw, session, service = lifecycle
     repo.set_membership(a, bob.id, 'owner')
