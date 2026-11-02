@@ -3,11 +3,13 @@
 from dataclasses import replace
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
+from threading import Event
+from time import monotonic, sleep
 from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import event, text
 
 from tabula_rasa.application.identity import IdentityError
 from tabula_rasa.infrastructure.postgres.customer_lifecycle import PostgresCustomerLifecycle
@@ -199,6 +201,60 @@ def test_concurrent_confirmation_and_durable_export_boundary(database, lifecycle
         from tabula_rasa.bookkeeping_export.schema import DOMAINS
         guarded = set(c.execute(text("SELECT event_object_table FROM information_schema.triggers WHERE trigger_name='customer_closure_guard'")).scalars())
         assert set(DOMAINS) <= guarded
+
+
+def test_named_period_command_drains_before_business_closure(database, lifecycle):
+    from tabula_rasa.infrastructure.postgres.audit import AuditContext, audit_context
+    from tabula_rasa.infrastructure.postgres.periods import PostgresPeriodRepository
+    from tests.postgres.test_periods import operator
+
+    _, alice, _, _, _, _, _, _, _, session, service = lifecycle
+    periods = PostgresPeriodRepository(database, 'alpha')
+    with operator(database):
+        periods.configure(enabled=True, reason='Adopt control')
+    request = service.request(session, uuid4().hex, 'business_closure', 'alpha')
+    held, release = Event(), Event()
+
+    def pause_after_authority(connection, cursor, statement, parameters, context, executemany):
+        if statement.startswith('SELECT require_period_authority('):
+            held.set()
+            assert release.wait(10)
+
+    def close_period():
+        with audit_context(database, AuditContext('user', alice.id, 'test', 'alpha')):
+            return periods.change('2026-10-01', closed=True, reason='Close month', expected_version=0)
+
+    event.listen(database.engine, 'after_cursor_execute', pause_after_authority)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(close_period)
+            assert held.wait(10)
+            second = pool.submit(service.change, session, request['id'], 'confirm', 1, export_saved=True)
+            try:
+                deadline = monotonic() + 5
+                blocked = False
+                while monotonic() < deadline:
+                    with database.transaction(read_only=True) as c:
+                        blocked = c.scalar(text('''SELECT EXISTS (SELECT 1 FROM pg_locks
+                            WHERE locktype='advisory' AND classid=346 AND NOT granted
+                            AND database=(SELECT oid FROM pg_database WHERE datname=current_database()))'''))
+                    if blocked:
+                        break
+                    sleep(0.01)
+                assert blocked
+                # The closure fence is scoped; another business is still writable.
+                with database.transaction() as c:
+                    c.execute(text("UPDATE business_entities SET name='Still active' WHERE id='beta'"))
+            finally:
+                release.set()
+            assert first.result(timeout=10)['closed']
+            assert second.result(timeout=10)['effective_state'] == 'read_only'
+        with audit_context(database, AuditContext('user', alice.id, 'test', 'alpha')):
+            with pytest.raises(IdentityError, match='forbidden'):
+                periods.change('2026-10-01', closed=False, reason='Too late', expected_version=1)
+    finally:
+        release.set()
+        event.remove(database.engine, 'after_cursor_execute', pause_after_authority)
 
 
 def test_real_http_export_survives_closure_but_not_access_expiry(database):
