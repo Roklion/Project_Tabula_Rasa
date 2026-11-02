@@ -57,6 +57,8 @@ before live use.
 [Incident response](operations/INCIDENT_RESPONSE.md), [secret
 operations](operations/SECRETS.md), [support operations](operations/SUPPORT.md) and
 [controlled drills](operations/INCIDENT_DRILLS.md) define reusable operator procedures.
+[Customer lifecycle](operations/CUSTOMER_LIFECYCLE.md) owns closure, privacy requests
+and the distinction between effective preservation and proposed retention deadlines.
 Keep actual outcomes and gaps in approved evidence custody. [Resource
 retirement](operations/RESOURCE_RETIREMENT.md) requires a fresh private inventory and
 exact-target approval; preserve frozen sources, indefinite NAS retention and recovery

@@ -333,6 +333,11 @@ directory with conservative running/failed health; inspect it with
 `verify --generation GENERATION_NAME` before recording private evidence or
 requesting another run. Do not manually report success from a partial directory.
 
+[Customer lifecycle](CUSTOMER_LIFECYCLE.md) proposes 90 days from creation for
+routine generations, subject to legal, recovery and tooling review. That proposal
+does not change the effective indefinite policy or authorize pruning. Holds,
+frozen-source obligations and required recovery evidence need explicit treatment.
+
 Each successful generation is retained **indefinitely**. There is no expiry,
 pruning, automatic rotation or deletion of retained artifacts. Only the current
 run's transient plaintext is removed after encryption succeeds. Incomplete

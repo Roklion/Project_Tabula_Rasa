@@ -377,6 +377,20 @@ def test_real_pg_dump_restore_retains_audit_archive(database):
     for services in (alpha, beta):
         made = services.transactions.create(transaction_id='same-id', **expense())
         services.transactions.update('same-id', expected=made, amount='20')
+    from tabula_rasa.infrastructure.postgres.control_plane import PostgresIdentityRepository
+    from tabula_rasa.infrastructure.postgres.customer_lifecycle import PostgresCustomerLifecycle
+    from tabula_rasa.infrastructure.postgres.sessions import PostgresSessionRepository
+    from tests.postgres.test_identity import verified
+    identity = PostgresIdentityRepository(database)
+    owner = identity.resolve_user(verified())
+    org = identity.create_organization(owner.id, 'Synthetic retained closure')
+    identity.bind_entity(org, 'alpha')
+    sessions = PostgresSessionRepository(database, 'test', 'a' * 64)
+    sessions.configure()
+    raw, session = sessions.issue(verified())
+    lifecycle = PostgresCustomerLifecycle(database)
+    request = lifecycle.request(session, uuid4().hex, 'business_closure', 'alpha')
+    closure = lifecycle.change(session, request['id'], 'confirm', 1, export_saved=True)
     expected = {scope: capture(database, scope) for scope in ('alpha', 'beta')}
     source_events = {scope: reader(database, scope).query(limit=1000) for scope in expected}
     username = database.engine.url.username
@@ -408,6 +422,11 @@ def test_real_pg_dump_restore_retains_audit_archive(database):
         for scope in expected:
             assert verify(restored, expected[scope], scope)['status'] == 'matched'
             assert reader(restored, scope).query(limit=1000) == source_events[scope]
+        restored_session = PostgresSessionRepository(restored, 'test', 'a' * 64).validate(raw)
+        assert restored_session.selected.closure_expires_at == closure['recover_until']
+        assert PostgresCustomerLifecycle(restored).status(restored_session, 'alpha')['requests'][0] == closure
+        with pytest.raises(DatabaseError, match='forbidden'), restored.transaction() as connection:
+            connection.execute(text("UPDATE business_entities SET name='blocked' WHERE id='alpha'"))
     finally:
         if restored is not None:
             restored.dispose()

@@ -152,6 +152,25 @@ Tenant-owned Google connection status/connect/disconnect are exposed under
 owns their approved provisioning and secret boundary. They never expose raw
 credentials or confer deployment/local administration.
 
+## Customer lifecycle boundary
+
+`GET/POST /api/v1/customer-lifecycle` and
+`POST /api/v1/customer-lifecycle/{request_id}` use the central named-session and
+Origin/CSRF guards independently of selected-ledger access. The lifecycle repository
+rechecks active identity and current business Owner membership at mutation time;
+Admin and foreign-business requests are denied. Personal requests belong to the
+authenticated actor. Confirm/cancel uses recent authentication and a loaded version.
+Login closure rechecks last-active-Owner safety and atomically disables identity,
+revokes sessions and records its transition. It never deletes a provider identity.
+
+Confirmed business closure masks write capabilities, changes private cache scope
+and fences canonical SQL mutations for workers/imports as well as HTTP. Owner
+export and scoped connection recovery remain available during 60 days. Ordinary
+business discovery/selection ends at expiry; lifecycle status remains available
+to active Owners through the independent identity boundary. Disabled/suspended
+access does not bypass authorization for export or recovery; use private support.
+See [the lifecycle policy and recovery procedure](../operations/CUSTOMER_LIFECYCLE.md).
+
 ## Adding an operation and verification
 
 Register an explicit operation ID, exact method, action and entity/identity scope

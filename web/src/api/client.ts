@@ -55,6 +55,12 @@ export function createApi(fetcher: typeof fetch = (...args) => fetch(...args)) {
   const mutationParams = (session: Session, id: string) => ({ params: { path: path(session, id) }, headers: headers(session.csrf_token) });
   const createParams = (session: Session) => ({ ...listParams(session), headers: headers(session.csrf_token) });
   return {
+    lifecycleStatus: (businessId?: string, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
+      '/api/v1/customer-lifecycle', { params: { query: { business_id: businessId } }, signal, headers: headers() }))),
+    requestLifecycle: (s: SessionState, body: Schemas['LifecycleRequest']) => safe(async () => unwrap(await client.POST(
+      '/api/v1/customer-lifecycle', { body, headers: headers(s.csrf_token) }))),
+    changeLifecycle: (s: SessionState, request_id: string, body: Schemas['LifecycleChange']) => safe(async () => unwrap(await client.POST(
+      '/api/v1/customer-lifecycle/{request_id}', { params: { path: { request_id } }, body, headers: headers(s.csrf_token) }))),
     connectionStatus: (s: Session, signal?: AbortSignal) => safe(async () => unwrap(await client.GET(
       '/api/v1/entities/{entity_id}/connections/google-drive', listParams(s, signal)))),
     authorizeDrive: (s: Session, body: Schemas['ConnectionStart']) => safe(async () => unwrap(await client.POST(

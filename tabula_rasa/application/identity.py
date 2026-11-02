@@ -50,6 +50,18 @@ class EntityAccess:
     authorization_version: int
     organization_name: str = ''
     currency_code: str = 'USD'
+    closure_expires_at: datetime | None = None
+    lifecycle_version: int = 0
+
+
+def access_capabilities(access):
+    granted = capabilities(access.role)
+    if access.closure_expires_at is not None:
+        # Freeze bookkeeping while preserving membership/ownership recovery and
+        # security administration under their existing independent rules.
+        return granted - {'bookkeeping:write', 'bookkeeping:import', 'bookkeeping:correct',
+                          'period:close', 'period:unlock'}
+    return granted
 
 
 @dataclass(frozen=True)

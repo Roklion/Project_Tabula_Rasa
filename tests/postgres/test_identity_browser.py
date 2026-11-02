@@ -285,3 +285,52 @@ def test_named_transaction_receipt_logout_then_other_user_has_no_residual_data(n
         for storage in ('localStorage', 'sessionStorage'):
             stored = page.evaluate(f'JSON.stringify(Object.entries({storage}))')
             assert all(value not in stored for value in ('Alice private transaction', 'alice-private.pdf', document))
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+@pytest.mark.parametrize('engine', ['chromium', 'firefox', 'webkit'])
+def test_customer_closure_export_cancel_and_expired_status(named_server, database, native_browser, width, engine):
+    from sqlalchemy import text
+    origin, _, _, _, _, _, claims, _ = named_server
+    claims['auth_time'] = int(time())
+    with native_browser(engine) as browser:
+        context = browser.new_context(viewport={'width': width, 'height': 1000})
+        configure_login(context, origin, claims)
+        page = context.new_page()
+        page.goto(origin)
+        page.get_by_role('link', name='Sign in', exact=True).click()
+        expect(page.get_by_role('button', name='Sign out', exact=True)).to_be_visible()
+        page.goto(origin + '/data')
+        page.get_by_role('button', name='Request business closure', exact=True).click()
+        page.get_by_role('button', name='Review and confirm business closure', exact=True).click()
+        dialog = page.get_by_role('alertdialog')
+        expect(dialog.get_by_role('button', name='Confirm request')).to_be_disabled()
+        expect(dialog).to_contain_text('alpha')
+        dialog.get_by_role('checkbox').check()
+        dialog.get_by_role('button', name='Confirm request').click()
+        expect(page.get_by_text('Business closure is in progress.', exact=False)).to_be_visible()
+        page.goto(origin + '/data')
+        expect(page.get_by_text('Read-only export/recovery window', exact=True)).to_be_visible()
+        page.get_by_label('Archive scope').select_option('metadata_only')
+        with page.expect_download() as download:
+            page.get_by_role('button', name='Download handoff ZIP', exact=True).click()
+        assert download.value.failure() is None
+        assert_accessible(page)
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        page.get_by_role('button', name='Cancel business closure', exact=True).click()
+        page.get_by_role('alertdialog').get_by_role('button', name='Cancel request').click()
+        expect(page.get_by_text('Business closure is in progress.', exact=False)).to_have_count(0)
+        page.goto(origin + '/data')
+        page.get_by_role('button', name='Request business closure', exact=True).click()
+        page.get_by_role('button', name='Review and confirm business closure', exact=True).click()
+        dialog = page.get_by_role('alertdialog')
+        dialog.get_by_role('checkbox').check()
+        dialog.get_by_role('button', name='Confirm request').click()
+        expect(page.get_by_text('Business closure is in progress.', exact=False)).to_be_visible()
+        with database.transaction() as c:
+            c.execute(text("UPDATE customer_lifecycle_requests SET recover_until=clock_timestamp()-interval '1 second' WHERE state='confirmed' AND entity_id='alpha'"))
+        page.reload()
+        expect(page.get_by_text('Access ended; data retained', exact=True)).to_be_visible()
+        expect(page.get_by_role('button', name='Cancel business closure', exact=True)).to_have_count(0)
+        assert context.request.get(origin + '/api/v1/entities/alpha/accounts').status == 403
+        assert_accessible(page)

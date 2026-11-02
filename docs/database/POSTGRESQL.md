@@ -781,3 +781,14 @@ and append-only event history. It preserves canonical bookkeeping/export v1,
 existing memberships and separately operated internal owners. Follow
 [beta admission](../operations/BETA_ADMISSION.md) for inventory, synthetic staging,
 operator commands, compatible rollback and the separate release handoff.
+
+## Customer lifecycle control plane
+
+Forward revision `0021_customer_lifecycle` follows `0020_book_currency`. It adds
+customer requests and immutable transition events without changing the 26-collection
+financial export. Confirmed business closure fences canonical SQL writes and affects
+named discovery/capabilities; no ledger is deleted and no provider is contacted by
+the migration. Existing businesses stay active until an Owner explicitly confirms
+closure. Back up the full control plane with the ledger; restoring bookkeeping v1
+alone cannot restore closure/access decisions. See [customer lifecycle](../operations/CUSTOMER_LIFECYCLE.md)
+for exact access windows, support recovery, policy proposals and manual approval.

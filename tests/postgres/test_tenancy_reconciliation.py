@@ -23,6 +23,7 @@ from tabula_rasa.infrastructure.postgres.workspaces import PostgresWorkspaceRepo
 from tests.postgres._support import entity, simple_entry
 from tests.postgres.test_business_tenancy import old_schema
 from tests.postgres.test_identity import verified
+from tests.postgres.historical_identity import historical_access
 
 
 @pytest.fixture
@@ -35,9 +36,10 @@ def source(empty_database, tmp_path):
             CREATE ROLE tabula_staging_runtime LOGIN; END IF; END $$"""))
     sessions = PostgresSessionRepository(db, 'staging', 'a' * 64)
     sessions.configure()
-    raw, owner = sessions.issue(verified('owner'))
-    _, recipient = sessions.issue(verified('recipient'))
-    _, peer = sessions.issue(verified('peer'))
+    with historical_access():
+        raw, owner = sessions.issue(verified('owner'))
+        _, recipient = sessions.issue(verified('recipient'))
+        _, peer = sessions.issue(verified('peer'))
     repository = PostgresIdentityRepository(db)
     service = WorkspaceService(PostgresWorkspaceRepository(db))
     from tests.postgres.historical_identity import legacy_business, legacy_invitation
@@ -49,7 +51,8 @@ def source(empty_database, tmp_path):
         connection.execute(text("UPDATE workspace_invitations SET state='accepted',responded_by=:user WHERE id=:id"),
                            {'user':recipient.user_id,'id':invitation.id})
     repository.set_membership(a1['organization_id'], recipient.user_id, 'read_only', active=False)
-    sessions.select(raw, a1['entity_id'])
+    with historical_access():
+        sessions.select(raw, a1['entity_id'])
     key, moved = uuid4().hex, uuid4().hex
     payload = sha256(json.dumps(['Org A', 'A2', a1['organization_id']]).encode()).hexdigest()
     byte_files = {}
@@ -110,14 +113,15 @@ def test_atomic_reconciliation_preserves_scope_provenance_and_upgrades(source, t
     with pytest.raises(ReconciliationError):
         apply(db, plan, approval=approval, writers_drained=True)
     assert {p: p.read_bytes() for p in byte_files} == byte_files
-    assert [a.entity_id for a in repo.allowed_entities(recipient.user_id)] == []
-    assert {a.entity_id for a in repo.allowed_entities(owner.user_id)} == {args['retained_entity'], args['moved_entity']}
-    assert {a.entity_id for a in repo.allowed_entities(peer.user_id)} == {b1['entity_id']}
     result = dict(state='ready', organization_id=args['destination_org'], entity_id=args['moved_entity'])
-    assert service.bootstrap_status(owner, key) == result
+    with historical_access():
+        assert [a.entity_id for a in repo.allowed_entities(recipient.user_id)] == []
+        assert {a.entity_id for a in repo.allowed_entities(owner.user_id)} == {args['retained_entity'], args['moved_entity']}
+        assert {a.entity_id for a in repo.allowed_entities(peer.user_id)} == {b1['entity_id']}
+        assert service.bootstrap_status(owner, key) == result
     upgrade(db)
     assert service.bootstrap(owner, key, 'Org A', 'A2', a1['organization_id']) == result
-    assert db.health()['revision'] == '0020_book_currency'
+    assert db.health()['revision'] == '0021_customer_lifecycle'
     assert service.bootstrap_status(owner, key) == result
     assert {p: p.read_bytes() for p in byte_files} == byte_files
     # Keep another active Owner in A1 so its original owner can legitimately

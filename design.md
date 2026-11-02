@@ -638,6 +638,25 @@ there is no retained archive or reusable link. Navigation/business changes abort
 the pending browser download. Editor and Read-only see the full-export capability
 requirement and retain ordinary CSV downloads.
 
+**Current behavior — customer lifecycle:** Data & backup exposes separate
+business closure, personal login closure and privacy-review requests. Only a
+current active Owner can request or confirm business closure. The impact review
+identifies the business, requires saved-export acknowledgement and recent sign-in,
+and starts a 60-day read-only window. The Owner retains handoff and cancellation;
+any current active Owner may cancel with recent sign-in during that window.
+At expiry ordinary business access ends; data remains retained and support review
+is required. Bookkeeping mutations are also fenced in PostgreSQL, including workers.
+Request identity, versions and immutable transition events support explicit retry
+and restart. Account confirmation immediately disables the local login and revokes
+its sessions, without deleting provider identity, businesses or history. Last-active-
+Owner checks run both when requesting and confirming account closure. Privacy
+erasure only requests case-specific review. Requests/status remain available to
+authenticated users without a selected business; disabled users receive support
+guidance. No deletion, archive pruning or formal hold tooling is enabled.
+The [lifecycle policy](docs/operations/CUSTOMER_LIFECYCLE.md) separates effective
+preservation from proposed 90-day live-data/backup deadlines and unresolved legal
+decisions; public legal publication and customer release remain separate gates.
+
 **Current behavior — existing workflow ports :** Data &
 backup contains separate Tabula Rasa CSV, QuickBooks transaction and QuickBooks
 mileage uploaders, scoped to the selected business. Uploaders require read, write
