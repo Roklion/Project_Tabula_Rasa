@@ -344,6 +344,8 @@ def test_onboarding_invitee_joins_existing_workspace_without_new_ownership(named
         peer = context.new_page()
         peer.add_init_script("Object.defineProperty(document, 'visibilityState', {get: () => 'hidden'})")
         peer.goto(origin)
+        # Settle the asynchronous notice before clicking a button below it.
+        expect(peer.get_by_text('New admissions are paused.', exact=False)).to_be_visible()
         peer.get_by_role('button', name='Create your first business', exact=True).click()
         peer.get_by_label('Business name').fill('Unsubmitted invitee draft')
         page.bring_to_front()
