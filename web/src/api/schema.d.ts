@@ -106,6 +106,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/beta/operator": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Beta Operator */
+        post: operations["beta_operator"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/beta/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Beta Status */
+        get: operations["beta_status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/businesses": {
         parameters: {
             query?: never;
@@ -2154,10 +2188,104 @@ export interface components {
             /** Total Liabilities */
             total_liabilities: string;
         };
+        /** BetaOperatorCommand */
+        BetaOperatorCommand: {
+            /** Admission Id */
+            admission_id?: string | null;
+            /**
+             * Approval Reference
+             * @default
+             */
+            approval_reference: string;
+            /**
+             * Business Cap
+             * @default 3
+             */
+            business_cap: number;
+            /**
+             * Creation Paused
+             * @default true
+             */
+            creation_paused: boolean;
+            /**
+             * Invitations Paused
+             * @default true
+             */
+            invitations_paused: boolean;
+            /**
+             * Operation
+             * @enum {string}
+             */
+            operation: "inspect" | "configure" | "approve" | "approve_user" | "deny" | "withdraw" | "suspend" | "resume" | "close" | "withdraw_user";
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /** Revision */
+            revision?: number | null;
+            /**
+             * Stage
+             * @default initial
+             * @enum {string}
+             */
+            stage: "initial" | "expanded";
+            /**
+             * Suspended
+             * @default false
+             */
+            suspended: boolean;
+            /** User Cap */
+            user_cap?: number | null;
+            /** User Id */
+            user_id?: string | null;
+        };
+        /** BetaRequestStatus */
+        BetaRequestStatus: {
+            /** Business Name */
+            business_name: string;
+            /**
+             * Country
+             * @enum {string}
+             */
+            country: "US" | "CA";
+            /**
+             * Currency
+             * @enum {string}
+             */
+            currency: "USD" | "CAD";
+            /** Request Id */
+            request_id: string;
+            /** State */
+            state: string;
+        };
+        /** BetaStatus */
+        BetaStatus: {
+            /** Internal */
+            internal: boolean;
+            /** Invitations Paused */
+            invitations_paused: boolean;
+            /** Paused */
+            paused: boolean;
+            /** Requests */
+            requests: components["schemas"]["BetaRequestStatus"][];
+        };
         /** BootstrapRequest */
         BootstrapRequest: {
             /** Business Name */
             business_name: string;
+            /**
+             * Country
+             * @default US
+             * @enum {string}
+             */
+            country: "US" | "CA";
+            /**
+             * Currency
+             * @default USD
+             * @enum {string}
+             */
+            currency: "USD" | "CAD";
             /** Request Id */
             request_id: string;
             /** Workspace Name */
@@ -2173,12 +2301,24 @@ export interface components {
              * State
              * @enum {string}
              */
-            state: "not_started" | "ready";
+            state: "not_started" | "pending" | "approved" | "expired" | "denied" | "withdrawn" | "suspended" | "closed" | "active" | "ready";
         };
         /** BusinessCreateRequest */
         BusinessCreateRequest: {
             /** Business Name */
             business_name: string;
+            /**
+             * Country
+             * @default US
+             * @enum {string}
+             */
+            country: "US" | "CA";
+            /**
+             * Currency
+             * @default USD
+             * @enum {string}
+             */
+            currency: "USD" | "CAD";
             /** Request Id */
             request_id: string;
         };
@@ -2190,7 +2330,7 @@ export interface components {
              * State
              * @enum {string}
              */
-            state: "not_started" | "ready";
+            state: "not_started" | "pending" | "approved" | "expired" | "denied" | "withdrawn" | "suspended" | "closed" | "active" | "ready";
         };
         /** BusinessInfo */
         BusinessInfo: {
@@ -2406,7 +2546,7 @@ export interface components {
          * ErrorCode
          * @enum {string}
          */
-        ErrorCode: "validation" | "not_found" | "conflict" | "period_closed" | "duplicate" | "reference" | "invariant" | "required" | "baseline_required" | "baseline_invalid" | "stale" | "concurrent_write" | "unauthorized" | "forbidden" | "unavailable" | "unexpected" | "method_not_allowed" | "reauthentication_required" | "invitation_invalid" | "invitation_used" | "invitation_expired";
+        ErrorCode: "beta_pending" | "beta_paused" | "beta_capacity" | "beta_eligibility" | "validation" | "not_found" | "conflict" | "period_closed" | "duplicate" | "reference" | "invariant" | "required" | "baseline_required" | "baseline_invalid" | "stale" | "concurrent_write" | "unauthorized" | "forbidden" | "unavailable" | "unexpected" | "method_not_allowed" | "reauthentication_required" | "invitation_invalid" | "invitation_used" | "invitation_expired";
         /** ErrorDetail */
         ErrorDetail: {
             code: components["schemas"]["ErrorCode"];
@@ -4407,6 +4547,176 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Identity required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Operation denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Duplicate or concurrent change */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Transport or domain validation */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unexpected failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    beta_operator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BetaOperatorCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Identity required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Operation denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Duplicate or concurrent change */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Transport or domain validation */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unexpected failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    beta_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BetaStatus"];
+                };
             };
             /** @description Identity required */
             401: {

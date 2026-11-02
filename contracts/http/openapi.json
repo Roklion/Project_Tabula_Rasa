@@ -1267,6 +1267,198 @@
         "title": "BalanceSheet",
         "type": "object"
       },
+      "BetaOperatorCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "admission_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admission Id"
+          },
+          "approval_reference": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Approval Reference",
+            "type": "string"
+          },
+          "business_cap": {
+            "default": 3,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Business Cap",
+            "type": "integer"
+          },
+          "creation_paused": {
+            "default": true,
+            "title": "Creation Paused",
+            "type": "boolean"
+          },
+          "invitations_paused": {
+            "default": true,
+            "title": "Invitations Paused",
+            "type": "boolean"
+          },
+          "operation": {
+            "enum": [
+              "inspect",
+              "configure",
+              "approve",
+              "approve_user",
+              "deny",
+              "withdraw",
+              "suspend",
+              "resume",
+              "close",
+              "withdraw_user"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Reason",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "stage": {
+            "default": "initial",
+            "enum": [
+              "initial",
+              "expanded"
+            ],
+            "title": "Stage",
+            "type": "string"
+          },
+          "suspended": {
+            "default": false,
+            "title": "Suspended",
+            "type": "boolean"
+          },
+          "user_cap": {
+            "anyOf": [
+              {
+                "maximum": 20.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Cap"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          }
+        },
+        "required": [
+          "operation"
+        ],
+        "title": "BetaOperatorCommand",
+        "type": "object"
+      },
+      "BetaRequestStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "business_name": {
+            "title": "Business Name",
+            "type": "string"
+          },
+          "country": {
+            "enum": [
+              "US",
+              "CA"
+            ],
+            "title": "Country",
+            "type": "string"
+          },
+          "currency": {
+            "enum": [
+              "USD",
+              "CAD"
+            ],
+            "title": "Currency",
+            "type": "string"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "business_name",
+          "country",
+          "currency",
+          "state"
+        ],
+        "title": "BetaRequestStatus",
+        "type": "object"
+      },
+      "BetaStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "internal": {
+            "title": "Internal",
+            "type": "boolean"
+          },
+          "invitations_paused": {
+            "title": "Invitations Paused",
+            "type": "boolean"
+          },
+          "paused": {
+            "title": "Paused",
+            "type": "boolean"
+          },
+          "requests": {
+            "items": {
+              "$ref": "#/components/schemas/BetaRequestStatus"
+            },
+            "title": "Requests",
+            "type": "array"
+          }
+        },
+        "required": [
+          "paused",
+          "invitations_paused",
+          "internal",
+          "requests"
+        ],
+        "title": "BetaStatus",
+        "type": "object"
+      },
       "BootstrapRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1274,6 +1466,24 @@
             "maxLength": 160,
             "minLength": 1,
             "title": "Business Name",
+            "type": "string"
+          },
+          "country": {
+            "default": "US",
+            "enum": [
+              "US",
+              "CA"
+            ],
+            "title": "Country",
+            "type": "string"
+          },
+          "currency": {
+            "default": "USD",
+            "enum": [
+              "USD",
+              "CAD"
+            ],
+            "title": "Currency",
             "type": "string"
           },
           "request_id": {
@@ -1326,6 +1536,14 @@
           "state": {
             "enum": [
               "not_started",
+              "pending",
+              "approved",
+              "expired",
+              "denied",
+              "withdrawn",
+              "suspended",
+              "closed",
+              "active",
               "ready"
             ],
             "title": "State",
@@ -1345,6 +1563,24 @@
             "maxLength": 160,
             "minLength": 1,
             "title": "Business Name",
+            "type": "string"
+          },
+          "country": {
+            "default": "US",
+            "enum": [
+              "US",
+              "CA"
+            ],
+            "title": "Country",
+            "type": "string"
+          },
+          "currency": {
+            "default": "USD",
+            "enum": [
+              "USD",
+              "CAD"
+            ],
+            "title": "Currency",
             "type": "string"
           },
           "request_id": {
@@ -1379,6 +1615,14 @@
           "state": {
             "enum": [
               "not_started",
+              "pending",
+              "approved",
+              "expired",
+              "denied",
+              "withdrawn",
+              "suspended",
+              "closed",
+              "active",
               "ready"
             ],
             "title": "State",
@@ -2013,6 +2257,10 @@
       },
       "ErrorCode": {
         "enum": [
+          "beta_pending",
+          "beta_paused",
+          "beta_capacity",
+          "beta_eligibility",
           "validation",
           "not_found",
           "conflict",
@@ -6150,6 +6398,196 @@
         "summary": "Revoke All",
         "tags": [
           "Authentication"
+        ]
+      }
+    },
+    "/api/v1/beta/operator": {
+      "post": {
+        "operationId": "beta_operator",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BetaOperatorCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Beta Operator",
+        "tags": [
+          "Business access"
+        ]
+      }
+    },
+    "/api/v1/beta/status": {
+      "get": {
+        "operationId": "beta_status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BetaStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Identity required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Operation denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Duplicate or concurrent change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Transport or domain validation"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unexpected failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Beta Status",
+        "tags": [
+          "Business access"
         ]
       }
     },

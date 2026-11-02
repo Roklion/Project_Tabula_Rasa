@@ -156,12 +156,12 @@ def test_shared_production_factory_validates_all_bindings_and_preserves_request_
 
 def test_native_workspace_bootstrap_remains_available_for_independent_users(monkeypatch):
     runtime = PostgresRuntime(Mock(), Mock(), service_factory=Mock(), identity=Mock())
-    bootstrap = Mock(side_effect=lambda actor, *args: {'state': 'ready', 'entity_id': actor})
+    bootstrap = Mock(side_effect=lambda actor, *args, **kwargs: {'state': 'ready', 'entity_id': actor})
     monkeypatch.setattr(runtime.workspaces.repository, 'bootstrap', bootstrap)
     for actor in ('alpha', 'beta'):
         assert runtime.workspaces.bootstrap(SimpleNamespace(user_id=actor), 'request-' + actor,
                                              'Workspace', 'Business') == {'state': 'ready', 'entity_id': actor}
-        bootstrap.assert_called_with(actor, 'request-' + actor, 'Workspace', 'Business', None)
+        bootstrap.assert_called_with(actor, 'request-' + actor, 'Workspace', 'Business', None, country='US', currency='USD')
 
 
 @pytest.mark.parametrize('mismatch', ['database', 'environment'])

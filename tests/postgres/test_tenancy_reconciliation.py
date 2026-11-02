@@ -40,10 +40,14 @@ def source(empty_database, tmp_path):
     _, peer = sessions.issue(verified('peer'))
     repository = PostgresIdentityRepository(db)
     service = WorkspaceService(PostgresWorkspaceRepository(db))
-    a1 = service.bootstrap(owner, uuid4().hex, 'Org A', 'A1')
-    b1 = service.bootstrap(peer, uuid4().hex, 'Org B', 'B1')
-    invitation = service.invite(owner, a1['organization_id'], recipient.verified_email, 'read_only')
-    service.respond(recipient, invitation.credential, True)
+    from tests.postgres.historical_identity import legacy_business, legacy_invitation
+    a1 = legacy_business(db, owner, workspace='Org A', name='A1')
+    b1 = legacy_business(db, peer, workspace='Org B', name='B1')
+    invitation = legacy_invitation(db, owner, a1['organization_id'], recipient.verified_email, 'read_only')
+    repository.set_membership(a1['organization_id'], recipient.user_id, 'read_only')
+    with db.transaction() as connection:
+        connection.execute(text("UPDATE workspace_invitations SET state='accepted',responded_by=:user WHERE id=:id"),
+                           {'user':recipient.user_id,'id':invitation.id})
     repository.set_membership(a1['organization_id'], recipient.user_id, 'read_only', active=False)
     sessions.select(raw, a1['entity_id'])
     key, moved = uuid4().hex, uuid4().hex
@@ -110,10 +114,10 @@ def test_atomic_reconciliation_preserves_scope_provenance_and_upgrades(source, t
     assert {a.entity_id for a in repo.allowed_entities(owner.user_id)} == {args['retained_entity'], args['moved_entity']}
     assert {a.entity_id for a in repo.allowed_entities(peer.user_id)} == {b1['entity_id']}
     result = dict(state='ready', organization_id=args['destination_org'], entity_id=args['moved_entity'])
-    assert service.bootstrap(owner, key, 'Org A', 'A2', a1['organization_id']) == result
     assert service.bootstrap_status(owner, key) == result
     upgrade(db)
-    assert db.health()['revision'] == '0018_drive_oauth'
+    assert service.bootstrap(owner, key, 'Org A', 'A2', a1['organization_id']) == result
+    assert db.health()['revision'] == '0019_beta_admission'
     assert service.bootstrap_status(owner, key) == result
     assert {p: p.read_bytes() for p in byte_files} == byte_files
     # Keep another active Owner in A1 so its original owner can legitimately

@@ -77,11 +77,11 @@ ROUTE_POLICIES = MappingProxyType({
     'list_entities': RoutePolicy('GET', 'read', 'identity'),
     'list_businesses': RoutePolicy('GET', 'read', 'identity'),
     **{name: RoutePolicy('GET', 'session', 'identity') for name in (
-        'bootstrap_status', 'business_creation_status', 'list_members', 'list_invitations',
+        'beta_status', 'bootstrap_status', 'business_creation_status', 'list_members', 'list_invitations',
         'business_members', 'business_invitations',
     )},
     **{name: RoutePolicy('POST', 'session', 'identity') for name in (
-        'create_business', 'bootstrap_workspace', 'bootstrap_business', 'create_invitation', 'respond_invitation', 'grant_ownership',
+        'beta_operator', 'create_business', 'bootstrap_workspace', 'bootstrap_business', 'create_invitation', 'respond_invitation', 'grant_ownership',
         'business_invite', 'business_grant_ownership', 'preview_invitation',
     )},
     'change_member': RoutePolicy('PATCH', 'session', 'identity'),

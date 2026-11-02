@@ -19,6 +19,8 @@ def verified(subject='alice', issuer='https://id.example.test', now=None):
 def setup(database):
     repo = PostgresIdentityRepository(database)
     alice, bob = repo.resolve_user(verified()), repo.resolve_user(verified('bob'))
+    from tests.postgres.test_workspaces import approve_internal
+    approve_internal(database, alice.id, bob.id)
     a, b = repo.create_organization(alice.id, 'A'), repo.create_organization(bob.id, 'B')
     with database.transaction() as connection:
         entity(connection, 'alpha')

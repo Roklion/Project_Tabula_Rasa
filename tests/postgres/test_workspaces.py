@@ -19,11 +19,20 @@ from tests.postgres.test_identity import verified
 from tests.postgres.test_identity_http import client_for
 
 
+def approve_internal(database, *users):
+    with database.transaction() as connection:
+        if connection.scalar(text("SELECT to_regclass('beta_internal_users')")) is None:
+            return
+        for user in users:
+            connection.execute(text("INSERT INTO beta_internal_users(user_id,approval_reference) VALUES (:user,'synthetic-internal') ON CONFLICT DO NOTHING"), {'user':user})
+
+
 def context(database, subject='alice', email=None):
     sessions = PostgresSessionRepository(database, 'test', 'a' * 64)
     sessions.configure()
     identity = replace(verified(subject), email=email or subject + '@example.test')
     raw, session = sessions.issue(identity)
+    approve_internal(database, session.user_id)
     return sessions, raw, session
 
 
@@ -189,6 +198,7 @@ def test_workspace_http_setup_csrf_foreign_scope_and_secret_safe_errors(database
     caplog.set_level(logging.INFO, logger='tabula_rasa.http')
     client, auth, factory = client_for(database)
     raw, session = auth.sessions.issue(replace(verified(), email='alice@example.test'))
+    approve_internal(database, session.user_id)
     with client:
         client.cookies.set(auth.session_cookie, raw, domain='127.0.0.1', path='/')
         headers = {'origin': auth.settings.public_origin, 'x-csrf-token': session.csrf_token}
@@ -318,6 +328,7 @@ def test_business_only_http_contract_and_independent_owner_access(database):
     client, auth, _ = client_for(database)
     raw, alice = auth.sessions.issue(replace(verified(), email='alice@example.test'))
     _, bob = auth.sessions.issue(replace(verified('bob'), email='bob@example.test'))
+    approve_internal(database, alice.user_id, bob.user_id)
     repo = PostgresIdentityRepository(database)
     service = WorkspaceService(PostgresWorkspaceRepository(database))
     with client:

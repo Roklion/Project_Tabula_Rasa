@@ -102,7 +102,7 @@ comparison trims and ignores case without plus-tag or dot rewriting. Stable
 issuer/subject mapping remains the identity key; matching emails never link users.
 
 **Review invitation** first shows the offered business name, stable reference and
-effective role to the verified recipient. Preview is read-only and grants no
+effective role and exact expiration deadline to the verified recipient. Preview is read-only and grants no
 membership or discovery of sibling businesses. Editing the credential discards
 that preview. Accept/decline revalidates all guards and consumes the credential
 once; preview cannot reserve or extend it. Confirmed acceptance selects that
@@ -114,7 +114,8 @@ Only the hash is stored with invitation lifecycle/recipient metadata. The native
 transaction rechecks recipient, current inviter grant authority, expiry and
 pending state, consumes once and creates/reactivates unique membership. An
 existing active membership keeps its role. Concurrent/replayed acceptance grants
-access once; later requests report already used. Expired (48 hours), revoked,
+access once; later requests report already used. Invitations last at most 48 hours;
+beta offers also expire at their approval deadline. Expired, revoked,
 declined, invalid-recipient and reauthentication-required states offer safe
 guidance. On required reauthentication, the form clears the credential; paste it
 again after signing in. Pending invitations confer no discovery or ledger access.
@@ -130,7 +131,8 @@ invitations remain available there; bootstrap status remains a read-only lookup.
 Authenticated named users, including users without memberships and Read-only
 members of another business, can call `POST /api/v1/businesses` with `request_id`
 (16–128 ASCII letters, digits, underscores or hyphens, one recoverable URL segment)
-and `business_name` (required, trimmed, at most 160 characters). The server creates
+and `business_name` (required, trimmed, at most 160 characters), plus country/currency
+(default US/USD; Canada/CAD remains held). After required external admission approval, the server creates
 a new private backing organization, grants the acting user Owner and creates one
 canonical business. There is no workspace-name field, existing-organization selector,
 caller-supplied owner/entity ID or implicit copy of other members. The result exposes
@@ -139,7 +141,8 @@ Income/Expense categories; opening balances start at zero. No new tax/currency o
 default-accounting logic is introduced.
 
 `POST /api/v1/workspaces/bootstrap` remains deprecated compatibility for older
-callers with `workspace_name` and `business_name`; it always creates a new container.
+callers with `workspace_name` and `business_name`; it applies the same admission guard
+and always uses a new container once approved.
 The deprecated `/api/v1/workspaces/{organization_id}/businesses` rejects new additions,
 even for Owners, while permitting authorized exact replay of historical receipts.
 Internal organization/schema names remain implementation details. Existing
@@ -152,10 +155,11 @@ One database transaction creates organization, Owner membership, canonical
 business entity, ownership binding, default records and an idempotency receipt.
 Failures roll everything back. Concurrent submissions with the same acting user
 and request ID serialize and return the same result. Reusing that ID with a
-different normalized payload returns conflict; distinct IDs deliberately create
+different normalized payload returns conflict; separately approved distinct IDs create
 independent businesses. Preserve the request ID when retrying an uncertain
 response. `GET /api/v1/businesses/creation/{request_id}` (legacy status remains compatible) returns `ready` with
-the authorized business ID or `not_started` for no committed receipt. Another user
+the authorized business ID, the current private admission state when no ledger exists,
+or `not_started` when neither exists. Another user
 cannot inspect the receipt. There is no half-created/incomplete durable state:
 resume means retrying the same request. Receipts and ledger defaults survive
 pool/worker restart. Session inspection then discovers the first available entity.
@@ -211,8 +215,9 @@ route separately from the credential. That route returns to acceptance after log
 both new and existing members, without creating an organization. Credentials must be
 pasted after login and never enter URLs. Confirmed acceptance uses the same peer
 scope-change signal as fresh setup, so other tabs clear stale setup or ledger views and
-reload their authorized business. Connections remain optional through Data & backup
-(external connections); invites are optional and can be sent later. Existing live Sheets
+reload their authorized business. Internal connections remain optional through Data & backup. Beta receipts require
+customer-owned Google Drive; collaborator invitations require individual program
+approval and may be sent later. Existing live Sheets
 migration remains the explicit authority cutover and live owner cutover operator
 process, with no browser import or authority switch during setup.
 
@@ -272,3 +277,11 @@ service's availability, independently of the selected business role. Both first-
 and existing-member views offer creation only when it is true. Migrated-profile
 compositions keep bootstrap disabled; invitation and operator migration paths
 remain available, and the service continues to reject unsupported creation.
+
+## Program admission
+
+[Invitation-only beta admission](../operations/BETA_ADMISSION.md) adds server-side
+program approval to the existing creation/invitation transactions. A new external
+Create Business request may remain pending without a ledger; retry its exact
+request after operator approval. Independent roles and existing access/export
+remain authoritative during enrollment freezes.

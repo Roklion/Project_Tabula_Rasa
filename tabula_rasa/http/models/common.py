@@ -9,6 +9,10 @@ class DTO(BaseModel):
 
 
 class ErrorCode(StrEnum):
+    BETA_PENDING = 'beta_pending'
+    BETA_PAUSED = 'beta_paused'
+    BETA_CAPACITY = 'beta_capacity'
+    BETA_ELIGIBILITY = 'beta_eligibility'
     VALIDATION = "validation"
     NOT_FOUND = "not_found"
     CONFLICT = "conflict"

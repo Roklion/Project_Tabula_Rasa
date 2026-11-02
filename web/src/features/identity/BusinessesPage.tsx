@@ -1,3 +1,4 @@
+import { BetaNotice } from './BetaNotice';
 import { useContext, useState } from 'react';
 import { EntitySelectionContext } from '../../app/entitySelectionContext';
 import { businessLabel } from '../../app/businessLabels';
@@ -23,5 +24,6 @@ export function BusinessesPage() {
       <div className="actions"><a className="button" href="/invitations">Join an invited business</a></div>
       <p>Moving existing Sheets books requires the approved operator migration and cutover process. Creating a business does not import or claim those books.</p>
     </section>
+    <BetaNotice />
   </div>;
 }

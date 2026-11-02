@@ -766,3 +766,12 @@ Forward revision `0011_control_plane_join` marks the integrated head after
 `0009_external_connections` -> `0010_workspace_lifecycle` -> `0010_onboarding_routes`. Upgrade to
 this single head from the supported connection or workspace revision; those
 published revisions are unchanged.
+
+## Beta program control plane
+
+Forward revision `0019_beta_admission` adds closed-by-default program limits,
+per-business named approval/reservations, expiring independent operator grants
+and append-only event history. It preserves canonical bookkeeping/export v1,
+existing memberships and separately operated internal owners. Follow
+[beta admission](../operations/BETA_ADMISSION.md) for inventory, synthetic staging,
+operator commands, compatible rollback and the separate release handoff.

@@ -21,6 +21,7 @@ export const owned = { ...ordinary, id: 'mixed', record_id: 'mixed', source_type
 
 export function coreResponse(url: URL) {
     const path = url.pathname;
+    if (path === '/api/v1/beta/status') return { paused: true, invitations_paused: true, internal: true, requests: [] };
     const items = [ordinary, journal, owned].filter(row =>
       (!url.searchParams.get('start') || row.txn_date >= url.searchParams.get('start')!)
       && (!url.searchParams.get('end') || row.txn_date <= url.searchParams.get('end')!)

@@ -316,3 +316,13 @@ compiling the SPA; the guide owns local setup and outstanding release evidence.
 [Operational observability](operations/OBSERVABILITY.md) owns the sanitized telemetry
 contract, optional collection setup, tier/retention/access checkpoint, alert thresholds,
 staging smoke and platform operations integration responsibilities.
+
+## Admission validation
+
+`tests/postgres/test_beta_admission.py` covers synthetic real-database capacity,
+identity, eligibility, expiry/replay, pauses and privileged API behavior. Native
+beta desktop/mobile/accessibility scenarios extend `test_workspace_browser.py`.
+Existing lifecycle fixtures explicitly mark approved internal use; historical
+migration fixtures seed prior records directly rather than running current
+workflow code on an old schema. [Admission operations](operations/BETA_ADMISSION.md)
+owns the supported control contract and separate external-release gate.

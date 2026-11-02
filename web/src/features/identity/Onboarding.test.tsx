@@ -153,7 +153,7 @@ it('keeps creation pending and submits a business-only payload once', async () =
   expect(submit).toBeDisabled();
   expect(await screen.findByText('Creating your ledger and selecting the business…')).toBeVisible();
   expect(create).toHaveBeenCalledTimes(1);
-  expect(create.mock.calls[0][1]).toEqual({ request_id: expect.any(String), business_name: 'Business' });
+  expect(create.mock.calls[0][1]).toEqual({ request_id: expect.any(String), business_name: 'Business', country: 'US', currency: 'USD' });
   reject(new ApiError('validation'));
   expect(await screen.findByRole('alert')).toBeVisible();
 });
@@ -208,7 +208,7 @@ it('resumes an interrupted additional creation and retries the same payload afte
   await screen.findByRole('alert');
   fireEvent.click(screen.getByRole('button', { name: 'Retry same setup' }));
   await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
-  expect(create.mock.calls[0][1]).toEqual({ request_id: 'additional-request', business_name: 'Business' });
+  expect(create.mock.calls[0][1]).toEqual({ request_id: 'additional-request', business_name: 'Business', country: 'US', currency: 'USD' });
   expect(create.mock.calls[1][1]).toEqual(create.mock.calls[0][1]);
 });
 
@@ -239,5 +239,43 @@ it('keeps the preceding workspace request ID on an uncommitted additional setup'
   await review();
   fireEvent.click(screen.getByRole('button', { name: 'Create business' }));
   await screen.findByRole('alert');
-  expect(create).toHaveBeenCalledExactlyOnceWith(member, { request_id: 'workspace-request', business_name: 'Business' });
+  expect(create).toHaveBeenCalledExactlyOnceWith(member, { request_id: 'workspace-request', business_name: 'Business', country: 'US', currency: 'USD' });
+});
+
+
+it('shows pending enrollment and retries the same approved request without reporting success early', async () => {
+  vi.spyOn(api, 'bootstrapStatus').mockResolvedValue({ state: 'not_started', entity_id: null });
+  const create = vi.spyOn(api, 'createBusiness').mockResolvedValue({ state: 'pending', entity_id: null });
+  const select = vi.spyOn(api, 'selectEntity');
+  render(<LedgerSetup session={setup} />);
+  await review();
+  fireEvent.click(screen.getByRole('button', { name: 'Create business' }));
+  expect(await screen.findByText(/Enrollment: pending/)).toBeVisible();
+  expect(select).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Retry same setup' }));
+  await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
+  expect(create.mock.calls[0][1]).toEqual(create.mock.calls[1][1]);
+});
+
+it('keeps Canadian eligibility explicit and shows the currency verification hold', async () => {
+  vi.spyOn(api, 'bootstrapStatus').mockResolvedValue({ state: 'not_started', entity_id: null });
+  const create = vi.spyOn(api, 'createBusiness').mockResolvedValue({ state: 'pending', entity_id: null });
+  render(<LedgerSetup session={setup} />);
+  await screen.findByLabelText('Business name');
+  fireEvent.change(screen.getByLabelText('Business country and currency'), { target: { value: 'CA' } });
+  await review();
+  fireEvent.click(screen.getByRole('button', { name: 'Create business' }));
+  await screen.findByText(/Enrollment: pending/);
+  expect(create.mock.calls[0][1]).toMatchObject({ country: 'CA', currency: 'CAD' });
+});
+
+
+it('shows the server invitation deadline before acceptance', async () => {
+  const expires = '2026-11-02T15:00:00Z';
+  vi.spyOn(api, 'previewInvitation').mockResolvedValue({ business_id: 'invited', business_name: 'Invited books', role: 'read_only', expires_at: expires });
+  render(<InvitationAcceptance session={setup} />);
+  fireEvent.change(screen.getByLabelText('Invitation credential'), { target: { value: 'synthetic-private-invitation' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Review invitation' }));
+  expect(await screen.findByText('Invitation expires: ' + new Date(expires).toLocaleString() + '.')).toBeVisible();
+  expect(screen.getByText(/cannot outlive their approval/)).toBeVisible();
 });
