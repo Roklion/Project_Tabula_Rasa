@@ -22,7 +22,7 @@ const second: Schemas['Transaction'] = { ...first, id: 'two', description: 'Seco
 function ledgerItem(row: Schemas['Transaction']): Schemas['LedgerItem'] {
   return { id: row.id, record_id: row.id, entry_type: 'transaction', txn_date: row.txn_date, kind: row.kind,
     amount: row.amount, account: 'Cash', to_account: '', category: 'Office', payee: '', tags: [],
-    description: row.description, reference: row.reference, receipt_count: 0, postings: [], source_type: '' };
+    description: row.description, reference: row.reference, receipt_count: 0, postings: [], source_type: '', recurring_schedule_id: row.recurring_schedule_id };
 }
 const records = [ledgerItem(first), ledgerItem(second)];
 const initialFilters = { kind: 'All', account_ids: [], category_ids: [], tag_ids: [] };

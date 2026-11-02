@@ -419,7 +419,11 @@ retain local scrolling and 44px action targets. Writer detail links say Manage
 for Assets, Recurring and Mixed-use; read-only detail links say View. The route,
 loaded baseline, confirmations and available commands remain capability-owned.
 The ledger displays transaction type and source as separate pills (for example,
-Expense and Mixed-use), with the existing combined accessible row name. Mileage
+Expense and Mixed-use), with the existing combined accessible row name. The
+Type column also shows a Recurring pill for initial and generated occurrences
+with a persisted recurring schedule ID, including mixed-use projections. It
+retains the accounting type and source pills; descriptions do not determine
+recurring identity, and Type filtering/sorting retains accounting semantics. Mileage
 keeps 16px between Download filtered mileage CSV and the log table. Semantic
 success/error/warning colors and all bookkeeping/state owners remain unchanged.
 The [integrated acceptance record](docs/browser/VISUAL_REVIEW.md) tracks the

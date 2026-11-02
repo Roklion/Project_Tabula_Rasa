@@ -18,7 +18,7 @@ const row: Schemas['Transaction'] = { id: 'one', txn_date: '2026-10-05', kind: '
   description: 'Memo', reference: '', created_at: 'now', baseline: 'original-baseline', source_type: '', recurring_schedule_id: '' };
 const ledger: Schemas['LedgerItem'] = { id: 'one', record_id: 'one', entry_type: 'transaction', txn_date: row.txn_date,
   kind: row.kind, amount: row.amount, account: 'Cash', to_account: '', category: 'Office', payee: 'Vendor', tags: ['Job'],
-  description: 'Memo', reference: '', receipt_count: 0, postings: [], source_type: '' };
+  description: 'Memo', reference: '', receipt_count: 0, postings: [], source_type: '', recurring_schedule_id: '' };
 
 function setup(selected = [ledger], loaded = [row]) {
   const onApplied = vi.fn(); const onCopy = vi.fn();

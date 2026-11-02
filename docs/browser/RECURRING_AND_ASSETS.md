@@ -57,7 +57,10 @@ have distinct stable source/projection IDs. Protected deletion removes the pair,
 subject to the service's reference rules. Generated sources show recurring
 provenance. The generic ledger cannot mutate their projections independently.
 Its derived rows link to Mixed-use expenses or Assets for source-owned actions;
-mixed-use allocations are labeled **Mixed-use** in the ledger.
+mixed-use allocations are labeled **Mixed-use** in the ledger. The ledger Type
+column also shows **Recurring** beside **Expense** for both initial and generated
+ordinary occurrences and mixed-use projections, using their persisted schedule
+link. Editing an occurrence memo or visible date does not remove that identity.
 
 The commercial slice exposes source setup/edit/delete and recurring creation. mixed-use
 source receipts adds **Receipts** on each source detail through the shared receipt
