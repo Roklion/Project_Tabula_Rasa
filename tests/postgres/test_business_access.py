@@ -20,7 +20,7 @@ def test_public_business_contract_and_foreign_member_invitation_ids(database, ca
     with named_client(database) as (client, auth, repo, identities, factory, _, headers):
         alice, bob, a, b = identities
         choices = client.get('/api/v1/businesses').json()['items']
-        assert choices == [{'id': 'alpha', 'name': 'alpha', 'role': 'owner'}]
+        assert choices == [{'id': 'alpha', 'name': 'alpha', 'currency_code': 'USD', 'role': 'owner'}]
         # An Owner of A has no administrative rights in B, including when a
         # browser forges backing-container selectors or a real foreign user ID.
         invite = WorkspaceService(PostgresWorkspaceRepository(database)).invite(
@@ -82,7 +82,8 @@ def test_invited_accountant_and_revoke_in_a_preserve_b_membership_session_and_pr
         assert preview.status_code == 200
         assert preview.json()['business_id'] == 'alpha' and preview.json()['role'] == 'accountant'
         assert set(preview.json()) == {'business_id', 'business_name', 'role', 'expires_at'}
-        assert client.get('/api/v1/businesses').json()['items'] == [{'id': 'beta', 'name': 'beta', 'role': 'owner'}]
+        assert client.get('/api/v1/businesses').json()['items'] == [
+            {'id': 'beta', 'name': 'beta', 'currency_code': 'USD', 'role': 'owner'}]
         assert client.post('/api/v1/invitations/respond', headers=bob_headers,
             json={'credential': issued['credential'], 'accept': True}).status_code == 200
         assert {item['id']: item['role'] for item in client.get('/api/v1/businesses').json()['items']} == {
