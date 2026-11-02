@@ -37,6 +37,7 @@ class LedgerItem(DTO):
     reference: str = ''
     receipt_count: int = 0
     source_type: str = ''
+    recurring_schedule_id: str = ''
     postings: list[LedgerLine]
 
 
@@ -55,7 +56,8 @@ def ledger_response(query):
             rows.append(LedgerItem(**common, record_id=row.id, entry_type='transaction',
                 account=accounts.get(row.account_id, 'Unknown'), to_account=accounts.get(row.to_account_id, ''),
                 category=categories.get(row.category_id, ''), payee=row.payee, tags=list(row.tags),
-                description=row.description, reference=row.reference, receipt_count=row.receipt_count, source_type=row.source_type, postings=[]))
+                description=row.description, reference=row.reference, receipt_count=row.receipt_count, source_type=row.source_type,
+                recurring_schedule_id=row.recurring_schedule_id, postings=[]))
         else:
             row = entry.journal
             rows.append(LedgerItem(**common, record_id=row.id, entry_type='journal',

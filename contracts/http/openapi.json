@@ -2975,6 +2975,11 @@
             "title": "Record Id",
             "type": "string"
           },
+          "recurring_schedule_id": {
+            "default": "",
+            "title": "Recurring Schedule Id",
+            "type": "string"
+          },
           "reference": {
             "default": "",
             "title": "Reference",

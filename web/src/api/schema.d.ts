@@ -2870,6 +2870,11 @@ export interface components {
             /** Record Id */
             record_id: string;
             /**
+             * Recurring Schedule Id
+             * @default
+             */
+            recurring_schedule_id: string;
+            /**
              * Reference
              * @default
              */

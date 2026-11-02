@@ -115,6 +115,12 @@ heading. Inline informational links remain underlined.
 
 ## Transactions and journals
 
+The ledger **Type** column keeps the accounting type (such as Expense) and adds
+**Recurring** for initial and generated occurrences linked to a persisted schedule.
+Recurring mixed-use projections show **Expense**, **Mixed-use** and **Recurring**
+together and remain managed through Mixed-use expenses. Descriptions do not
+control this label; Type filters and sorting still use the accounting type.
+
 **Transactions** shows the combined ledger with **Add transaction** and **Add
 journal** actions. The standalone Journals page also links to journal creation.
 Forms share field components with protected editors rather than introducing
