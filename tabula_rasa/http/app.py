@@ -140,7 +140,7 @@ def create_app(*, settings=None, runtime_factory=None, schema_only=False, static
         if response.status_code >= 500 and failure is None:
             failure = "unavailable" if response.status_code == 503 else "unexpected"
         provider = getattr(request.state, "telemetry_provider", None) or (
-            "identity" if operation in {"begin_login", "complete_login", "logout", "revoke_all_sessions"} else
+            "identity" if operation in {"begin_login", "begin_registration", "complete_login", "logout", "revoke_all_sessions"} else
             "postgresql" if operation == "readiness" else "application"
         )
         context = getattr(request.state, "telemetry_context", None)

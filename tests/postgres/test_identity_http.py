@@ -56,8 +56,9 @@ def test_logout_bootstrap_during_outage_preserves_origin_csrf_and_cookie_isolati
         runtime.services.assert_not_called()
 
 
+@pytest.mark.parametrize('entry', ['login', 'register'])
 @pytest.mark.parametrize('return_path', ['/', '/onboarding', '/invitations'])
-def test_login_callback_cookie_contract_and_no_entity_setup(database, return_path, caplog, monkeypatch):
+def test_login_callback_cookie_contract_and_no_entity_setup(database, return_path, caplog, monkeypatch, entry):
     import json
     monkeypatch.setenv('TABULA_RASA_TELEMETRY_SCOPE_KEY', 'synthetic-identity-telemetry-key-32-chars')
     caplog.set_level('INFO', logger='tabula_rasa.http')
@@ -69,8 +70,8 @@ def test_login_callback_cookie_contract_and_no_entity_setup(database, return_pat
         delayed_denial = client.get('/api/v1/session')
         assert delayed_denial.status_code == 401
         for bad_path in ('https://foreign.test', '//foreign.test', '/invitations?credential=private', '/invitations/../other'):
-            assert client.get('/api/v1/auth/login', params={'return_path': bad_path}).status_code == 403
-        start = client.get('/api/v1/auth/login', params={'return_path': return_path}, follow_redirects=False)
+            assert client.get('/api/v1/auth/' + entry, params={'return_path': bad_path}).status_code == 403
+        start = client.get('/api/v1/auth/' + entry, params={'return_path': return_path}, follow_redirects=False)
         assert start.status_code == 303
         transaction = auth.provider.authorization_url.call_args.args[0]
         assert client.get('/api/v1/session').status_code == 401

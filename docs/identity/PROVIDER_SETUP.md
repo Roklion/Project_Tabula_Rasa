@@ -147,6 +147,62 @@ email. Restoring PostgreSQL/control-plane state must invalidate restored session
 transactions before ingress reopens (platform operations): restored revoked credentials
 must not become live again.
 
+## Hosted end-user self-registration
+
+**Create account** starts `/api/v1/auth/register` through the existing Web OIDC
+client and callback. ZITADEL explicitly supports `prompt=create` for its hosted
+registration form ([onboarding](https://zitadel.com/docs/guides/integrate/onboarding/end-users),
+[authorization parameters](https://zitadel.com/docs/apis/openidoauth/endpoints)).
+Sign in retains `prompt=login`; both send `max_age=0` and require recent
+`auth_time`, verified UserInfo, state/nonce/S256 PKCE and one-shot cookies.
+Registration defaults to the allowlisted `/invitations` return path. No password,
+email or invitation credential is placed in the authorization URL. This creates
+an end-user identity, not a Cloud Portal administrator or application business.
+
+Provider documentation verifies the protocol, not the actual tenant policy.
+Before claiming hosted acceptance, the operator must inventory the selected
+instance and effective organization policy, including overrides. Record safe
+values, inheritance, login UI version, issuer/client reference and observation
+date in the owning acceptance discussion; keep personal data, secrets and recovery
+material private. The retained [synthetic staging handoff](https://github.com/Roklion/Project_Tabula_Rasa/issues/321#issuecomment-6293694820)
+confirmed MFA use but retained mail/recovery gaps. It does not establish enabled
+self-registration or successful registration mail. Fresh inspection and hosted
+verification remain required; code-only implementation changes no provider setting.
+
+1. In Console open **Default Settings > Login Behavior and Security**
+   (`{instanceDomain}/ui/console/settings`). Inventory **Register allowed**,
+   native username/password login, external identity providers, **Force MFA**,
+   permitted factors and login lifetimes. Identify the default registration
+   organization and inspect its login/security policy for overrides. Do not
+   assume the project's owning organization selects the registration destination.
+   Verify the actual hosted login version with the configured Web client.
+   Under separately authorized provider configuration, enable **Register allowed**
+   on the effective policy and save, preserving native login and mandatory MFA.
+   Do not enable organization self-registration or grant provider admin roles.
+2. Inspect instance and organization **Password Complexity**, **Password Expiry**,
+   **Lockout**, **Notification settings** and verification-code lifetimes.
+   Preserve approved password/recovery rules. Require email verification and
+   approved TOTP/WebAuthn enrollment before app access. Check boolean
+   `email_verified=true` through UserInfo; do not mark emails verified manually
+   to pass acceptance or weaken required factors.
+3. Verify sender/domain, delivery restrictions, verification and reset mail,
+   lost-factor recovery and operator recovery custody with synthetic identities.
+   Stop hosted acceptance if required delivery, recovery or factors fail. A
+   provider screen or registration alone does not prove mail/recovery capability.
+4. Preserve existing exact callback/post-logout allowlists, Basic Auth Web-client
+   authentication and S256 PKCE. No new callback or scope is needed. Start at the
+   app rather than a bare provider registration URL so OIDC context is retained.
+5. Disabled registration may leave the browser on a provider refusal page.
+   Return to Tabula Rasa for private operator guidance or Sign in with an existing
+   account. Returned errors consume the attempt and use the safe failure page;
+   expired/aborted flows need a deliberate new action. Never display raw provider
+   errors, retry automatically or relax verification to recover.
+
+See [settings and inheritance](https://zitadel.com/docs/guides/manage/console/default-settings)
+and [hosted smoke checks](HOSTED_ROLLOUT.md#hosted-registration-and-invitation-smoke).
+Registration grants no membership, ledger or beta approval and cannot bypass
+cohort caps, pauses or release authorization.
+
 ## Business recovery and operator authority
 
 Follow the ADR's explicit Owner-only backup, recovery, entity/workspace and connection

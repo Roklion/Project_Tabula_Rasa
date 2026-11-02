@@ -32,11 +32,20 @@ def identity(request):
 
 @router.get("/api/v1/auth/login", operation_id="begin_login")
 def login(request: Request, return_path: str = "/"):
+    return begin_authentication(request, return_path)
+
+
+@router.get("/api/v1/auth/register", operation_id="begin_registration")
+def register(request: Request, return_path: str = "/invitations"):
+    return begin_authentication(request, return_path, registration=True)
+
+
+def begin_authentication(request, return_path, *, registration=False):
     auth = identity(request)
     request.state.login_request_id = request.state.request_id
     try:
         raw, transaction = auth.sessions.begin_login(return_path, request.cookies.get(auth.login_cookie))
-        response = RedirectResponse(auth.provider.authorization_url(transaction), status_code=303)
+        response = RedirectResponse(auth.provider.authorization_url(transaction, registration=registration), status_code=303)
         auth.set_cookie(response, auth.login_cookie, raw, 300)
         auth.set_cookie(response, auth.login_reference_cookie, request.state.request_id, 300)
         request.state.security_event = "login_started"

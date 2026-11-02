@@ -136,7 +136,7 @@ export function LedgerSetup({ session }: { session: SessionState }) {
 
 export function Onboarding({ session }: { session: SessionState }) {
   const [path, setPath] = useState<'choose' | 'fresh' | 'invite' | 'migration'>(() => window.location.pathname === '/invitations' ? 'invite' : 'choose');
-  return <div className="workflowSections"><PageHeader title={path === 'invite' ? 'Join an invited business' : 'My Businesses'} description="You do not have an active business yet. Create one, join an invitation, or move existing books with your operator." />
+  return <div className="workflowSections"><PageHeader title={path === 'invite' ? 'Join an invited business' : 'My Businesses'} description="Your account has no active business access. Join an invited business with its privately shared credential, or ask your operator about approval to create a business or move existing books." />
     {path === 'choose' && <div className="actions">
       {session.business_creation_available && <ActionButton tone="primary" onClick={() => setPath('fresh')}>Create your first business</ActionButton>}
       <ActionButton onClick={() => setPath('invite')}>Join an invited business</ActionButton>

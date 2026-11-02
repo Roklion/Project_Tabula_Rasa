@@ -14,17 +14,18 @@ from tests.postgres.test_identity_http import client_for
 from tests.test_oidc import oidc as oidc
 
 
+@pytest.mark.parametrize('entry', ['login', 'register'])
 @pytest.mark.parametrize('retained', [False, True])
-def test_signed_login_and_stale_provider_recovery(database, oidc, retained, caplog, monkeypatch):
+def test_signed_login_and_stale_provider_recovery(database, oidc, retained, caplog, monkeypatch, entry):
     monkeypatch.setenv('TABULA_RASA_TELEMETRY_SCOPE_KEY', 'synthetic-identity-telemetry-key-32-chars')
     caplog.set_level('INFO', logger='tabula_rasa.http')
     client, auth, factory = client_for(database)
     provider, _, claims, _, calls = oidc
     auth.provider = provider
     with client:
-        start = client.get('/api/v1/auth/login', follow_redirects=False)
+        start = client.get('/api/v1/auth/' + entry, follow_redirects=False)
         query = parse_qs(urlsplit(start.headers['location']).query)
-        assert query['prompt'] == ['login'] and query['max_age'] == ['0']
+        assert query['prompt'] == ['create' if entry == 'register' else 'login'] and query['max_age'] == ['0']
         original_state = query['state'][0]
         claims['nonce'] = query['nonce'][0]
         pending_cookie = client.cookies.get(auth.login_cookie)
@@ -52,7 +53,7 @@ def test_signed_login_and_stale_provider_recovery(database, oidc, retained, capl
             claims.update(nonce=fresh_query['nonce'][0], auth_time=int(time()))
             callback = client.get('/api/v1/auth/callback', params={
                 'state': fresh_query['state'][0], 'code': 'synthetic-fresh-code'}, follow_redirects=False)
-        assert callback.headers['location'] == '/'
+        assert callback.headers['location'] == ('/invitations' if entry == 'register' and not retained else '/')
         assert callback.headers['cache-control'] == 'no-store'
         assert callback.headers['referrer-policy'] == 'no-referrer'
         assert client.get('/api/v1/session').json()['state'] == 'needs_setup'
@@ -73,15 +74,16 @@ def test_signed_login_and_stale_provider_recovery(database, oidc, retained, capl
         factory.assert_not_called()
 
 
+@pytest.mark.parametrize('entry', ['login', 'register'])
 @pytest.mark.parametrize('failure', ['provider', 'state', 'cookie', 'expired', 'session'])
-def test_failed_callback_classification_and_deliberate_restart(database, failure, caplog):
+def test_failed_callback_classification_and_deliberate_restart(database, failure, caplog, entry):
     caplog.set_level('INFO', logger='tabula_rasa.http')
     client, auth, _ = client_for(database)
     auth.provider.authorization_url.return_value = 'https://id.example.test/authorize'
     auth.provider.verify.return_value = verified()
     original_issue, original_clock = auth.sessions.issue, auth.sessions.clock
     with client:
-        client.get('/api/v1/auth/login', follow_redirects=False)
+        client.get('/api/v1/auth/' + entry, follow_redirects=False)
         transaction = auth.provider.authorization_url.call_args.args[0]
         params = {'state': transaction.state, 'code': 'private-code'}
         expected = 'login_transaction'
@@ -120,8 +122,9 @@ def test_failed_callback_classification_and_deliberate_restart(database, failure
         assert client.get('/api/v1/session').status_code == 200
 
 
+@pytest.mark.parametrize('entry', ['login', 'register'])
 @pytest.mark.parametrize('boundary', ['transaction', 'discovery'])
-def test_login_start_outage_has_clean_recovery_page(database, boundary, caplog):
+def test_login_start_outage_has_clean_recovery_page(database, boundary, caplog, entry):
     caplog.set_level('INFO', logger='tabula_rasa.http')
     client, auth, _ = client_for(database)
     if boundary == 'transaction':
@@ -129,7 +132,7 @@ def test_login_start_outage_has_clean_recovery_page(database, boundary, caplog):
     else:
         auth.provider.authorization_url.side_effect = IdentityError('unavailable')
     with client:
-        result = client.get('/api/v1/auth/login', follow_redirects=False)
+        result = client.get('/api/v1/auth/' + entry, follow_redirects=False)
         query = parse_qs(urlsplit(result.headers['location']).query)
         assert query == dict(reason=['unavailable'], category=['login_start'],
                              reference=[result.headers['x-request-id']])
@@ -142,3 +145,40 @@ def test_login_start_outage_has_clean_recovery_page(database, boundary, caplog):
                   if record.name == 'tabula_rasa.http' and '"http_request"' in record.message]
         assert events[-1]['security_reason'] == 'login_start'
         assert events[-1]['outcome'] == 'failure'
+
+
+@pytest.mark.parametrize('unverified', [False, True])
+def test_registration_cannot_grant_business_or_beta_admission(database, oidc, unverified):
+    from sqlalchemy import text
+    from uuid import uuid4
+
+    client, auth, factory = client_for(database)
+    provider, _, claims, info, _ = oidc
+    auth.provider = provider
+    info['email_verified'] = not unverified
+    with client:
+        start = client.get('/api/v1/auth/register', follow_redirects=False)
+        query = parse_qs(urlsplit(start.headers['location']).query)
+        claims.update(nonce=query['nonce'][0], auth_time=int(time()))
+        callback = client.get('/api/v1/auth/callback', params={
+            'state': query['state'][0], 'code': 'synthetic-code'}, follow_redirects=False)
+        if unverified:
+            assert 'category=userinfo_validation' in callback.headers['location']
+            assert client.get('/api/v1/session').status_code == 401
+        else:
+            assert callback.headers['location'] == '/invitations'
+            session = client.get('/api/v1/session').json()
+            assert session['state'] == 'needs_setup' and session['entity'] is None
+            headers = {'origin': auth.settings.public_origin, 'x-csrf-token': session['csrf_token']}
+            assert client.get('/api/v1/entities/alpha/accounts').status_code == 403
+            assert client.get('/api/v1/entities/beta/accounts').status_code == 403
+            created = client.post('/api/v1/businesses', headers=headers, json={
+                'request_id': uuid4().hex, 'business_name': 'Synthetic unapproved',
+                'country': 'US', 'currency': 'USD'})
+            assert created.status_code == 200 and created.json()['state'] == 'pending'
+            assert client.get('/api/v1/session').json()['state'] == 'needs_setup'
+        with database.transaction(read_only=True) as c:
+            for table in ('memberships', 'business_entities', 'organizations', 'beta_named_users'):
+                assert c.scalar(text(f'SELECT count(*) FROM {table}')) == 0
+            assert c.scalar(text("SELECT count(*) FROM beta_admissions WHERE state <> 'pending'")) == 0
+        factory.assert_not_called()
