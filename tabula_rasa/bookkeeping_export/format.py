@@ -91,7 +91,7 @@ def validate_domains(domains, entity_id):
         indexes[name] = {row["id"]: row for row in rows if "id" in row}
     if len(domains["business_entities"]) != 1 or domains["business_entities"][0]["id"] != entity_id:
         raise ExportError("entity_scope")
-    if domains["business_entities"][0]["currency_code"] != "USD":
+    if domains["business_entities"][0]["currency_code"] not in {"USD", "CAD"}:
         raise ExportError("unsupported_currency")
     for name, spec in DOMAINS.items():
         for row in domains[name]:

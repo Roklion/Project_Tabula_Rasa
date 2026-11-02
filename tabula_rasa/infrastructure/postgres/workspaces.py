@@ -86,7 +86,7 @@ class PostgresWorkspaceRepository:
             if pending is not None:
                 return pending
             org = self.identity.create_organization(actor, workspace_name)
-            ledger = PostgresLedgerSetupRepository.create_entity(self.database, entity_id, business_name)
+            ledger = PostgresLedgerSetupRepository.create_entity(self.database, entity_id, business_name, currency=currency)
             self.identity.bind_entity(org, entity_id)
             LedgerSetupService(ledger).ensure_defaults()
             connection.execute(text('''INSERT INTO workspace_bootstraps

@@ -121,7 +121,7 @@ it('offers independent business creation to an existing read-only member and lis
   const member = { ...session, trusted_development: false, capabilities: ['bookkeeping:read'], business_creation_available: true };
   const select = vi.fn();
   render(<ScopeBoundary session={member}><EntitySelectionContext.Provider value={{ pending: false, select,
-    items: [{ ...member.entity, role: 'read_only' }, { id: 'other', name: 'Other business', role: 'owner' }] }}>
+    items: [{ ...member.entity, role: 'read_only' }, { currency_code: 'USD' as const, id: 'other', name: 'Other business', role: 'owner' }] }}>
     <BusinessesPage /></EntitySelectionContext.Provider></ScopeBoundary>);
   expect(screen.getByRole('heading', { name: 'My Businesses' })).toBeVisible();
   expect(screen.getByText('Read-only')).toBeVisible();
@@ -257,7 +257,7 @@ it('shows pending enrollment and retries the same approved request without repor
   expect(create.mock.calls[0][1]).toEqual(create.mock.calls[1][1]);
 });
 
-it('keeps Canadian eligibility explicit and shows the currency verification hold', async () => {
+it('keeps Canadian eligibility explicit and reviews the fixed CAD currency', async () => {
   vi.spyOn(api, 'bootstrapStatus').mockResolvedValue({ state: 'not_started', entity_id: null });
   const create = vi.spyOn(api, 'createBusiness').mockResolvedValue({ state: 'pending', entity_id: null });
   render(<LedgerSetup session={setup} />);

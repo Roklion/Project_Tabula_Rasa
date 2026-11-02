@@ -12,6 +12,7 @@ from tabula_rasa.application import LedgerInfo, assemble_application_services
 class FakeLedgerSetupRepository:
     def __init__(self, name: str) -> None:
         self.ledger_name = name
+        self.ledger_currency = "USD"
         self.calls = 0
         self.error: Exception | None = None
 
@@ -76,6 +77,7 @@ from tabula_rasa.application.reporting_contracts import LedgerSnapshot
 
 class Repository:
     ledger_name = 'Synthetic ledger'
+    ledger_currency = 'USD'
     def ensure_defaults(self):
         return {'accounts': 0, 'categories': 0}
 

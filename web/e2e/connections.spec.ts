@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
 
 test('customer first connection leaves for consent and returns to a scoped connected account', async ({ page }) => {
   const session = { state: 'ready', actor_id: 'synthetic-owner', organization_id: 'synthetic-org',
-    entity: { id: 'alpha', name: 'Alpha demonstration' }, capabilities: ['bookkeeping:read', 'connections:manage'],
+    entity: { currency_code: 'USD', id: 'alpha', name: 'Alpha demonstration' }, capabilities: ['bookkeeping:read', 'connections:manage'],
     cache_scope: 'customer-drive-alpha', csrf_token: 'synthetic-csrf', trusted_development: false };
   let connected = false;
   await page.route('**/api/v1/session', route => route.fulfill({ json: session }));
@@ -40,7 +40,7 @@ test('customer first connection leaves for consent and returns to a scoped conne
 
 test('owner connection confirmation is accessible and usable at desktop and mobile widths', async ({ page }) => {
   const session = { state: 'ready', actor_id: 'synthetic-owner', organization_id: 'synthetic-org',
-    entity: { id: 'alpha', name: 'Alpha demonstration' }, capabilities: ['bookkeeping:read', 'connections:manage'],
+    entity: { currency_code: 'USD', id: 'alpha', name: 'Alpha demonstration' }, capabilities: ['bookkeeping:read', 'connections:manage'],
     cache_scope: 'connections-alpha', csrf_token: 'synthetic-csrf', trusted_development: false };
   let revision = 1;
   let status = 'pending';
@@ -79,10 +79,10 @@ test('owner connection confirmation is accessible and usable at desktop and mobi
 test('ordinary commercial members have no legacy or connection administration controls', async ({ page }) => {
   await page.route('**/api/v1/session', route => route.fulfill({ json: {
     state: 'ready', actor_id: 'synthetic-reader', organization_id: 'synthetic-org',
-    entity: { id: 'alpha', name: 'Alpha demonstration' }, capabilities: ['bookkeeping:read'],
+    entity: { currency_code: 'USD', id: 'alpha', name: 'Alpha demonstration' }, capabilities: ['bookkeeping:read'],
     cache_scope: 'reader-alpha', csrf_token: 'synthetic-csrf', trusted_development: false,
   } }));
-  await page.route('**/api/v1/businesses', route => route.fulfill({ json: { items: [{ id: 'alpha', name: 'Alpha demonstration' }] } }));
+  await page.route('**/api/v1/businesses', route => route.fulfill({ json: { items: [{ currency_code: 'USD', id: 'alpha', name: 'Alpha demonstration' }] } }));
   await page.goto('/data');
   await expect(page.getByRole('heading', { name: 'Data & backup', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'External connections' })).toHaveCount(0);

@@ -28,7 +28,8 @@ def csv_client():
         operation=nullcontext, close=lambda: None, ready=lambda: True)
     repository = Mock()
     repository.read_ledger.side_effect = lambda **_: financial_snapshot(runtime.entity.title())
-    runtime.services = Mock(return_value=SimpleNamespace(reporting=ReportingService(repository)))
+    runtime.services = Mock(return_value=SimpleNamespace(reporting=ReportingService(repository),
+        ledger=SimpleNamespace(get_info=lambda: SimpleNamespace(currency_code='USD' if runtime.entity == 'alpha' else 'CAD'))))
     runtime.resolve_context = lambda _: RequestContext("actor", "org", runtime.entity, runtime.capabilities,
                                                        "scope:" + runtime.entity, "csrf")
     with TestClient(create_app(settings=HttpSettings("test", "http://testserver"),
@@ -44,6 +45,8 @@ def test_read_only_downloads_are_current_private_csv_attachments_and_whole_journ
         assert response.status_code == 200 and response.headers["content-type"] == "text/csv; charset=utf-8"
         assert response.headers["content-disposition"].startswith('attachment; filename="tabula-rasa-')
         assert response.headers["cache-control"] == "no-store" and response.headers["x-content-type-options"] == "nosniff"
+        assert response.headers['x-book-currency'] == 'USD'
+        assert response.headers['content-disposition'].endswith('-USD.csv"')
     assert csv_rows(responses[0].content)[0] == TRANSACTION_COLUMNS
     assert csv_rows(responses[1].content)[0] == JOURNAL_COLUMNS
     assert [row["Type"] for row in csv_rows(selected.content)[1]] == ["Journal", "↳ Posting", "↳ Posting", "Expense"]
@@ -57,7 +60,10 @@ def test_two_selected_entities_never_reuse_each_others_csv_even_with_equal_recor
     assert csv_rows(alpha)[1][0]["Account"] == "Alpha"
     runtime.entity = "beta"
     assert client.get(PREFIX + FILES[0]).status_code == 403
-    beta = client.get("/api/v1/entities/beta/" + FILES[0]).content
+    response = client.get("/api/v1/entities/beta/" + FILES[0])
+    assert response.headers['x-book-currency'] == 'CAD'
+    assert response.headers['content-disposition'].endswith('-CAD.csv"')
+    beta = response.content
     assert csv_rows(beta)[1][0]["Account"] == "Beta"
     assert b"Beta" not in alpha and b"Alpha" not in beta
 

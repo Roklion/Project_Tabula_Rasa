@@ -2334,6 +2334,12 @@ export interface components {
         };
         /** BusinessInfo */
         BusinessInfo: {
+            /**
+             * Currency Code
+             * @default USD
+             * @enum {string}
+             */
+            currency_code: "USD" | "CAD";
             /** Id */
             id: string;
             /** Name */
@@ -2521,6 +2527,12 @@ export interface components {
         };
         /** EntityInfo */
         EntityInfo: {
+            /**
+             * Currency Code
+             * @default USD
+             * @enum {string}
+             */
+            currency_code: "USD" | "CAD";
             /** Id */
             id: string;
             /** Name */

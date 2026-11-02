@@ -1,6 +1,6 @@
 export const longName = 'Synthetic business label with deliberately long words for responsive fields and management records';
 export const longId = 'synthetic-record-identity-with-long-stable-provenance-0123456789';
-export const session = { actor_id: 'synthetic', organization_id: 'synthetic', entity: { id: 'alpha', name: 'Alpha demonstration' },
+export const session = { actor_id: 'synthetic', organization_id: 'synthetic', entity: { currency_code: 'USD', id: 'alpha', name: 'Alpha demonstration' },
   capabilities: ['bookkeeping:read', 'bookkeeping:write', 'bookkeeping:import'], cache_scope: 'forms-secondary-alpha', csrf_token: 'synthetic', trusted_development: true };
 export const account = { id: 'account', name: longName, type: 'Bank', classification: 'Asset', opening_balance: '0.00', parent_id: null, active: true, baseline: 'loaded-account' };
 export const accumulated = { ...account, id: 'accumulated', name: 'Accumulated depreciation', type: 'Other' };

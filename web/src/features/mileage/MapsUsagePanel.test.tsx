@@ -100,7 +100,7 @@ it.each(['business', 'sign-out'])('discards pending results and resets the panel
   const view = panel(); await expand();
   fireEvent.click(screen.getByRole('button', { name: 'Load usage' }));
   await waitFor(() => expect(api.loadMapsQuota).toHaveBeenCalledTimes(1));
-  const next = { ...session, cache_scope: 'next-session', entity: { id: 'beta', name: 'Beta' } };
+  const next = { ...session, cache_scope: 'next-session', entity: { currency_code: 'USD' as const, id: 'beta', name: 'Beta' } };
   if (change === 'sign-out') view.rerender(<div>Signed out</div>);
   else view.rerender(<ScopeBoundary session={next}><MapsUsagePanel /></ScopeBoundary>);
   await act(async () => { finish(ready); });

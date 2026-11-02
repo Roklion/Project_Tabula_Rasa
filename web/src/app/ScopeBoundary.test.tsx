@@ -17,7 +17,7 @@ it('clears the previous private cache and remounts drafts when server entity/ses
   const { rerender, unmount } = render(<ScopeBoundary session={session}><Feature /></ScopeBoundary>);
   caches[0].setQueryData(resourceKey(session, 'accounts'), { private: 'alpha ledger' });
   fireEvent.change(screen.getByRole('textbox'), { target: { value: 'alpha draft' } });
-  rerender(<ScopeBoundary session={{ ...session, entity: { id: 'beta', name: 'Beta' } }}><Feature /></ScopeBoundary>);
+  rerender(<ScopeBoundary session={{ ...session, entity: { currency_code: 'USD', id: 'beta', name: 'Beta' } }}><Feature /></ScopeBoundary>);
   expect(screen.getByRole('textbox')).toHaveValue('');
   expect(caches[0].getQueryCache().getAll()).toHaveLength(0);
   expect(caches[1].getQueryCache().getAll()).toHaveLength(0);

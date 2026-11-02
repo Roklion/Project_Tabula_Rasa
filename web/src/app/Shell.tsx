@@ -37,6 +37,7 @@ export function Shell() {
       <div className={styles.context}><span className="muted">Business</span>
         <strong>{session.entity.name}</strong>
         <span>Business reference: {session.entity.id}</span>
+        <span>Book currency: {session.entity.currency_code}</span>
         {session.entity.role && <span>Role: {roleLabel(session.entity.role)}</span>}
         <EntitySelector activeId={session.entity.id} />
         {session.trusted_development && <span className={styles.badge}>Technical alpha · development</span>}
@@ -55,10 +56,11 @@ export function Shell() {
     </aside>
     <div className={styles.content}>
       <header className={styles.topbar}><span>{workflowName ?? navigation.find(([path]) => matchesRoute(location.pathname, path))?.[1] ?? (matchesRoute(location.pathname, '/businesses') ? 'My Businesses' : undefined) ?? (matchesRoute(location.pathname, '/business/members') ? 'Business & members' : 'Tabula Rasa')}</span>
-        <span className="muted">{session.entity.name}</span></header>
+        <span className="muted">{session.entity.name} · {session.entity.currency_code}</span></header>
       <main ref={main} id="main" tabIndex={-1} className={styles.main} key={location.key}>{isEntryRoute(location.pathname) ? <WorkflowNav label="Entries" routes={entryRoutes} canWrite={session.capabilities.includes('bookkeeping:write')} />
         : matchesRoute(location.pathname, '/mileage') ? <WorkflowNav label="Mileage workflows" routes={mileageRoutes} canWrite={session.capabilities.includes('bookkeeping:write')} />
           : isReferenceRoute(location.pathname) ? <WorkflowNav label="Reference data" routes={referenceRoutes} canWrite={session.capabilities.includes('bookkeeping:write')} /> : null}
+        <p className="muted">All monetary amounts are in {session.entity.currency_code}. Each business keeps its own fixed currency.</p>
         <Outlet /></main>
     </div>
   </div>;

@@ -91,10 +91,6 @@ def require_open(program, *, creation=False):
 
 def prepare_business(connection, actor, request_id, name, country, currency):
     program = lock_program(connection)
-    if internal(connection, actor):
-        if (country, currency) != ("US", "USD"):
-            raise IdentityError("beta_eligibility")
-        return None
     if (country, currency) not in {("US", "USD"), ("CA", "CAD")}:
         raise IdentityError("beta_eligibility")
     row = (
@@ -108,6 +104,9 @@ def prepare_business(connection, actor, request_id, name, country, currency):
         .first()
     )
     if row is None:
+        # Exempt only a new USD request, never a request already bound to admission.
+        if internal(connection, actor) and (country, currency) == ("US", "USD"):
+            return None
         key = uuid4().hex
         connection.execute(
             text("""INSERT INTO beta_admissions(id,user_id,request_id,business_name,country,currency)
@@ -142,9 +141,6 @@ def prepare_business(connection, actor, request_id, name, country, currency):
             "organization_id": None,
         }
     require_open(program, creation=True)
-    # Current canonical product is USD-only. Never reinterpret Canadian books.
-    if country != "US":
-        raise IdentityError("beta_eligibility")
     owner = connection.scalar(
         text("""SELECT user_id FROM beta_named_users WHERE admission_id=:id
         AND user_id=:user AND state='approved' AND expires_at>clock_timestamp()"""),
@@ -348,10 +344,7 @@ class PostgresBeta:
                 if admission is None:
                     raise IdentityError("not_found")
                 if operation == "approve":
-                    if (
-                        admission["organization_id"] is not None
-                        or admission["country"] != "US"
-                    ):
+                    if admission["organization_id"] is not None:
                         raise IdentityError("beta_eligibility")
                     if admission["state"] not in {
                         "pending",

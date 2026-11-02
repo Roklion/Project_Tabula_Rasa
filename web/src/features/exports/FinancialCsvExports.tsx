@@ -9,7 +9,7 @@ export function FinancialCsvExports({ embedded = false }: { embedded?: boolean }
   const transfer = useCsvDownload();
   const today = new Date().toISOString().slice(0, 10);
   return <>{!embedded && <PageHeader title="Data & backup" description={`Downloads for ${session.entity.name}.`} />}<section className="surface" aria-label="Financial CSV exports">
-    <SectionHeader title="Exports" description={`Financial CSV downloads for ${session.entity.name}.`} />
+    <SectionHeader title="Exports" description={`Financial CSV downloads for ${session.entity.name} · ${session.entity.currency_code}.`} />
     <p>Transactions and journal postings are separate CSVs. Each download reads the current business's ledger, including inactive accounts. An empty ledger produces column headings.</p>
     <div className="actions">
       <ActionButton disabled={transfer.busy} onClick={() => void transfer.download(signal => api.downloadTransactionsCsv(session, signal), `tabula-rasa-${today}.csv`)}>Download transactions CSV</ActionButton>

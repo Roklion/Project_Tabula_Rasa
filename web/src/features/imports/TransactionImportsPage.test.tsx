@@ -16,7 +16,7 @@ const file = new File(['synthetic source'], 'transactions.csv', { type: 'text/cs
 
 beforeEach(() => {
   vi.spyOn(api, 'session').mockResolvedValue(session);
-  vi.spyOn(api, 'entities').mockResolvedValue({ items: [session.entity, { id: 'beta', name: 'Beta' }] });
+  vi.spyOn(api, 'entities').mockResolvedValue({ items: [session.entity, { currency_code: 'USD' as const, id: 'beta', name: 'Beta' }] });
 });
 
 it('keeps uploaders independent and performs writes only from explicit import actions', async () => {
@@ -97,7 +97,7 @@ it('ignores a superseded preparation response and blocks business switching duri
 
 it('preserves staged files when navigation is cancelled and clears them on restricted-alpha business switching', async () => {
   vi.spyOn(api, 'prepareTransactionCsv').mockResolvedValue(csv);
-  vi.spyOn(api, 'selectEntity').mockResolvedValue({ ...session, entity: { id: 'beta', name: 'Beta' }, cache_scope: 'beta-scope' });
+  vi.spyOn(api, 'selectEntity').mockResolvedValue({ ...session, entity: { currency_code: 'USD' as const, id: 'beta', name: 'Beta' }, cache_scope: 'beta-scope' });
   render(<RouterProvider router={createTestRouter(['/data'])} />);
   await userEvent.upload(await screen.findByLabelText('Transaction CSV file'), file);
   await screen.findByRole('region', { name: 'Tabula Rasa source rows' });

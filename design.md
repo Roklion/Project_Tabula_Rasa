@@ -269,7 +269,14 @@ membership and claimed profile IDs do not unlock that interface.
   write permission. [Named-user authentication](docs/identity/AUTHENTICATION.md) owns the
   operator settings, session policy and remaining release gates.
 - Named users can switch among server-authorized business choices.
-  Business and role labels use server claims; backing organization names stay hidden.
+  Business, currency and role labels use server claims; backing organization names stay hidden.
+  The shell shows Book currency and states the unit for all monetary amounts above
+  its content, including entry forms, ledger, reports and downloads on desktop/mobile.
+  Currency labels do not convert or round stored numeric values. Each new business
+  has one fixed currency; switching remounts the selected unit with private state.
+  Selector/list labels and download filenames identify USD versus CAD. CSV columns
+  remain compatible. Import guidance states that currency-free amounts use the
+  selected book and contradictory explicit source currency is rejected.
   Duplicate business names include the full stable business reference in selector/list
   labels. Confirmation names the target reference, and the shell retains the selected
   reference so users can distinguish same-name ledgers before entering records. Confirmed switching discards
@@ -301,7 +308,7 @@ membership and claimed profile IDs do not unlock that interface.
   stacking boundary above. Navigation covers Dashboard, Transactions, Assets,
   Mileage, Accounts, Categories & contacts, Reports, and Data & backup in the same order.
   A labeled Menu button exposes navigation on narrow screens.
-- The server-resolved business name is always visible. The fixed synthetic
+- The server-resolved business name and USD/CAD book currency are always visible. The fixed synthetic
   context is identified as technical-alpha development. This shell does not
   expose internal profile keys, workbook metadata, Google credentials or local
   administration controls as commercial authorization.
@@ -1116,8 +1123,8 @@ upload. Maps lookup buttons retain an 8px gap below their input.
 beta notice below the business actions and forms, using existing surfaces and status text.
 Asynchronous enrollment status must not shift controls during a pointer interaction.
 Scope and service limitations sit in a keyboard-accessible disclosure. Business setup collects
-U.S./USD or Canada/CAD; Canadian admission is held pending currency-safe product
-verification. Create Business can return pending without creating a ledger. The
+U.S./USD or Canada/CAD. The review step states the fixed currency and that it
+cannot change after creation. Canadian admission requires separate release/cohort approval. Create Business can return pending without creating a ledger. The
 form preserves the exact request for explicit retry after approval, including
 refresh recovery, and never treats a pending result as successful creation.
 Named collaborators need separate operator approval and retain the existing

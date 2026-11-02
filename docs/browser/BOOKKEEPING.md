@@ -9,6 +9,15 @@ The [cutover procedure](../accounting/CUTOVER.md) separately controls live autho
 
 ## Business selection
 
+Each book has one fixed USD or CAD currency selected at creation. The server-owned
+business/session metadata supplies the unit beside the business and role, and
+above monetary content on desktop and mobile. Entry forms, ledger and reports
+use that unit without converting, rescaling or rounding stored values. Switching
+businesses clears private drafts/queries and reloads currency with the selected
+scope; permissions and totals stay independent. Financial download filenames
+identify the currency. Transfers remain outside income/expenses and mileage
+remains separate from financial transactions.
+
 Transactions filters can be collapsed with **Hide filters** and restored with
 **Show filters** using mouse, Enter or Space. The active scope remains visible;
 collapsing does not change filters, results, sorting or entry selection. **Clear

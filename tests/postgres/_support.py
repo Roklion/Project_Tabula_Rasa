@@ -3,8 +3,8 @@
 from sqlalchemy import text
 
 
-def entity(connection, scope="alpha"):
-    connection.execute(text("INSERT INTO business_entities(id,name,incarnation_id) VALUES (:id,:id,:id)"), {"id": scope})
+def entity(connection, scope="alpha", *, currency="USD"):
+    connection.execute(text("INSERT INTO business_entities(id,name,incarnation_id,currency_code) VALUES (:id,:id,:id,:currency)"), {"id": scope, "currency": currency})
 
 
 def account(connection, scope="alpha", account_id="cash", *, parent=None, classification="Asset"):

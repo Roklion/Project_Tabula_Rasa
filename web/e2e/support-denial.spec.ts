@@ -9,7 +9,7 @@ const target = { origin: 'https://synthetic.invalid', release: 'a'.repeat(40), o
   business: 'business-a', approval: 'private-ref', synthetic: true, consent: true };
 const requestId = 'b'.repeat(32);
 const session = { state: 'ready', actor_id: 'synthetic-user', organization_id: 'org-a',
-  entity: { id: 'business-a', organization_id: 'org-a', name: 'Synthetic', role: 'read_only' },
+  entity: { currency_code: 'USD', id: 'business-a', organization_id: 'org-a', name: 'Synthetic', role: 'read_only' },
   cache_scope: 'synthetic-scope', csrf_token: 'SENTINEL-csrf', trusted_development: false, capabilities: [] };
 const forbidden = { error: { code: 'forbidden', message: 'You do not have access to this operation.' }, request_id: requestId };
 

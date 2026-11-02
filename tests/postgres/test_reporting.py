@@ -17,10 +17,10 @@ from tests.postgres._support import account, category, entity
 from tests.postgres.core_support import seed_core
 
 
-@pytest.fixture
-def reporting_services(database, monkeypatch):
+@pytest.fixture(params=["USD", "CAD"])
+def reporting_services(database, monkeypatch, request):
     monkeypatch.setattr('tabula_rasa.application.transactions.utc_now', lambda: '2026-10-05T12:00:00Z')
-    alpha, beta = seed_core(database)
+    alpha, beta = seed_core(database, currencies=(request.param, "USD"))
     with database.transaction() as connection:
         for scope in ('alpha', 'beta'):
             account(connection, scope, 'card', classification='Liability')

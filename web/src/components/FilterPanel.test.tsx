@@ -18,7 +18,7 @@ it('keeps mounted values when collapsed and remembers only scoped presentation a
   view.unmount();
   const next = render(<ScopeBoundary session={session}>{panel}</ScopeBoundary>);
   expect(screen.getByRole('button', { name: /Show filters/ })).toHaveAttribute('aria-expanded', 'false');
-  next.rerender(<ScopeBoundary session={{ ...session, entity: { id: 'beta', name: 'Beta' } }}>{panel}</ScopeBoundary>);
+  next.rerender(<ScopeBoundary session={{ ...session, entity: { currency_code: 'USD', id: 'beta', name: 'Beta' } }}>{panel}</ScopeBoundary>);
   expect(screen.getByLabelText('Search')).toBeVisible();
   expect(screen.getByRole('button', { name: /Hide filters/ })).toHaveAttribute('aria-expanded', 'true');
 });

@@ -184,7 +184,8 @@ keep the original name, country and request, then retry after approval. Offers
 last up to 48 hours, bounded by their approval deadline shown during review, and
 need a new approval/invitation after expiry or withdrawal.
 An admission pause preserves existing authorized business access and export.
-U.S. books use USD; Canadian CAD requests remain on hold pending currency-safe
+U.S. books use USD; Canadian books use CAD with a fixed currency selected at creation.
+Canadian enrollment still requires selected-release currency-safe
 product verification. My Businesses shows beta status and limitations. See the
 [admission procedure](operations/BETA_ADMISSION.md) for supported scope and release
 requirements. Customer-owned Google Drive is required for beta receipts; reviewed

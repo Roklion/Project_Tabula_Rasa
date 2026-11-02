@@ -169,6 +169,8 @@ def general_ledger_rows(matrix: Iterable[Iterable[Any]]) -> tuple[list[dict[str,
         return [], ["General Ledger header row was not found"]
     header = [_text(value) for value in rows[header_index]]
     positions = {name: header.index(name) for name in GENERAL_LEDGER_COLUMNS}
+    currency_columns = [name for name in header if name.strip().casefold() in {"currency", "currency code", "currency_code"}]
+    positions.update({name: header.index(name) for name in currency_columns})
     entries: list[dict[str, str]] = []
     errors: list[str] = []
     for sheet_row, values in enumerate(rows[header_index + 1 :], start=header_index + 2):
@@ -184,6 +186,7 @@ def general_ledger_rows(matrix: Iterable[Iterable[Any]]) -> tuple[list[dict[str,
             if (debit > 0) == (credit > 0):
                 raise ValueError("exactly one of Debit or Credit must be positive")
             entries.append({
+                **{name: _text(cell(name)) for name in currency_columns},
                 "sheet_row": str(sheet_row),
                 "Date": _date(cell("Date")),
                 "Transaction Type": _text(cell("Transaction Type")),
@@ -268,6 +271,8 @@ def general_ledger_rows(matrix: Iterable[Iterable[Any]]) -> tuple[list[dict[str,
             continue
         payee = next((item["Name"] for item in paired if item["Name"]), "")
         converted.append({
+            **{name: "|".join(sorted({_text(item[name]).upper() for item in paired if _text(item[name])}))
+               for name in currency_columns},
             "Date": first["Date"], "Transaction Type": txn_type,
             "Num": first["Num"], "Name": payee,
             "Memo/Description": first["Memo/Description"],

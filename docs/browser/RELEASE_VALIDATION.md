@@ -11,6 +11,43 @@ regression coverage and the completed historical technical-alpha acceptance.
 
 ## Exact default workflow matrix
 
+### Country and fixed-currency acceptance
+
+Before a selected Canadian cohort is authorized, record the exact release SHA,
+image digest, database revision (including `0020_book_currency`), browser versions,
+viewports and sanitized test outcomes in the owning release discussion. Keep
+private cohort/identity/ledger evidence in approved custody, not Git or logs.
+The release owner must verify:
+
+- An exact operator-approved CA/CAD request creates one CAD book atomically;
+  replay returns the same identity, and changed/forged pairs fail. US/USD and
+  existing internal USD books retain identities, memberships and values.
+- The initial three-business aggregate cap includes both countries; expansion,
+  named-user approval and freezes remain independently enforced. A paused cohort
+  retains authorized selected-business reads and customer exports.
+- One named user switches between USD and CAD businesses with different roles
+  on desktop/mobile. Currency, private drafts/cache, records, receipt access and
+  download labels follow the selected business. Direct foreign-business access
+  and unauthorized writes/exports fail; no membership is granted by switching.
+- Representative opening balances, income/expense, transfer, journal, recurring
+  and mixed-use activity retain exact amounts and signs. Mileage and transfers
+  stay outside income/expenses; Assets = Liabilities + Equity remains balanced.
+- Currency-free CSV/QuickBooks files are explicitly interpreted in the selected
+  unit. Contradictory explicit currency fails preview and commit, including
+  replay and paired workbook rows. Retained USD Sheets migration cannot target
+  CAD. Financial CSV columns/values remain compatible and delivery identifies
+  currency; canonical/customer exports validate CAD metadata and exact values.
+- Inspect keyboard, screen-reader labels, narrow layouts and current-revision
+  CI/review evidence. Verify a CAD-aware admission-compatible rollback image;
+  do not relabel books or roll back to USD-only interpretation.
+
+Synthetic regression coverage is an input, not hosted acceptance. Canadian
+legal/privacy/provider eligibility, real identity/Drive/restart and independent
+database/receipt recovery remain with their existing owners. The
+[external-beta release gate](https://github.com/Roklion/Project_Tabula_Rasa/issues/348)
+requires written GO for the exact release/cohort; code completion alone admits
+no Canadian or other external customer and authorizes no deployment or migration.
+
 Automated cases use a fixed synthetic identity and byte adapter. Hosted acceptance
 applies these workflows to authorized named fixtures and the real configured provider
 under hosted rollout; synthetic context or bytes cannot supply that hosted evidence.

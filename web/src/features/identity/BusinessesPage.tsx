@@ -15,7 +15,7 @@ export function BusinessesPage() {
   const [creating, setCreating] = useState(false);
   return <div className="workflowSections"><PageHeader title="My Businesses" description="Each business has its own membership and ledger. Creating another business does not copy anyone else’s access." />
     <section aria-label="Available businesses"><h2>Your businesses</h2><ul className="recordList">
-      {selection?.items.map(item => <li key={item.id}><span>{businessLabel(item, selection.items)} <span className="muted">{roleLabel(item.role)}</span></span>
+      {selection?.items.map(item => <li key={item.id}><span><span>{businessLabel(item, selection.items)}</span> · {item.currency_code} <span className="muted">{roleLabel(item.role)}</span></span>
         {item.id === session.entity.id ? <span>Selected business</span> : <EntitySelector activeId={session.entity.id} targetId={item.id} />}</li>)}
     </ul></section>
     {!session.trusted_development && session.business_creation_available && (creating ? <LedgerSetup key={session.actor_id} session={session} />

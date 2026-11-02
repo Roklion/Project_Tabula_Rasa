@@ -4,10 +4,10 @@ from tabula_rasa.infrastructure.postgres.composition import create_postgres_serv
 from tests.postgres._support import account, category, entity
 
 
-def seed_core(database):
+def seed_core(database, *, currencies=("USD", "USD")):
     with database.transaction() as connection:
-        for scope in ('alpha', 'beta'):
-            entity(connection, scope)
+        for scope, currency in zip(('alpha', 'beta'), currencies, strict=True):
+            entity(connection, scope, currency=currency)
             account(connection, scope, 'cash')
             account(connection, scope, 'bank')
             category(connection, scope, 'sales', kind='Income')

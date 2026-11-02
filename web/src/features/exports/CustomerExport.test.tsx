@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { api } from '../../api/client';
 import { EntityContext } from '../../app/context';
@@ -7,6 +7,18 @@ import * as downloads from '../../components/downloadBlob';
 import { CustomerExport } from './CustomerExport';
 
 afterEach(() => vi.restoreAllMocks());
+
+it('labels a CAD handoff and its saved filename without altering returned bytes', async () => {
+  const content = new Blob(['synthetic-cad-archive']);
+  vi.spyOn(api, 'downloadCustomerExport').mockResolvedValue(content);
+  const save = vi.spyOn(downloads, 'downloadBlob').mockImplementation(() => undefined);
+  const owner = { ...session, entity: { ...session.entity, currency_code: 'CAD' as const },
+    capabilities: [...session.capabilities, 'bookkeeping:export'] };
+  render(<EntityContext value={owner}><CustomerExport /></EntityContext>);
+  expect(screen.getByText(/Complete bookkeeping archive for Alpha · CAD/)).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Download handoff ZIP' }));
+  await waitFor(() => expect(save).toHaveBeenCalledExactlyOnceWith(content, 'tabula-rasa-handoff-CAD.zip'));
+});
 
 it('discloses exclusions and denies full handoff to ordinary readers', () => {
   render(<EntityContext value={session}><CustomerExport /></EntityContext>);

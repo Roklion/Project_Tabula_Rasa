@@ -6,7 +6,7 @@ from dataclasses import replace
 from sqlalchemy import text
 
 from tabula_rasa.application.imports import (
-    TransactionImportContext, csv_transaction_inputs, preview_quickbooks,
+    TransactionImportContext, csv_transaction_inputs, preview_quickbooks, validate_source_currency,
 )
 from tabula_rasa.application.reference_data import PayeeService, TagService
 from tabula_rasa.application.transactions import TransactionService
@@ -18,7 +18,7 @@ from .concurrency import baseline_for
 from .provenance import bounded_rows, complete_import, completed_import, import_identity
 from .reference_data import (
     PostgresAccountRepository, PostgresCategoryRepository, PostgresPayeeRepository,
-    PostgresTagRepository,
+    PostgresTagRepository, PostgresLedgerSetupRepository,
 )
 from .repository import EntityRepository
 
@@ -40,6 +40,10 @@ class PostgresTransactionImportRepository(EntityRepository):
             payees=PayeeService(self.payees), tags=TagService(self.tags),
         )
 
+    @property
+    def currency_code(self):
+        return PostgresLedgerSetupRepository(self.database, self.entity_id).ledger_currency
+
     def context(self, connection, *, lock=False):
         if lock:
             self.accounting.references(connection, lock=True)
@@ -49,6 +53,8 @@ class PostgresTransactionImportRepository(EntityRepository):
             tuple(connection.execute(text(
                 "SELECT fingerprint FROM import_records WHERE entity_id=:scope AND record_kind='entry'"
             ), {'scope': self.entity_id}).scalars()),
+            currency_code=connection.scalar(text('SELECT currency_code FROM business_entities WHERE id=:scope'),
+                                            {'scope': self.entity_id}),
         )
 
     def quickbooks_context(self):
@@ -94,6 +100,8 @@ class PostgresTransactionImportRepository(EntityRepository):
             # Serialize submitted import batches and supported reference/entry writes
             # before fresh selection. No application retry or Sheets fallback.
             self.lock_entity(connection)
+            validate_source_currency(rows, connection.scalar(
+                text('SELECT currency_code FROM business_entities WHERE id=:scope'), {'scope': self.entity_id}))
             if completed_import(connection, self.entity_id, batch_id):
                 return []
             inputs = csv_transaction_inputs(rows, self.context(connection, lock=True))
@@ -106,6 +114,8 @@ class PostgresTransactionImportRepository(EntityRepository):
         batch_id = self.identity('quickbooks', rows)
         with self.operation() as connection:
             self.lock_entity(connection)
+            validate_source_currency(rows, connection.scalar(
+                text('SELECT currency_code FROM business_entities WHERE id=:scope'), {'scope': self.entity_id}))
             if completed_import(connection, self.entity_id, batch_id):
                 return []
             context = self.context(connection, lock=True)

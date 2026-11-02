@@ -20,13 +20,18 @@ router = APIRouter(prefix="/api/v1/entities/{entity_id}/imports", tags=["Imports
 @router.post("/csv/prepare", response_model=TransactionCsvPreview,
              operation_id="prepare_transaction_csv", openapi_extra=BINARY_UPLOAD)
 async def prepare_transaction_csv(entity_id: str, request: Request, context: Context):
-    try:
-        prepared = await run_in_threadpool(prepare_csv_import, await read_import_upload(request))
-    except StorageValidationError as error:
-        # File preparation errors contain only fixed guidance and required column
-        # names, so the authorized preview can display them safely.
-        return TransactionCsvPreview(columns=[], source_rows=[], total_rows=0, errors=[str(error)])
-    return TransactionCsvPreview(columns=prepared.columns, source_rows=prepared.rows[:20], total_rows=len(prepared.rows))
+    content = await read_import_upload(request)
+
+    def prepare():
+        try:
+            prepared = prepare_csv_import(content)
+        except StorageValidationError as error:
+            # Preparation errors contain only fixed guidance and required headers.
+            return TransactionCsvPreview(columns=[], source_rows=[], total_rows=0, errors=[str(error)])
+        with service_operation(request, context, "imports") as service:
+            service.validate_source(prepared.rows)
+        return TransactionCsvPreview(columns=prepared.columns, source_rows=prepared.rows[:20], total_rows=len(prepared.rows))
+    return await run_in_threadpool(prepare)
 
 
 @router.post("/quickbooks/preview", response_model=QuickBooksImportPreview,

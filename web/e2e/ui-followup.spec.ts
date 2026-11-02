@@ -4,7 +4,7 @@ import { coreResponse, session as coreSession, longName } from './core-fixture';
 import { secondaryResponse } from './secondary-fixture';
 import { captureEvidence, retainEvidence } from './visual-evidence';
 
-const session = { ...coreSession, trusted_development: false, entity: { id: 'alpha', name: longName },
+const session = { ...coreSession, trusted_development: false, entity: { currency_code: 'USD', id: 'alpha', name: longName },
   capabilities: [...coreSession.capabilities, 'members:manage', 'ownership:manage', 'entity:manage'] };
 const member = { user_id: 'synthetic-member', display_name: 'Synthetic collaborator', role: 'read_only', state: 'active', authorization_version: 1 };
 
@@ -12,7 +12,7 @@ test.beforeEach(async ({ page }) => {
   await page.route('**/api/v1/**', route => {
     const url = new URL(route.request().url());
     const path = url.pathname;
-    const json = path.endsWith('/session') ? session : path === '/api/v1/businesses' ? { items: [session.entity, { id: 'beta', name: longName + ' second business' }] }
+    const json = path.endsWith('/session') ? session : path === '/api/v1/businesses' ? { items: [session.entity, { currency_code: 'CAD', id: 'beta', name: longName + ' second business' }] }
       : path.endsWith('/members') ? { items: [member] } : path.endsWith('/invitations') ? { items: [] }
         : path.includes('/mileage') ? secondaryResponse(url) : coreResponse(url);
     return route.fulfill({ json });

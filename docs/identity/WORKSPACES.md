@@ -132,12 +132,12 @@ Authenticated named users, including users without memberships and Read-only
 members of another business, can call `POST /api/v1/businesses` with `request_id`
 (16–128 ASCII letters, digits, underscores or hyphens, one recoverable URL segment)
 and `business_name` (required, trimmed, at most 160 characters), plus country/currency
-(default US/USD; Canada/CAD remains held). After required external admission approval, the server creates
+(default US/USD; Canada/CAD creates independent CAD books). After required external admission approval, the server creates
 a new private backing organization, grants the acting user Owner and creates one
 canonical business. There is no workspace-name field, existing-organization selector,
 caller-supplied owner/entity ID or implicit copy of other members. The result exposes
 only `state` and `entity_id`. Books reuse `LedgerSetupService`'s standard chart and
-Income/Expense categories; opening balances start at zero. No new tax/currency or
+Income/Expense categories; opening balances start at zero. No new tax or
 default-accounting logic is introduced.
 
 `POST /api/v1/workspaces/bootstrap` remains deprecated compatibility for older
