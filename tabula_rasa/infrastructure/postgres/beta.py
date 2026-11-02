@@ -93,9 +93,6 @@ def prepare_business(connection, actor, request_id, name, country, currency):
     program = lock_program(connection)
     if (country, currency) not in {("US", "USD"), ("CA", "CAD")}:
         raise IdentityError("beta_eligibility")
-    # Preserve the historical USD exemption; CAD still needs exact cohort approval.
-    if internal(connection, actor) and (country, currency) == ("US", "USD"):
-        return None
     row = (
         connection.execute(
             text(
@@ -107,6 +104,9 @@ def prepare_business(connection, actor, request_id, name, country, currency):
         .first()
     )
     if row is None:
+        # Exempt only a new USD request, never a request already bound to admission.
+        if internal(connection, actor) and (country, currency) == ("US", "USD"):
+            return None
         key = uuid4().hex
         connection.execute(
             text("""INSERT INTO beta_admissions(id,user_id,request_id,business_name,country,currency)

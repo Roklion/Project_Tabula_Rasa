@@ -183,6 +183,41 @@ def test_cad_uses_aggregate_cap_freeze_and_expiry_even_for_an_internal_owner(dat
     assert len(auth.sessions.identity.allowed_entities(alice.user_id)) == 2
 
 
+@pytest.mark.parametrize('approved', [False, True])
+def test_internal_usd_exemption_cannot_reinterpret_an_existing_cad_request(database, cohort, approved):
+    _, auth, _, person, _, _, beta, command, configure, service, request, _ = cohort
+    from tests.postgres.test_workspaces import approve_internal
+
+    _, alice = person('internal-cad-request')
+    approve_internal(database, alice.user_id)
+    configure()
+    internal = service.create_business(alice, uuid4().hex, 'Existing USD')
+    ca, key = request(alice, 'Bound CAD', country='CA', currency='CAD')
+    if approved:
+        command('approve', admission_id=ca)
+    expected_state = 'approved' if approved else 'pending'
+    for name, country, currency in [('Bound CAD', 'US', 'USD'), ('Changed', 'US', 'USD'), ('Changed', 'CA', 'CAD')]:
+        with pytest.raises(IdentityError, match='conflict'):
+            service.create_business(alice, key, name, country=country, currency=currency)
+    with database.transaction(read_only=True) as c:
+        assert c.scalar(text('SELECT count(*) FROM business_entities')) == 1
+        assert c.scalar(text('SELECT currency_code FROM business_entities WHERE id=:id'),
+                        {'id': internal['entity_id']}) == 'USD'
+        row = c.execute(text('SELECT state,country,currency,organization_id FROM beta_admissions WHERE id=:id'),
+                        {'id': ca}).mappings().one()
+        assert dict(row) == dict(state=expected_state, country='CA', currency='CAD', organization_id=None)
+    assert beta.status(alice.user_id)['requests'][0]['state'] == expected_state
+    assert len(auth.sessions.identity.allowed_entities(alice.user_id)) == 1
+    if not approved:
+        assert service.create_business(alice, key, 'Bound CAD', country='CA', currency='CAD')['state'] == 'pending'
+        command('approve', admission_id=ca)
+    ready = service.create_business(alice, key, 'Bound CAD', country='CA', currency='CAD')
+    assert ready['state'] == 'ready'
+    assert service.create_business(alice, key, 'Bound CAD', country='CA', currency='CAD') == ready
+    currencies = {item.entity_id: item.currency_code for item in auth.sessions.identity.allowed_entities(alice.user_id)}
+    assert currencies == {internal['entity_id']: 'USD', ready['entity_id']: 'CAD'}
+
+
 def test_cad_import_currency_replay_recurring_and_mixed_use(database):
     cad, usd = seed_core(database, currencies=('CAD', 'USD'))
     assert cad.ledger.get_info().currency_code == 'CAD'
@@ -190,11 +225,11 @@ def test_cad_import_currency_replay_recurring_and_mixed_use(database):
     for source in ('csv', 'quickbooks'):
         rows = [csv()] if source == 'csv' else [qb(Num='QB')]
         commit = getattr(cad.imports, 'import_' + source)
-        assert len(commit(rows)) == 1
+        assert len(commit(iter(rows))) == 1
         # Even a batch with a completed currency-free identity must be checked.
         for column in ('Currency', 'Currency Code', 'currency_code'):
             with pytest.raises(StorageValidationError, match='Source currency'):
-                commit([{**rows[0], column: 'USD'}])
+                commit(iter([{**rows[0], column: 'USD'}]))
         assert commit([{**rows[0], 'Currency': 'CAD'}]) == []
     with pytest.raises(StorageValidationError, match='Source currency'):
         cad.imports.preview_quickbooks([qb(Currency='EUR')])
