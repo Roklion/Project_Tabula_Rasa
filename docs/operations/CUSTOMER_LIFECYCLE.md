@@ -48,6 +48,71 @@ operators must verify actual expiry/versioning/custody limits before changes. Th
 product owner separately approves production execution and launch; none of those
 approvals is inferred from the product selections above.
 
+## Jurisdiction and legal review
+
+The owner identified businesses in **Delaware, New York and Connecticut, U.S.,
+and British Columbia, Canada** for the retention review. External counsel's
+approval remains pending. A business's formation or operating location does not
+establish every affected individual's residence or all applicable laws. Before
+review, privately confirm the contracting service operator, operating locations,
+customer/data-subject locations, processing locations, customer sectors and the
+operator's role for each purpose. Do not infer a regulated-sector exemption or
+that business bookkeeping contains no personal information.
+
+The following primary sources identify questions for counsel, not an approved
+schedule or a conclusion that a particular law applies. Recheck effective dates
+and amendments for the actual release and review date.
+
+| Review area | Source and decision needed |
+| --- | --- |
+| U.S. federal business records | [IRS recordkeeping periods](https://www.irs.gov/businesses/small-businesses-self-employed/how-long-should-i-keep-records) vary with the record and circumstances. Determine the customer's duties, any independent operator duties, state-specific duties and the records needed for property, disputes or other exceptions. Do not equate the proposed service-copy deletion date with the customer's lawful record-destruction date. |
+| Canadian business records | [CRA keeping records](https://www.canada.ca/en/revenue-agency/services/forms-publications/publications/rc188/keeping-records.html) generally requires six years from the end of the relevant tax year, with exceptions; outsourcing does not remove the record keeper's responsibility. Review readable customer exports, receipt originals, access and cross-border storage, and whether the service has separate retention duties. |
+| British Columbia personal information | [PIPA sections 3, 23 and 35](https://www.bclaws.gov.bc.ca/civix/document/id/complete/statreg/03063_01) require applicability, access and retention analysis. Section 35 includes a one-year minimum for information used to make a decision directly affecting an individual and destruction/de-identification conditions when purposes end. Determine which identity, access, support and ledger records fall within these rules before accepting a 90-day schedule or indefinite audit retention. |
+| Canadian federal/interprovincial processing | [PIPEDA retention guidance](https://www.priv.gc.ca/en/privacy-topics/privacy-laws-in-canada/the-personal-information-protection-and-electronic-documents-act-pipeda/p_principle/principles/p_use/) calls for purpose-based retention and documented minimum/maximum periods. Counsel must resolve its interaction with provincial law, cross-border processing and the actual operator/customer roles. |
+| Delaware personal data | Review [Title 6, chapter 12D](https://delcode.delaware.gov/title6/c012d/index.html), including current and future effective versions, covered-consumer definitions, applicability thresholds, controller/processor contracts, deletion rights and exceptions. A small business cohort alone does not establish the number or status of individuals represented in receipts and ledgers. |
+| Connecticut personal data | Review the [Attorney General's CTDPA guidance](https://portal.ct.gov/ag/sections/privacy/the-connecticut-data-privacy-act) and applicable amended law for the release date: coverage, business-context exclusions, controller/processor responsibilities, rights handling and exceptions. Determine whether any recorded data triggers additional rules; excluded product workloads are not evidence that prohibited data can never be submitted. |
+| New York private information | Review [SHIELD Act safeguards and disposal guidance](https://ag.ny.gov/resources/organizations/data-breach-reporting/shield-act), applicable tax/recordkeeping rules and any sector-specific obligations. Identify protected fields, service-provider responsibilities and disposal safeguards; no universal New York retention period is selected here. |
+
+### Decision package and approval evidence
+
+Supply counsel with this guide's product rules and store matrix, the implemented
+[export contract](../accounting/EXPORT.md), [audit policy](AUDIT_POLICY.md),
+[receipt recovery](../storage/RECEIPT_RECOVERY.md),
+[observability inventory](OBSERVABILITY.md), and the proposed customer disclosures.
+The existing public Terms/Privacy describe internal/private use; they are not
+evidence of approval for unrelated customers or the proposed deletion schedule.
+Use synthetic examples. Hold notices, personal data, provider account details,
+legal advice and exact execution targets stay in restricted custody.
+
+| Required decision | Evidence needed before acceptance |
+| --- | --- |
+| Applicable duties and roles | Counsel identifies covered jurisdictions, purposes, data categories, controller/processor or equivalent roles, exclusions and record-specific statutory/contractual duties. Confirm the service operator and authorized privacy contact privately. |
+| Live data and receipts at day 90 | Approve, revise or reject the proposal by store/category, with the clock's start, minimum/maximum periods, customer export responsibilities and longer-duty exceptions. An owner's saved-export acknowledgement does not discharge a statutory duty or prove a readable complete copy. |
+| Audit, lifecycle and support evidence | Decide a finite duration or a justified interim exception for stable actor IDs, financial measures, access decisions and case history. Assess immutable rows and digests, access rights, erasure exceptions and any permitted transformation. No audit rewrite/pruning is enabled by review preparation. |
+| Routine backups at 90 days | Reconcile the proposal with indefinite NAS generations, actual managed PITR/snapshot windows, receipt-byte copies, credential/key custody, frozen sources and holds. Approve the treatment of existing generations separately; a future expiry policy cannot silently dispose of historical evidence. |
+| Operational/security logs | Inventory actual Render, Better Stack, identity-provider, database, NAS, Actions and support/incident copies that exist. Record fields, purpose, geography, access, configured retention, exported copies and incident/hold exceptions. Published plan limits and older staging evidence are not current account readback or a legally approved duration. |
+| Individual-rights requests | Define verified intake, responsible reviewer, received date, applicable response/extension/appeal deadlines, authority to act for a business or another individual, permitted refusals and private decision evidence. A manual workflow or an unapproved erasure mechanism does not suspend a legally applicable response deadline. Escalate promptly rather than waiting for day 60 or 90. |
+| Holds and destruction | Identify who may issue/release a restricted manual hold, the evidence required for a known-clear decision, exceptions and preservation beyond provider windows. Approve exact-store destruction methods, verification limits, shared-resource isolation and the treatment of later restores. Unknown status still blocks destruction. |
+| Customer disclosures | Owner and counsel reconcile retention, access expiry, export limits, provider/customer-held copies, residual backups, support and rights handling with the actual Terms/Privacy. Approval of wording, publication, customer admission and production execution are separate decisions. |
+
+For each accepted decision, retain the reviewer and authority, review date,
+policy revision, applicable scope, decision/rationale, private advice reference,
+exceptions, expiry/review trigger and owner approval. Public evidence contains
+only a sanitized decision and approval reference. Do not mark legal review
+complete from a prepared package, a proposed duration or an implementation merge.
+
+### Applying an approved schedule
+
+After counsel and owner approve the policy, the engineering owner maps every
+approved category to its actual storage and recovery copies and implements the
+required mechanism through the normal reviewed change process. Verify denial
+for missing approvals, unknown holds, unavailable recovery, incomplete document
+inventory and another business's data; verify the approved success path,
+interruption/restart and later-restore behavior on synthetic resources. A passing
+deletion test does not authorize a real target. Separately record operator
+approval, exact scope and irreversible step before any production operation or
+provider setting change. Until these gates pass, current preservation applies.
+
 ## Store and retention inventory
 
 Until a reviewed destruction plan is approved, preserve data. A proposed deadline
