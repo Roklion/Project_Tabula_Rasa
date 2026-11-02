@@ -289,8 +289,19 @@ def test_onboarding_invitee_joins_existing_workspace_without_new_ownership(named
         credential_field.fill(invitation.credential)
         peer = context.new_page()
         peer.add_init_script("Object.defineProperty(document, 'visibilityState', {get: () => 'hidden'})")
-        peer.goto(origin)
-        peer.get_by_role('button', name='Create your first business', exact=True).click()
+        status_routes = []
+        peer.route('**/api/v1/beta/status', lambda route: status_routes.append(route))
+        with peer.expect_request('**/api/v1/beta/status'):
+            peer.goto(origin)
+        create = peer.get_by_role('button', name='Create your first business', exact=True)
+        expect(create).to_be_visible()
+        before_status = create.bounding_box()
+        # Deliver status after controls are usable: it must not move a click target.
+        assert len(status_routes) == 1
+        status_routes[0].fulfill(response=context.request.get(origin + '/api/v1/beta/status'))
+        expect(peer.get_by_text('New admissions are paused.', exact=False)).to_be_visible()
+        assert create.bounding_box() == before_status
+        create.click()
         peer.get_by_label('Business name').fill('Unsubmitted invitee draft')
         page.bring_to_front()
         page.get_by_role('button', name='Review invitation').click()

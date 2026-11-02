@@ -13,7 +13,7 @@ export function BusinessesPage() {
   const session = useEntity();
   const selection = useContext(EntitySelectionContext);
   const [creating, setCreating] = useState(false);
-  return <div className="workflowSections"><PageHeader title="My Businesses" description="Each business has its own membership and ledger. Creating another business does not copy anyone else’s access." /><BetaNotice />
+  return <div className="workflowSections"><PageHeader title="My Businesses" description="Each business has its own membership and ledger. Creating another business does not copy anyone else’s access." />
     <section aria-label="Available businesses"><h2>Your businesses</h2><ul className="recordList">
       {selection?.items.map(item => <li key={item.id}><span>{businessLabel(item, selection.items)} <span className="muted">{roleLabel(item.role)}</span></span>
         {item.id === session.entity.id ? <span>Selected business</span> : <EntitySelector activeId={session.entity.id} targetId={item.id} />}</li>)}
@@ -24,5 +24,6 @@ export function BusinessesPage() {
       <div className="actions"><a className="button" href="/invitations">Join an invited business</a></div>
       <p>Moving existing Sheets books requires the approved operator migration and cutover process. Creating a business does not import or claim those books.</p>
     </section>
+    <BetaNotice />
   </div>;
 }

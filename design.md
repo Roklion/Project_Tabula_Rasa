@@ -1113,7 +1113,8 @@ upload. Maps lookup buttons retain an 8px gap below their input.
 ## Invitation-only beta enrollment
 
 **Current behavior:** My Businesses and first-use onboarding include the shared
-beta notice after the page header, using existing surfaces and status text.
+beta notice below the business actions and forms, using existing surfaces and status text.
+Asynchronous enrollment status must not shift controls during a pointer interaction.
 Scope and service limitations sit in a keyboard-accessible disclosure. Business setup collects
 U.S./USD or Canada/CAD; Canadian admission is held pending currency-safe product
 verification. Create Business can return pending without creating a ledger. The
