@@ -22,9 +22,9 @@ do not approve destructive execution, statutory periods or public legal claims.
 | Login closure confirmation | Disable the local login and revoke all its sessions immediately; retain identity and history pending reviewed deletion. Provider identity deletion is separate. |
 | Privacy erasure | Separate request and case-specific review of jurisdiction, statutory duties, holds and backup limits before erasure. |
 | Export before business closure | Require the Owner's acknowledgement that needed bookkeeping and receipt exports were saved. This is an attestation, not proof of successful download. |
-| Eligible live bookkeeping/receipt deletion | **Proposal:** 90 days after confirmed closure, leaving 30 days after ordinary access ends. No deletion is enabled until legal review, approved tooling and exact-target authorization. |
-| Routine backup expiry | **Proposal:** 90 days from generation creation. Current indefinite NAS preservation remains effective until a separately reviewed replacement policy and tooling are approved. Holds, frozen sources and recovery evidence remain exceptions. |
-| Immutable audit and lifecycle history | Finite retention is the desired direction; the duration remains for counsel to determine. Existing indefinite preservation and no-rewrite protections remain effective. |
+| Eligible live bookkeeping/receipt deletion | Owner-selected product policy: eligibility 90 days after confirmed closure, leaving 30 days after ordinary access ends. Eligibility requires resolved holds and legal exceptions, complete inventory and recovery safeguards. No deletion is enabled until legal review, approved tooling and exact-target authorization. |
+| Routine backup expiry | Owner-selected product policy: 90 days from creation for future routine generations under an approved replacement schedule. Preserve all existing NAS generations until a separately approved historical-disposal plan. Current indefinite preservation remains effective until legal review and replacement tooling are approved; the policy selection starts no automatic expiry. Holds, frozen sources and recovery evidence remain exceptions. |
+| Immutable audit, lifecycle and support history | Preserve audit, lifecycle and support history on an interim basis without a fixed end date pending a legal decision on duration and exceptions. Existing audit no-rewrite protections remain effective. Any transformation or pruning requires separate approval. |
 | Legal holds | Manual restricted procedure; unknown or unresolved status blocks deletion. Formal hold registry/issuance/release tooling remains deferred. |
 | Operational/security logs | Duration unresolved until actual provider inventory and legal review; no automatic expiry or claim of provider deletion. |
 
@@ -87,9 +87,9 @@ legal advice and exact execution targets stay in restricted custody.
 | Required decision | Evidence needed before acceptance |
 | --- | --- |
 | Applicable duties and roles | Counsel identifies covered jurisdictions, purposes, data categories, controller/processor or equivalent roles, exclusions and record-specific statutory/contractual duties. Confirm the service operator and authorized privacy contact privately. |
-| Live data and receipts at day 90 | Approve, revise or reject the proposal by store/category, with the clock's start, minimum/maximum periods, customer export responsibilities and longer-duty exceptions. An owner's saved-export acknowledgement does not discharge a statutory duty or prove a readable complete copy. |
+| Live data and receipts at day 90 | Legally approve, revise or reject the owner-selected eligibility by store/category, with the clock's start, minimum/maximum periods, customer export responsibilities and longer-duty exceptions. An owner's saved-export acknowledgement does not discharge a statutory duty or prove a readable complete copy. |
 | Audit, lifecycle and support evidence | Decide a finite duration or a justified interim exception for stable actor IDs, financial measures, access decisions and case history. Assess immutable rows and digests, access rights, erasure exceptions and any permitted transformation. No audit rewrite/pruning is enabled by review preparation. |
-| Routine backups at 90 days | Reconcile the proposal with indefinite NAS generations, actual managed PITR/snapshot windows, receipt-byte copies, credential/key custody, frozen sources and holds. Approve the treatment of existing generations separately; a future expiry policy cannot silently dispose of historical evidence. |
+| Routine backups at 90 days | Legally review the owner-selected future-generation schedule against actual managed PITR/snapshot windows, receipt-byte copies, credential/key custody, frozen sources and holds. Existing NAS generations remain preserved; any historical disposal needs a separate reviewed plan. Define the activation boundary for future generations before enabling expiry. A future expiry policy cannot silently dispose of historical evidence. |
 | Operational/security logs | Inventory actual Render, Better Stack, identity-provider, database, NAS, Actions and support/incident copies that exist. Record fields, purpose, geography, access, configured retention, exported copies and incident/hold exceptions. Published plan limits and older staging evidence are not current account readback or a legally approved duration. |
 | Individual-rights requests | Define verified intake, responsible reviewer, received date, applicable response/extension/appeal deadlines, authority to act for a business or another individual, permitted refusals and private decision evidence. A manual workflow or an unapproved erasure mechanism does not suspend a legally applicable response deadline. Escalate promptly rather than waiting for day 60 or 90. |
 | Holds and destruction | Identify who may issue/release a restricted manual hold, the evidence required for a known-clear decision, exceptions and preservation beyond provider windows. Approve exact-store destruction methods, verification limits, shared-resource isolation and the treatment of later restores. Unknown status still blocks destruction. |
@@ -132,8 +132,18 @@ does not establish a statutory duty or authorize a provider setting change.
 | Temporary customer exports | Anonymous temporary files are closed after preparation failure, completed delivery or cancellation; no retained archive/link. | A downloaded customer copy cannot be recalled. Failure/stream interruption cannot prove the customer saved an archive. |
 | Retained operator exports, source snapshots and reconciliation oracles | Private recovery/evidence custody and frozen-source obligations continue. These are not alternate live ledgers. | Individually review owner, purpose, hold and preservation obligations; the routine-backup proposal does not silently expire required evidence. |
 | Browser/query caches | Session/business scope boundaries own invalidation and private-state clearing. | Revocation cannot erase files already downloaded or screenshots/customer copies. No private content in telemetry. |
+| Support correspondence and privacy case records | Preserve relevant case history in approved restricted custody pending a legal decision on duration and exceptions. | Inventory the actual support channels, custody locations and retained copies privately. |
 | Operational/security logs and error telemetry | Minimized safe codes and request references; actual hosting/provider retention must be inventoried privately. | A product target is not evidence of provider deletion. Hold and incident obligations may override routine expiry. |
 | Billing/payment-provider records | No paid provider is selected or activated by customer closure. | Future provider/legal obligations and cancellation/refunds require a separate commercial contract; login or business closure must not invent subscription semantics. |
+
+For each provider, distinguish the retrievable history window from underlying
+storage retention, exported copies and verified destruction. For example,
+[ZITADEL audit history](https://help.zitadel.com/audit-trail-history-events)
+describes events retrievable through its API or GUI, subject to subscription
+limits. Its [cloud log guidance](https://help.zitadel.com/access-and-runtime-logs)
+also separates log availability from retrieval limits. A query window or an
+unavailable console view does not establish that older provider-held data was
+purged. Record unresolved provider preservation/deletion limits explicitly.
 
 ## Request, confirmation and recovery procedure
 
@@ -185,6 +195,56 @@ identity/membership context; canonical bookkeeping exports deliberately exclude 
 Fresh account disablement can make an uncertain confirmation response unrecoverable
 through the same login. Support must inspect the retained case; do not re-enable
 identity merely to retry confirmation.
+
+## Manual privacy-request handling
+
+Record the owner-designated privacy-intake mailbox in restricted operator
+records. Verify mailbox access, delivery and response coverage. Reconcile the
+mailbox with the published Terms/Privacy contact through legal disclosure review
+before claiming a deployed intake path.
+The owner selected a private Google Drive folder for case/hold evidence custody.
+Keep its exact folder reference in private operator custody and verify ownership,
+authorized readers and sharing restrictions before storing case material. Do not
+reuse a customer receipt folder or infer privacy from the folder name. Selecting
+a mailbox does not establish evidence custody or grant access to that folder.
+
+The service owner is the primary privacy reviewer. This manual responsibility
+does not grant additional application, database or provider access. Use approved
+restricted case custody for requests received through the private support path
+or the lifecycle review queue; neither GitHub issues nor application telemetry
+is a case store. A disabled login or expired business-access window must not
+prevent the reviewer from accepting a request through that support path.
+
+1. Record the received date/time in UTC or with an explicit time zone offset,
+   along with the private case reference, assigned reviewer, requested right and
+   scope. Preserve the original receipt date when linking
+   repeated submissions or an application request; confirmation, verification
+   or a restart does not silently replace it.
+2. Verify the requester's identity and authority for the requested scope through
+   the approved private channel, collecting only necessary evidence. Business
+   ownership and an individual's rights require separate analysis; a business
+   role alone does not resolve every personal-information request. Do not request
+   passwords, session cookies or provider tokens as verification evidence.
+3. Obtain legal determination of applicable duties and response, extension and
+   appeal deadlines, and track them with the responsible reviewer. Escalate an
+   unknown deadline promptly for legal review; do not wait for closure day 60 or
+   90 or for deletion tooling. Manual review does not suspend applicable clocks.
+4. Review the relevant stores, provider/customer-held copies, holds, required
+   preservation and supported export/recovery limits. Require legal review
+   before denying rights or releasing a legal hold. No request, cancellation,
+   product retention selection or case decision substitutes for approved
+   destruction tooling and exact-target execution authority.
+5. Keep the verification outcome, legal decision reference, authorized response,
+   actual actions, unresolved limits and completion date in restricted custody.
+   Disclose effects and limits through the verified private channel. Record any
+   legally required extension or appeal handling; do not mark a case fulfilled
+   merely because it was queued, access was revoked or a query window expired.
+
+This procedure establishes manual ownership and handling, not a deployed case
+management system, an automated deadline scheduler, a legal applicability
+decision or approved public rights wording. Counsel's jurisdiction/category
+decisions, approved custody/contact arrangements and disclosure review remain
+required before claiming commercial rights-handling readiness.
 
 ## Hold and destruction review
 
