@@ -397,6 +397,9 @@ diagnostic signals.
 Signed-out users choose **Create account** or **Sign in**. Create account starts
 ZITADEL's hosted registration with `prompt=create` and `max_age=0`; Sign in keeps
 `prompt=login`. Both use the existing callback, verification and session security.
+Registration allows 15 minutes for the hosted form, email verification and factor
+enrollment. Both browser cookies and the durable transaction expire at that
+boundary. The callback still requires recent provider authentication.
 Registration returns to `/invitations` by default. It grants no membership,
 ledger or beta approval. See [provider setup](PROVIDER_SETUP.md#hosted-end-user-self-registration)
 and [hosted verification](HOSTED_ROLLOUT.md#hosted-registration-and-invitation-smoke).

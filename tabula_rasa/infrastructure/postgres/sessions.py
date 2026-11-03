@@ -7,7 +7,7 @@ import secrets
 
 from sqlalchemy import text
 
-from tabula_rasa.application.identity import AuthenticatedSession, IdentityError, LoginTransaction
+from tabula_rasa.application.identity import AuthenticatedSession, IdentityError, LoginTransaction, LOGIN_TRANSACTION_SECONDS
 from .control_plane import PostgresIdentityRepository, entity_access, identity_operation
 
 
@@ -56,7 +56,7 @@ class PostgresSessionRepository:
             raise IdentityError('unauthorized')
         return epoch
 
-    def begin_login(self, return_path, previous=None):
+    def begin_login(self, return_path, previous=None, *, lifetime=LOGIN_TRANSACTION_SECONDS):
         if return_path not in {'/', '/onboarding', '/invitations'}:
             raise IdentityError('forbidden')
         raw = secrets.token_urlsafe(32)
@@ -81,7 +81,7 @@ class PostgresSessionRepository:
                 VALUES (:hash,:env,:epoch,:state,:nonce,:verifier,:path,:expiry)'''),
                 {'hash': credential_hash(raw), 'env': self.environment, 'epoch': epoch, 'state': transaction.state,
                  'nonce': transaction.nonce, 'verifier': transaction.verifier, 'path': return_path,
-                 'expiry': now + timedelta(minutes=5)})
+                 'expiry': now + timedelta(seconds=lifetime)})
         return raw, transaction
 
     def consume_login(self, raw, state):

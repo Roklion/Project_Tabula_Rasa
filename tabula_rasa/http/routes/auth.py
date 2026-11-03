@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Request
 from starlette.responses import RedirectResponse, Response
 
-from tabula_rasa.application.identity import IdentityError, LOGIN_FAILURE_REASONS
+from tabula_rasa.application.identity import (
+    IdentityError, LOGIN_FAILURE_REASONS, LOGIN_TRANSACTION_SECONDS, REGISTRATION_TRANSACTION_SECONDS,
+)
 from ..context import require_csrf
 from ..errors import ERROR_RESPONSES, TransportError, error_response
 from ..models.common import LogoutContext
@@ -44,10 +46,11 @@ def begin_authentication(request, return_path, *, registration=False):
     auth = identity(request)
     request.state.login_request_id = request.state.request_id
     try:
-        raw, transaction = auth.sessions.begin_login(return_path, request.cookies.get(auth.login_cookie))
+        lifetime = REGISTRATION_TRANSACTION_SECONDS if registration else LOGIN_TRANSACTION_SECONDS
+        raw, transaction = auth.sessions.begin_login(return_path, request.cookies.get(auth.login_cookie), lifetime=lifetime)
         response = RedirectResponse(auth.provider.authorization_url(transaction, registration=registration), status_code=303)
-        auth.set_cookie(response, auth.login_cookie, raw, 300)
-        auth.set_cookie(response, auth.login_reference_cookie, request.state.request_id, 300)
+        auth.set_cookie(response, auth.login_cookie, raw, lifetime)
+        auth.set_cookie(response, auth.login_reference_cookie, request.state.request_id, lifetime)
         request.state.security_event = "login_started"
     except IdentityError as error:
         if error.code == 'forbidden':

@@ -294,7 +294,7 @@ invitations, change production settings or admit a cohort during code validation
    Exercise wrong email, unverified identity, stale authentication, replay,
    48-hour expiry, revocation and lost inviter authority. Check admission approval,
    cohort caps and pauses through direct APIs too; registration is no exemption.
-4. Cancel/expire registration and exercise disabled registration on an isolated
+4. Cancel registration or let its 15-minute transaction expire and exercise disabled registration on an isolated
    approved test client. Returned failures consume cookies/state, show safe
    guidance and support deliberate retry and existing-account Sign in. If the
    provider keeps the browser on its own refusal screen, return to the app and

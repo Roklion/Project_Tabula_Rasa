@@ -4,6 +4,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 
+LOGIN_TRANSACTION_SECONDS = 300
+REGISTRATION_TRANSACTION_SECONDS = 900
+
+
 LOGIN_FAILURE_REASONS = frozenset({
     'login_start', 'login_transaction', 'provider_authorization', 'token_exchange',
     'token_validation', 'login_freshness', 'userinfo_validation', 'session_issue',

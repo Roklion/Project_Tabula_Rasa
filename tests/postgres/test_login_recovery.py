@@ -26,6 +26,12 @@ def test_signed_login_and_stale_provider_recovery(database, oidc, retained, capl
         start = client.get('/api/v1/auth/' + entry, follow_redirects=False)
         query = parse_qs(urlsplit(start.headers['location']).query)
         assert query['prompt'] == ['create' if entry == 'register' else 'login'] and query['max_age'] == ['0']
+        lifetime = 900 if entry == 'register' else 300
+        assert sum(f'Max-Age={lifetime};' in cookie for cookie in start.headers.get_list('set-cookie')) == 2
+        if entry == 'register':
+            # Model time spent on the hosted form before fresh provider authentication.
+            now = auth.sessions.clock()
+            auth.sessions.clock = lambda: now + timedelta(minutes=6)
         original_state = query['state'][0]
         claims['nonce'] = query['nonce'][0]
         pending_cookie = client.cookies.get(auth.login_cookie)
@@ -96,7 +102,7 @@ def test_failed_callback_classification_and_deliberate_restart(database, failure
             client.cookies.clear()
         elif failure == 'expired':
             now = original_clock()
-            auth.sessions.clock = lambda: now + timedelta(minutes=6)
+            auth.sessions.clock = lambda: now + timedelta(minutes=16 if entry == 'register' else 6)
         else:
             auth.sessions.issue = Mock(side_effect=IdentityError('unavailable'))
             expected = 'session_issue'
