@@ -132,6 +132,7 @@ does not establish a statutory duty or authorize a provider setting change.
 | Temporary customer exports | Anonymous temporary files are closed after preparation failure, completed delivery or cancellation; no retained archive/link. | A downloaded customer copy cannot be recalled. Failure/stream interruption cannot prove the customer saved an archive. |
 | Retained operator exports, source snapshots and reconciliation oracles | Private recovery/evidence custody and frozen-source obligations continue. These are not alternate live ledgers. | Individually review owner, purpose, hold and preservation obligations; the routine-backup proposal does not silently expire required evidence. |
 | Browser/query caches | Session/business scope boundaries own invalidation and private-state clearing. | Revocation cannot erase files already downloaded or screenshots/customer copies. No private content in telemetry. |
+| Support correspondence and privacy case records | Preserve relevant case history in approved restricted custody pending a legal decision on duration and exceptions. | Inventory the actual support channels, custody locations and retained copies privately. |
 | Operational/security logs and error telemetry | Minimized safe codes and request references; actual hosting/provider retention must be inventoried privately. | A product target is not evidence of provider deletion. Hold and incident obligations may override routine expiry. |
 | Billing/payment-provider records | No paid provider is selected or activated by customer closure. | Future provider/legal obligations and cancellation/refunds require a separate commercial contract; login or business closure must not invent subscription semantics. |
 
@@ -204,8 +205,9 @@ or the lifecycle review queue; neither GitHub issues nor application telemetry
 is a case store. A disabled login or expired business-access window must not
 prevent the reviewer from accepting a request through that support path.
 
-1. Record the received date/time, private case reference, assigned reviewer,
-   requested right and scope. Preserve the original receipt date when linking
+1. Record the received date/time in UTC or with an explicit time zone offset,
+   along with the private case reference, assigned reviewer, requested right and
+   scope. Preserve the original receipt date when linking
    repeated submissions or an application request; confirmation, verification
    or a restart does not silently replace it.
 2. Verify the requester's identity and authority for the requested scope through
