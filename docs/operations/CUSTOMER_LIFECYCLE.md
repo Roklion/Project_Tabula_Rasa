@@ -198,10 +198,10 @@ identity merely to retry confirmation.
 
 ## Manual privacy-request handling
 
-The owner-designated privacy-intake mailbox is
-<heathcoteadvisoryllc@gmail.com>. This selection does not verify mailbox access,
-delivery or response coverage. Reconcile it with the published Terms/Privacy
-contact through legal disclosure review before claiming a deployed intake path.
+Record the owner-designated privacy-intake mailbox in restricted operator
+records. Verify mailbox access, delivery and response coverage. Reconcile the
+mailbox with the published Terms/Privacy contact through legal disclosure review
+before claiming a deployed intake path.
 The owner selected a private Google Drive folder for case/hold evidence custody.
 Keep its exact folder reference in private operator custody and verify ownership,
 authorized readers and sharing restrictions before storing case material. Do not
