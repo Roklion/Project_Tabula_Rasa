@@ -301,6 +301,35 @@ it behind: confirm the old process/container has stopped, record the failure,
 then remove **only that exact empty `.lock` directory** before one manual run.
 Never delete a retained generation or incomplete directory to clear a lock.
 
+### Opt-in staging recovery cadence
+
+In the protected configuration for an approved staging source, set
+`"environment": "uat"` and `"schedule": "twice_daily"`. Slots are 10:00 and
+22:00 America/New_York, with 11–13 elapsed hours across DST. The existing
+`scheduled` command attempts only the latest slot, once. An interrupted or
+failed attempt consumes it. An unattempted slot can be caught until the next
+slot supersedes it. Keep the two-hour slot grace and use `status` for a separate
+20-hour capture-age alert, including while another attempt is running. Omit
+`schedule` to use the Wednesday/Sunday policy. Production accepts only that
+default policy.
+
+Use distinct protected configs, direct source fingerprints, and read-only roles
+for the staging ledger and dedicated custody databases. In the custody config
+also set `"source_kind": "connection_custody"`. Its TLS preflight checks the
+dedicated grants table and refuses a ledger with an Alembic version table. The
+dump includes only the custody schema and its manifest records the source kind.
+Restore into a dedicated isolated database, preserving exact ciphertext and
+references. Keep the Fernet key separately recoverable.
+
+Before enabling this cadence, approve exact DSM windows and an independent
+monitor outside the NAS. Serialize both staging captures and reserve windows
+away from production tasks. Measure elapsed time, peak memory, database
+connections, and storage growth with a single heavy PostgreSQL client at a time.
+Budget for full and incomplete generations on the 512 MB host. A per-source
+lock cannot serialize distinct databases. Use the
+[coordinated recovery procedure](DATABASE_RECOVERY.md#coordinated-staging-recovery-point)
+for composite generation status and rehearsal.
+
 ## Archive and health contract
 
 The runner executes `pg_dump -Fc`, traverses/decompresses the entire archive

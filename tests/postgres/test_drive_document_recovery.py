@@ -12,8 +12,10 @@ import pytest
 from sqlalchemy import text
 
 from scripts.manage_document_storage import execute, read_binding
+from scripts.verify_recovery_custody import verify_references
 from tabula_rasa.application.document_recovery import verify_entity_documents
 from tabula_rasa.application.documents import DocumentError, DocumentValidationError
+from tabula_rasa.application.identity import IdentityError
 from tabula_rasa.errors import StorageConflictError
 from tabula_rasa.google_drive import GoogleDriveAccessError
 from tabula_rasa.http.connections import google_store
@@ -386,3 +388,67 @@ def test_real_drive_staging_exact_byte_backup_and_isolated_restore(database, tmp
     payloads, secrets = prepare(database, tmp_path, private)
     result = drill(database, payloads, secrets, tmp_path / 'archives')
     print(json.dumps({'status': 'drive_recovery_drill_passed', **result}, sort_keys=True))
+
+
+
+def test_backup_reads_current_grant_without_private_tokens_in_binding(database, tmp_path, monkeypatch):
+    (payloads, secrets), _ = fixture(database, tmp_path, monkeypatch)
+    selectors = {
+        entity: {**payloads[entity]['source'], 'google_drive_oauth': {}, 'google_drive': {}}
+        for entity in ('alpha', 'beta')
+    }
+    for entity, selector in selectors.items():
+        assert backup(database, secrets, selector, tmp_path / entity)['verified'] == 2
+
+    alpha = selectors['alpha']
+    attempt_ref = secrets.put(dict(environment='staging', organization_id=alpha['organization_id'],
+                                   entity_id='alpha', provider='google_drive', verifier='synthetic-verifier'))
+    with database.transaction() as connection:
+        connection.execute(text("""INSERT INTO drive_oauth_requests
+            (entity_id, organization_id, actor_id, session_hash, state_hash,
+             secret_ref, expected_revision, expires_at, consumed, outcome)
+            VALUES ('alpha', :org, (SELECT min(id) FROM identity_users), 'session', 'state',
+                    :ref, 1, CURRENT_TIMESTAMP, true, 'complete')"""),
+                           {'org': alpha['organization_id'], 'ref': attempt_ref})
+    assert verify_references(database, secrets)['verified'] == 3
+    attempt_path = secrets.directory / (attempt_ref + '.grant')
+    ciphertext = attempt_path.read_bytes()
+    attempt_path.unlink()
+    with pytest.raises(IdentityError):
+        verify_references(database, secrets)
+    attempt_path.write_bytes(ciphertext)
+
+    # A different business's valid ciphertext must fail before any source copy.
+    wrong_reference = secrets.put(payloads['beta']['source'])
+    with database.transaction() as connection:
+        connection.execute(text("UPDATE external_connections SET secret_ref=:ref WHERE entity_id='alpha'"),
+                           {'ref': wrong_reference})
+    with pytest.raises(IdentityError):
+        backup(database, secrets, selectors['alpha'], tmp_path / 'wrong')
+    assert not (tmp_path / 'wrong').exists()
+    assert backup(database, secrets, selectors['beta'], tmp_path / 'beta-next')['verified'] == 2
+
+    with pytest.raises(IdentityError):
+        verify_references(database, secrets)
+    with pytest.raises(IdentityError):
+        verify_references(database, ConnectionSecrets(secrets.directory, Fernet.generate_key().decode()))
+
+
+def test_current_grant_backup_refuses_to_publish_after_reconnect(database, tmp_path, monkeypatch):
+    (payloads, secrets), _ = fixture(database, tmp_path, monkeypatch)
+    grant = payloads['alpha']['source']
+    selector = {**grant, 'google_drive_oauth': {}, 'google_drive': {}}
+    archive = tmp_path / 'archive'
+    plan = backup(database, secrets, selector, archive, apply=False)
+    new_reference = secrets.put(grant)
+
+    def reconnect(progress):
+        if progress['verified'] == 1:
+            with database.transaction() as connection:
+                connection.execute(text("UPDATE external_connections SET secret_ref=:ref WHERE entity_id='alpha'"),
+                                   {'ref': new_reference})
+
+    with pytest.raises(DocumentValidationError, match='changed during backup'):
+        execute(database, secrets, selector, operation='backup', environment='staging', archive_path=archive,
+                apply=True, expected_plan=plan['plan_sha256'], approval_sha256='a' * 64, progress=reconnect)
+    assert not (archive / 'bookkeeping.json').exists()

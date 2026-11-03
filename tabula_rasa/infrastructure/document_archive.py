@@ -116,7 +116,7 @@ class DocumentArchive:
         raise DocumentValidationError('Recovery archive retirement requires a separate approved operation.')
 
 
-def archive_documents(repository, source, path, artifact, *, dry_run=True, progress=None):
+def archive_documents(repository, source, path, artifact, *, dry_run=True, progress=None, before_publish=None):
     """Freeze writers. Resume exact verified files; publish completion metadata last."""
     entity_id = repository.entity_id
     validate_artifact(artifact, entity_id=entity_id)
@@ -159,6 +159,8 @@ def archive_documents(repository, source, path, artifact, *, dry_run=True, progr
         # One current snapshot comparison before completion; no remote mutation.
         if repository.retained_documents() != documents:
             raise DocumentValidationError('Receipt metadata changed during backup; the generation remains incomplete.')
+        if before_publish is not None:
+            before_publish()
         manifest = _file(root, 'bookkeeping.json')
         if not manifest.exists():
             write_artifact(manifest, artifact)
