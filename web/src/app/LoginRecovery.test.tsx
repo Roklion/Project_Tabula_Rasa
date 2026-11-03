@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { api } from '../api/client';
+import { api, ApiError } from '../api/client';
 import { ContextBoundary } from './ContextBoundary';
 
 afterEach(() => { window.history.replaceState(null, '', '/'); vi.restoreAllMocks(); });
@@ -38,4 +38,16 @@ it('distinguishes an unavailable provider from an ordinary signed-out visit', ()
   render(<ContextBoundary><p>Private ledger</p></ContextBoundary>);
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Sign in' })).toBeVisible();
+});
+
+
+it.each(['/signed-out', '/invitations', '/'])('offers hosted registration and existing sign-in on %s', async path => {
+  vi.spyOn(api, 'session').mockRejectedValue(new ApiError('unauthorized'));
+  window.history.replaceState(null, '', path);
+  render(<ContextBoundary><p>Private ledger</p></ContextBoundary>);
+  expect(await screen.findByRole('link', { name: 'Create account' })).toHaveAttribute('href', '/api/v1/auth/register?return_path=/invitations');
+  expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', path === '/invitations' ? '/api/v1/auth/login?return_path=/invitations' : '/api/v1/auth/login');
+  expect(screen.getByText(/Creating an account does not create a business or grant access/)).toBeVisible();
+  expect(screen.getByText(/If registration is unavailable/)).toBeVisible();
+  expect(screen.queryByText('Private ledger')).not.toBeInTheDocument();
 });

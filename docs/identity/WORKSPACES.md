@@ -285,3 +285,22 @@ program approval to the existing creation/invitation transactions. A new externa
 Create Business request may remain pending without a ledger; retry its exact
 request after operator approval. Independent roles and existing access/export
 remain authoritative during enrollment freezes.
+
+## Invited users without a provider account
+
+Open Tabula Rasa and select **Create account**. Register with the invited email
+on ZITADEL, verify it and enroll the required authentication factors. Existing
+users select **Sign in**. Registration returns to **Join an invited business** at
+`/invitations`: paste the credential shared privately by the administrator,
+review the specific business/reference and role, then accept. Never put the
+credential in a link or create a replacement business to accept an invitation.
+Registration grants no business access or beta approval.
+
+Without an invitation, My Businesses retains **Join an invited business**,
+operator migration guidance and **Create your first business** only when the
+server enables that path. Creation still requires admission approval and respects
+caps and pauses. Registered but not yet invited/approved users should contact the
+administrator or operator through their private channel. If registration, email
+verification or factor enrollment fails, use the signed-out guidance or existing
+Sign in. [Provider setup](PROVIDER_SETUP.md#hosted-end-user-self-registration) owns
+operator troubleshooting and recovery.

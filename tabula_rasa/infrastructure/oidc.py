@@ -129,11 +129,11 @@ class OidcProvider:
                 self._metadata, self._metadata_deadline = data, time() + 300
             return self._metadata
 
-    def authorization_url(self, transaction):
+    def authorization_url(self, transaction, *, registration=False):
         with _BoundedOAuthSession(self) as client:
             url, _ = client.create_authorization_url(self.metadata()['authorization_endpoint'],
                 state=transaction.state, nonce=transaction.nonce, code_verifier=transaction.verifier,
-                max_age=0, prompt='login')
+                max_age=0, prompt='create' if registration else 'login')
             return url
 
     def _key(self, signature):

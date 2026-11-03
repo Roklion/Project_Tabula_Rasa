@@ -65,11 +65,12 @@ def oidc():
     return OidcProvider(settings, transport=Transport()), transaction, claims, info, calls
 
 
-def test_code_pkce_verified_identity_and_bounded_transport(oidc):
+@pytest.mark.parametrize('registration', [False, True])
+def test_code_pkce_verified_identity_and_bounded_transport(oidc, registration):
     provider, transaction, _, _, calls = oidc
-    query = parse_qs(urlsplit(provider.authorization_url(transaction)).query)
+    query = parse_qs(urlsplit(provider.authorization_url(transaction, registration=registration)).query)
     assert query['code_challenge_method'] == ['S256'] and query['max_age'] == ['0']
-    assert query['prompt'] == ['login']
+    assert query['prompt'] == ['create' if registration else 'login']
     assert query['redirect_uri'] == [provider.settings.callback]
     result = provider.verify('synthetic-code', transaction)
     assert result.subject == 'alice'

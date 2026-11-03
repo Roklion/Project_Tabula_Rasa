@@ -243,8 +243,11 @@ membership and claimed profile IDs do not unlock that interface.
 **Current behavior** for the opt-in named-user foundation:
 
 - Pending identity displays a loading state before any private feature is
-  mounted. Missing/expired/revoked identity offers Sign in through the hosted
-  provider. Failed callbacks show a clean sign-in failure page with an allowlisted
+  mounted. Missing/expired/revoked identity offers Sign in and Create account
+  through the hosted provider. Create account opens hosted registration and returns
+  to `/invitations` after verified authentication. Registration grants no business
+  access, ledger or beta approval. Disabled/incomplete registration retains private
+  operator guidance and existing-account Sign in. Failed callbacks show a clean sign-in failure page with an allowlisted
   explanation, safe request reference and deliberate Sign in action to restart
   provider reauthentication. The screen never retries automatically or asks users
   to delete cookies; provider query values are never displayed. An ordinary
@@ -583,7 +586,8 @@ edition.
 
 **Current behavior** for first-use onboarding on the named-user runtime:
 
-- Sign-in explains provider account creation and invited-account login. Users
+- Signed-out Sign in and Create account actions distinguish existing login from
+  hosted end-user registration, email verification and required factor enrollment. Users
   without an active business see My Businesses and choose Create your first business,
   Join an invited business, or existing
   Sheets migration. Existing members go directly to their authorized ledger.

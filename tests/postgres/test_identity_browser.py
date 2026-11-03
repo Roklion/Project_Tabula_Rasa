@@ -68,12 +68,12 @@ def named_server(database, oidc, request):
         assert not thread.is_alive()
 
 
-def configure_login(context, origin, claims):
+def configure_login(context, origin, claims, *, registration=False):
     """Use signed fake OIDC, adapting only Playwright's external redirect hop."""
     def authorize(route):
         query = parse_qs(urlsplit(route.request.url).query)
         assert query['code_challenge_method'] == ['S256']
-        assert query['prompt'] == ['login'] and query['max_age'] == ['0']
+        assert query['prompt'] == ['create' if registration else 'login'] and query['max_age'] == ['0']
         claims['nonce'] = query['nonce'][0]
         target = origin + '/api/v1/auth/callback?' + urlencode(
             {'state': query['state'][0], 'code': 'synthetic-code'})
@@ -93,7 +93,7 @@ def configure_login(context, origin, claims):
         route.fulfill(status=200, headers=headers, content_type='text/html',
             body='<script>location.replace(' + json.dumps(target) + ')</script>')
     context.route('https://id.example.test/authorize**', authorize)
-    context.route('**/api/v1/auth/login**', login_redirect)
+    context.route('**/api/v1/auth/' + ('register' if registration else 'login') + '**', login_redirect)
 
 
 def test_named_deployment_smoke_uses_public_shell_and_denied_http_boundary(named_server):
@@ -334,3 +334,52 @@ def test_customer_closure_export_cancel_and_expired_status(named_server, databas
         expect(page.get_by_role('button', name='Cancel business closure', exact=True)).to_have_count(0)
         assert context.request.get(origin + '/api/v1/entities/alpha/accounts').status == 403
         assert_accessible(page)
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+def test_registration_then_private_invitation_without_automatic_business_access(named_server, native_browser, width):
+    from sqlalchemy import text
+    from tabula_rasa.application.workspaces import WorkspaceService
+    from tabula_rasa.infrastructure.postgres.workspaces import PostgresWorkspaceRepository
+    from tests.postgres.test_identity import verified
+
+    origin, repo, _, _, org, _, claims, info = named_server
+    with repo.database.transaction(read_only=True) as c:
+        configuration = c.scalar(text("SELECT configuration_hash FROM identity_environments WHERE environment='test'"))
+    sessions = PostgresSessionRepository(repo.database, 'test', configuration)
+    _, owner = sessions.issue(verified())
+    service = WorkspaceService(PostgresWorkspaceRepository(repo.database))
+    invitation = service.invite(owner, org, 'shared@example.test', 'editor')
+    claims.update(sub='new-registered-user', auth_time=int(time()))
+    info.update(sub=claims['sub'], email='shared@example.test')
+    with native_browser('chromium') as browser:
+        context = browser.new_context(viewport={'width': width, 'height': 1000})
+        configure_login(context, origin, claims, registration=True)
+        page = context.new_page()
+        page.goto(origin + '/invitations')
+        expect(page.get_by_role('link', name='Sign in', exact=True)).to_be_visible()
+        expect(page.get_by_role('link', name='Create account', exact=True)).to_be_visible()
+        assert_accessible(page)
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        page.get_by_role('link', name='Create account', exact=True).click()
+        expect(page.get_by_role('heading', name='Join an invited business', exact=True)).to_be_visible()
+        current = context.request.get(origin + '/api/v1/session').json()
+        assert current['state'] == 'needs_setup' and current['actor_id'] != owner.user_id
+        with repo.database.transaction(read_only=True) as c:
+            assert c.scalar(text('SELECT count(*) FROM memberships WHERE user_id=:user'), {'user': current['actor_id']}) == 0
+            assert c.scalar(text('SELECT count(*) FROM business_entities')) == 2
+            assert c.scalar(text('SELECT count(*) FROM beta_named_users WHERE user_id=:user'), {'user': current['actor_id']}) == 0
+        assert context.request.get(origin + '/api/v1/entities/alpha/accounts').status == 403
+        assert context.request.get(origin + '/api/v1/entities/beta/accounts').status == 403
+        page.get_by_label('Invitation credential', exact=True).fill(invitation.credential)
+        page.get_by_role('button', name='Review invitation', exact=True).click()
+        expect(page.get_by_role('region', name='Invited business')).to_contain_text('alpha')
+        expect(page.get_by_role('region', name='Invited business')).to_contain_text('Editor')
+        page.get_by_role('button', name='Accept invitation', exact=True).click()
+        expect(page.get_by_role('heading', name='Your ledger is ready')).to_be_visible()
+        accepted = context.request.get(origin + '/api/v1/session').json()
+        assert accepted['entity']['id'] == 'alpha' and accepted['entity']['role'] == 'editor'
+        assert context.request.get(origin + '/api/v1/entities/beta/accounts').status == 403
+        with repo.database.transaction(read_only=True) as c:
+            assert c.scalar(text('SELECT count(*) FROM memberships WHERE user_id=:user'), {'user': current['actor_id']}) == 1
+            assert c.scalar(text('SELECT count(*) FROM business_entities')) == 2

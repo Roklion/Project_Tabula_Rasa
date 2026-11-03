@@ -391,3 +391,20 @@ Security logs emit only fixed event/failure codes and safe request identifiers; 
 log callback queries, provider payloads, emails, credentials or ledger content.
 [Operational telemetry](../operations/OBSERVABILITY.md) consumes only these allowlisted
 diagnostic signals.
+
+## Creating an identity before joining a business
+
+Signed-out users choose **Create account** or **Sign in**. Create account starts
+ZITADEL's hosted registration with `prompt=create` and `max_age=0`; Sign in keeps
+`prompt=login`. Both use the existing callback, verification and session security.
+Registration allows 15 minutes for the hosted form, email verification and factor
+enrollment. Both browser cookies and the durable transaction expire at that
+boundary. The callback still requires recent provider authentication.
+Registration returns to `/invitations` by default. It grants no membership,
+ledger or beta approval. See [provider setup](PROVIDER_SETUP.md#hosted-end-user-self-registration)
+and [hosted verification](HOSTED_ROLLOUT.md#hosted-registration-and-invitation-smoke).
+
+If registration is disabled or incomplete, return to the app for private operator
+guidance or Sign in with an existing account. Canceled/failed callbacks use the
+existing safe failure page and deliberate restart, without reflecting provider
+error descriptions. Provider signup never reactivates a closed application login.

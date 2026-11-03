@@ -270,3 +270,39 @@ compiled browser/disposable PostgreSQL; deployment failures use synthetic
 Render/registry responses. Current-revision hosted **Full test suite** remains the
 publication/review gate, separate from local checks and the actual hosted evidence
 tracked in hosted identity rollout.
+
+## Hosted registration and invitation smoke
+
+Use only a separately authorized synthetic environment at an exact release/schema,
+with a fresh [provider-policy inventory](PROVIDER_SETUP.md#hosted-end-user-self-registration).
+Local signed fake-provider tests establish application boundaries, not actual
+hosted registration, verification mail or factor enforcement. Do not send real
+invitations, change production settings or admit a cohort during code validation.
+
+1. In a clean desktop/mobile browser, open the app or `/invitations`. Check
+   **Create account** and **Sign in**. Register a brand-new synthetic identity
+   with the invited email through ZITADEL; complete real verification mail and
+   required factor enrollment without an operator creating or verifying the user.
+2. Confirm return to `/invitations` with recent verified authentication and the
+   immutable issuer/subject binding. Before acceptance, confirm zero memberships,
+   no new business/ledger or approved beta allocation, and denied direct API
+   access to two independent businesses. Matching another subject's email must
+   not link accounts; closed application logins remain closed.
+3. Use the existing approved synthetic invitation workflow and privately paste
+   its credential after login. Review the specific business/reference/role and
+   accept; check automatic business selection and denial for the second business.
+   Exercise wrong email, unverified identity, stale authentication, replay,
+   48-hour expiry, revocation and lost inviter authority. Check admission approval,
+   cohort caps and pauses through direct APIs too; registration is no exemption.
+4. Cancel registration or let its 15-minute transaction expire and exercise disabled registration on an isolated
+   approved test client. Returned failures consume cookies/state, show safe
+   guidance and support deliberate retry and existing-account Sign in. If the
+   provider keeps the browser on its own refusal screen, return to the app and
+   verify its guidance. Check URLs/storage/telemetry for credential leakage.
+5. Recheck existing sign-in/logout/recovery and additional business invitations
+   with distinct roles. Test email/factor recovery and failed mail delivery under
+   the effective policy. Record exact-revision sanitized outcomes and remaining
+   hosted gaps in the owning issue/PR or approved evidence custody.
+
+The external-beta release gate retains cohort GO authority. This smoke alone
+never authorizes external customer data, production activation or charging.

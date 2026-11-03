@@ -97,6 +97,7 @@ ROUTE_POLICIES = MappingProxyType({
     'logout': RoutePolicy('POST', 'logout', 'identity'),
     'logout_context': RoutePolicy('GET', 'logout', 'identity'),
     'begin_login': RoutePolicy('GET', 'login', 'public'),
+    'begin_registration': RoutePolicy('GET', 'login', 'public'),
     'complete_login': RoutePolicy('GET', 'callback', 'public'),
 })
 

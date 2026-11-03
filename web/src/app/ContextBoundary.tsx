@@ -164,9 +164,12 @@ export function ContextBoundary({ children, onScopeChange }: { children: ReactNo
     return <main className="standalone"><section className="surface"><PageHeader title="Project Tabula Rasa" description="You are signed out. Sign in to continue." />
       {state.error !== undefined && <ErrorNotice error={state.error} />}
       {window.location.pathname === '/signed-out' && <LoginFailure />}
-      <p>New here? Create your account with the secure sign-in provider, then create your first business. Invited members should sign in with their invited account.</p>
+      <p>New here? Choose Create account to register with our secure sign-in provider using your invited email, verify it, and set up the required authentication factors. Already have an account? Choose Sign in.</p>
+      <p>Creating an account does not create a business or grant access. After registration, join your invited business using the credential shared privately by its administrator. Business creation requires separate approval.</p>
+      <p>If registration is unavailable or you cannot complete email verification or factor setup, contact your service operator through your existing private support channel. You can still use Sign in with an existing account.</p>
       <p>If your login was closed or disabled, contact your service operator through your existing private support channel. Signing in does not reactivate a closed login.</p>
-      <div className="actions"><a className="button" href={window.location.pathname === '/invitations' ? '/api/v1/auth/login?return_path=/invitations' : '/api/v1/auth/login'}>Sign in</a></div></section></main>;
+      <div className="actions"><a className="button" href={window.location.pathname === '/invitations' ? '/api/v1/auth/login?return_path=/invitations' : '/api/v1/auth/login'}>Sign in</a>
+        <a className="button" href="/api/v1/auth/register?return_path=/invitations">Create account</a></div></section></main>;
   if (state.error) return <main className="standalone"><section className="surface"><PageHeader title="Project Tabula Rasa" />
     <ErrorNotice error={state.error} operation="read" onReview={() => { setState({}); setGeneration(value => value + 1); }} />
     <div className="actions"><ActionButton onClick={() => void logout()}>Sign out</ActionButton></div>
