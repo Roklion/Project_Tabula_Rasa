@@ -28,6 +28,26 @@ do not approve destructive execution, statutory periods or public legal claims.
 | Legal holds | Manual restricted procedure; unknown or unresolved status blocks deletion. Formal hold registry/issuance/release tooling remains deferred. |
 | Operational/security logs | Duration unresolved until actual provider inventory and legal review; no automatic expiry or claim of provider deletion. |
 
+## Internal operation and final production review
+
+For the internal owner-operated stage, the owner accepts existing provider
+windows as technical limits. Preserve audit, lifecycle and support history,
+existing NAS generations and frozen sources under the current contracts. This
+interim operating position changes no provider retention setting and enables
+no destruction or backup pruning. Existing hold-preservation and recovery
+obligations continue; accepting a provider window is not a promise that all
+copies expire with it.
+
+External counsel review is scheduled for final production release. It is not
+a prerequisite for non-destructive inventory and technical preparation during
+the internal stage. Unknown provider storage/purge limits and outstanding legal
+decisions remain explicit production-release gates, not completed acceptance.
+Before production retention changes or deletion are enabled, resolve the legal
+schedule and exceptions, hold handling, actual provider limits, approved tooling,
+customer disclosures and separate exact-target execution authority. Separate
+customer-admission and publication approvals remain unchanged. Internal operator
+acceptance is not legal approval or an externally promised retention schedule.
+
 ## Lifecycle stages and authority
 
 | Stage | Access, retention and recovery |
