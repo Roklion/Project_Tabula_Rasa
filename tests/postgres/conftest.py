@@ -40,7 +40,7 @@ def _test_database(template: str | None = None):
             database.dispose()
         if created:
             with admin.connect() as connection:
-                connection.exec_driver_sql(f'DROP DATABASE "{name}"')
+                connection.exec_driver_sql(f'DROP DATABASE "{name}" WITH (FORCE)')
         admin.dispose()
 
 
