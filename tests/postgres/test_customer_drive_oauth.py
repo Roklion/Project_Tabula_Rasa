@@ -284,3 +284,82 @@ def test_new_oauth_binding_composes_existing_document_adapter_and_preserves_rece
     with pytest.raises(IdentityError):
         store.fetch('beta', document.storage_key)
     client.delete_file.assert_not_called()
+
+
+@pytest.mark.parametrize('status,reason,attempts', [
+    (403, 'rateLimitExceeded', 4),
+    (429, 'rateLimitExceeded', 4),
+    (403, 'dailyLimitExceeded', 1),
+])
+def test_drive_quota_preserves_connected_grants_and_receipt_links(
+    database, tmp_path, monkeypatch, status, reason, attempts,
+):
+    from hashlib import sha256
+    from tabula_rasa.application.documents import DocumentError
+    from tabula_rasa.google_drive import GoogleDriveClient
+    from tabula_rasa.infrastructure.postgres.composition import create_postgres_services
+    from tests.drive_fixtures import receipt_drive_file
+    from tests.google_drive._support import DriveSession, FakeResponse, drive_error
+    from tests.postgres.core_support import account, category, expense
+
+    _, manager, _, _, alpha, beta, sessions = fixture(database, tmp_path)
+    transports = {}
+    before = {}
+    def client_for_grant(config, settings):
+        return GoogleDriveClient(config, settings,
+            session=transports[settings['receipt_folder']['id']], sleeper=lambda _: None)
+
+    monkeypatch.setattr('tabula_rasa.google_drive.GoogleDriveClient', client_for_grant)
+    for ctx, session in zip((alpha, beta), sessions):
+        entity = ctx.entity_id
+        assert finish(manager, ctx, session, begin(manager, ctx, session), entity)
+        grant = manager.repository.grant(ctx)
+        content = b'%PDF synthetic ' + entity.encode()
+        file_id = 'synthetic-file-' + entity
+        file = receipt_drive_file(file_id, 'receipt.pdf', profile_key=grant['profile_key'],
+            parent_id=grant['store_scope_key'], sha256=sha256(content).hexdigest(), size=len(content))
+        metadata, body = FakeResponse(200, file), FakeResponse(200, content=content)
+        transport = DriveSession([metadata, metadata, body])
+        transports[grant['store_scope_key']] = transport
+        store = manager.document_store(ctx)
+        document = store.metadata(entity, file_id)
+        with database.transaction() as connection:
+            account(connection, entity, 'cash')
+            category(connection, entity, 'office', kind='Expense')
+        services = create_postgres_services(database, entity, document_store=store, document_store_kind='google_drive')
+        services.transactions.create(transaction_id='txn', **expense())
+        services.receipts.link('txn', document)
+        assert store.fetch(entity, file_id) == content
+        receipts = services.receipts.repository
+        before[entity] = (grant, store, receipts, receipts.associations(entity), metadata, body)
+
+    alpha_grant, store, _, _, metadata, body = before['alpha']
+    alpha_transport = transports[alpha_grant['store_scope_key']]
+    alpha_transport.responses.extend([metadata] + [drive_error(status, reason)] * attempts)
+    custody_before = {file.name: file.read_bytes() for file in tmp_path.iterdir()}
+    reconnect = Mock(wraps=manager.repository.require_reconnect)
+    monkeypatch.setattr(manager.repository, 'require_reconnect', reconnect)
+    with pytest.raises(DocumentError, match='^Document storage is unavailable[.]$') as failure:
+        store.fetch('alpha', 'synthetic-file-alpha')
+    assert failure.value.__context__ is None
+    reconnect.assert_not_called()
+    assert not alpha_transport.responses
+
+    for ctx in (alpha, beta):
+        entity = ctx.entity_id
+        grant, store, receipts, links, metadata, body = before[entity]
+        assert manager.repository.grant(ctx) == grant
+        assert manager.repository.status(ctx).status == 'connected'
+        assert receipts.associations(entity) == links
+        transport = transports[grant['store_scope_key']]
+        transport.responses.extend([metadata, body])
+        assert store.fetch(entity, 'synthetic-file-' + entity) == body.content
+        assert all(method == 'GET' for method, _, _ in transport.requests)
+    assert {file.name: file.read_bytes() for file in tmp_path.iterdir()} == custody_before
+
+    alpha_transport.responses.append(drive_error(403, 'insufficientFilePermissions'))
+    with pytest.raises(DocumentError, match='^Document storage is unavailable[.]$'):
+        before['alpha'][1].fetch('alpha', 'synthetic-file-alpha')
+    reconnect.assert_called_once()
+    assert manager.repository.status(alpha).status == 'reconnect_required'
+    assert manager.repository.grant(beta) == before['beta'][0]

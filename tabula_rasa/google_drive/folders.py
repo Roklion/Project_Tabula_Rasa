@@ -167,7 +167,7 @@ class _FolderOperationsMixin:
             headers={"Content-Type": "application/json"},
             data=json.dumps(metadata, separators=(",", ":")).encode("utf-8"),
         )
-        return dict(_json_response(response))
+        return dict(_json_response(response, retryable=True))
 
 
     def _ensure_managed_folder(
@@ -210,7 +210,7 @@ class _FolderOperationsMixin:
         for attempt in range(2):
             try:
                 created = self._metadata_create(metadata)
-            except GoogleDriveAccessError:
+            except GoogleDriveAccessError as error:
                 reconciled = self._list_managed_folders(
                     profile_key=profile_key,
                     storage_kind=storage_kind,
@@ -227,7 +227,7 @@ class _FolderOperationsMixin:
                         storage_kind=storage_kind,
                         root_id=root_id,
                     )
-                if attempt == 1:
+                if not error.retryable or attempt == 1:
                     raise
                 self.sleeper(1.0)
                 continue

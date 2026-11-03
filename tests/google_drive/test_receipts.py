@@ -9,7 +9,7 @@ from tabula_rasa.google_drive import (
     GoogleDriveAccessError, GoogleDriveClient, safe_receipt_filename, suffixed_receipt_filename,
 )
 
-from ._support import FakeResponse, DriveSession, drive_settings, oauth_config
+from ._support import FakeResponse, DriveSession, drive_error, drive_settings, oauth_config
 
 class TestGoogleDriveReceipts:
     @pytest.mark.parametrize('damage', [None, 'profile', 'folder', 'trashed', 'identity', 'kind'])
@@ -350,14 +350,18 @@ class TestGoogleDriveReceipts:
         ]
 
 
+    @pytest.mark.parametrize("create_failure", [
+        requests.ConnectionError("response lost"),
+        drive_error(403, "userRateLimitExceeded"),
+    ])
     def test_receipt_upload_preserves_create_uncertainty_when_readback_fails(
-        self,
+        self, create_failure,
     ) -> None:
         session = DriveSession(
             [
                 FakeResponse(200, {"files": []}),
                 FakeResponse(200, {"files": []}),
-                requests.ConnectionError("response lost"),
+                create_failure,
                 FakeResponse(200, payload="not-json"),
             ]
         )
