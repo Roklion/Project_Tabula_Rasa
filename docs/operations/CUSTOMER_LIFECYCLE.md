@@ -135,6 +135,15 @@ does not establish a statutory duty or authorize a provider setting change.
 | Operational/security logs and error telemetry | Minimized safe codes and request references; actual hosting/provider retention must be inventoried privately. | A product target is not evidence of provider deletion. Hold and incident obligations may override routine expiry. |
 | Billing/payment-provider records | No paid provider is selected or activated by customer closure. | Future provider/legal obligations and cancellation/refunds require a separate commercial contract; login or business closure must not invent subscription semantics. |
 
+For each provider, distinguish the retrievable history window from underlying
+storage retention, exported copies and verified destruction. For example,
+[ZITADEL audit history](https://help.zitadel.com/audit-trail-history-events)
+describes events retrievable through its API or GUI, subject to subscription
+limits. Its [cloud log guidance](https://help.zitadel.com/access-and-runtime-logs)
+also separates log availability from retrieval limits. A query window or an
+unavailable console view does not establish that older provider-held data was
+purged. Record unresolved provider preservation/deletion limits explicitly.
+
 ## Request, confirmation and recovery procedure
 
 Data & backup provides business closure for the selected business's current active
@@ -185,6 +194,45 @@ identity/membership context; canonical bookkeeping exports deliberately exclude 
 Fresh account disablement can make an uncertain confirmation response unrecoverable
 through the same login. Support must inspect the retained case; do not re-enable
 identity merely to retry confirmation.
+
+## Manual privacy-request handling
+
+The service owner is the primary privacy reviewer. This manual responsibility
+does not grant additional application, database or provider access. Use approved
+restricted case custody for requests received through the private support path
+or the lifecycle review queue; neither GitHub issues nor application telemetry
+is a case store. A disabled login or expired business-access window must not
+prevent the reviewer from accepting a request through that support path.
+
+1. Record the received date/time, private case reference, assigned reviewer,
+   requested right and scope. Preserve the original receipt date when linking
+   repeated submissions or an application request; confirmation, verification
+   or a restart does not silently replace it.
+2. Verify the requester's identity and authority for the requested scope through
+   the approved private channel, collecting only necessary evidence. Business
+   ownership and an individual's rights require separate analysis; a business
+   role alone does not resolve every personal-information request. Do not request
+   passwords, session cookies or provider tokens as verification evidence.
+3. Obtain legal determination of applicable duties and response, extension and
+   appeal deadlines, and track them with the responsible reviewer. Escalate an
+   unknown deadline promptly for legal review; do not wait for closure day 60 or
+   90 or for deletion tooling. Manual review does not suspend applicable clocks.
+4. Review the relevant stores, provider/customer-held copies, holds, required
+   preservation and supported export/recovery limits. Require legal review
+   before denying rights or releasing a legal hold. No request, cancellation,
+   product retention selection or case decision substitutes for approved
+   destruction tooling and exact-target execution authority.
+5. Keep the verification outcome, legal decision reference, authorized response,
+   actual actions, unresolved limits and completion date in restricted custody.
+   Disclose effects and limits through the verified private channel. Record any
+   legally required extension or appeal handling; do not mark a case fulfilled
+   merely because it was queued, access was revoked or a query window expired.
+
+This procedure establishes manual ownership and handling, not a deployed case
+management system, an automated deadline scheduler, a legal applicability
+decision or approved public rights wording. Counsel's jurisdiction/category
+decisions, approved custody/contact arrangements and disclosure review remain
+required before claiming commercial rights-handling readiness.
 
 ## Hold and destruction review
 
