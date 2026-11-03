@@ -19,6 +19,31 @@ if TYPE_CHECKING:
     from .oauth import GoogleDriveOAuthConfig
 
 
+_RATE_LIMIT_REASONS = ("rateLimitExceeded", "userRateLimitExceeded")
+_QUOTA_LIMIT_REASONS = ("dailyLimitExceeded", "storageQuotaExceeded")
+
+
+def _forbidden_reason(response: requests.Response) -> str:
+    """Read a consistent reason from a small Drive error envelope."""
+    if len(response.content) > 16_384:
+        return ""
+    try:
+        payload = response.json()
+    except (ValueError, RecursionError):
+        return ""
+    error = payload.get("error") if isinstance(payload, dict) else None
+    entries = error.get("errors") if isinstance(error, dict) else None
+    if not isinstance(entries, list) or not 1 <= len(entries) <= 16:
+        return ""
+    first = entries[0]
+    reason = first.get("reason") if isinstance(first, dict) else None
+    if isinstance(reason, str) and all(
+        isinstance(entry, dict) and entry.get("reason") == reason for entry in entries
+    ):
+        return reason
+    return ""
+
+
 def _escape_query_value(value: str) -> str:
     return str(value).replace("\\", "\\\\").replace("'", "\\'")
 
@@ -167,15 +192,15 @@ class _DriveClientCore:
                 self._refresh()
                 refreshed_after_unauthorized = True
                 continue
-            if retry_transient and response.status_code in {429, 500, 502, 503, 504}:
-                if attempt < 3:
+            reason = _forbidden_reason(response) if response.status_code == 403 else ""
+            if reason in _QUOTA_LIMIT_REASONS:
+                raise GoogleDriveAccessError(
+                    "Google Drive has reached a quota or storage limit."
+                )
+            if response.status_code in {429, 500, 502, 503, 504} or reason in _RATE_LIMIT_REASONS:
+                if retry_transient and attempt < 3:
                     self.sleeper(2**attempt)
                     continue
-                raise GoogleDriveAccessError(
-                    "Google Drive is temporarily unavailable. Retry the request.",
-                    retryable=True,
-                )
-            if response.status_code in {429, 500, 502, 503, 504}:
                 raise GoogleDriveAccessError(
                     "Google Drive is temporarily unavailable. Retry the request.",
                     retryable=True,

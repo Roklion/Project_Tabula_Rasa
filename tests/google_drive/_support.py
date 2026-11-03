@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import requests
@@ -22,6 +23,17 @@ class FakeResponse:
 
     def json(self) -> dict[str, Any]:
         return self.payload
+
+
+def drive_error(status, *reasons):
+    response = requests.Response()
+    response.status_code = status
+    response._content = json.dumps({"error": {
+        "code": status,
+        "message": "synthetic-private-provider-response",
+        "errors": [{"reason": reason} for reason in reasons],
+    }}).encode()
+    return response
 
 
 class AuthorizationSession:

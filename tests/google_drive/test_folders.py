@@ -13,7 +13,7 @@ from tabula_rasa.google_drive import (
 )
 from tests.drive_fixtures import drive_folder
 
-from ._support import FakeResponse, DriveSession, drive_settings, managed_folder, oauth_config
+from ._support import FakeResponse, DriveSession, drive_error, drive_settings, managed_folder, oauth_config
 
 class TestGoogleDriveFolders:
     def test_freshly_validates_profile_root_and_managed_children(self) -> None:
@@ -232,6 +232,21 @@ class TestGoogleDriveFolders:
         assert metadata["mimeType"] == "application/vnd.google-apps.folder"
         assert metadata["appProperties"]["tabulaRasaKind"] == "storage-root"
 
+
+    def test_root_creation_does_not_repeat_after_storage_quota_failure(self) -> None:
+        delays = []
+        session = DriveSession([
+            FakeResponse(200, {"files": []}),
+            drive_error(403, "storageQuotaExceeded"),
+            FakeResponse(200, {"files": []}),
+        ])
+        client = GoogleDriveClient(oauth_config(), drive_settings(), session=session, sleeper=delays.append)
+
+        with pytest.raises(GoogleDriveAccessError, match="quota or storage limit"):
+            client.create_storage_root("north", "North Storage")
+
+        assert [method for method, _, _ in session.requests] == ["GET", "POST", "GET"]
+        assert delays == []
 
     def test_uncertain_root_creation_reuses_the_confirmed_root(self) -> None:
         root = managed_folder(
