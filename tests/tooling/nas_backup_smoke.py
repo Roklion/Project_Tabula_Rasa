@@ -22,6 +22,41 @@ def execute(args, *, env=None, capture=False):
                           stderr=subprocess.DEVNULL, timeout=90).stdout
 
 
+def check_custody_preflight(sql, service, passfile, configfile):
+    password = secrets.token_urlsafe(24)
+    sql(f"CREATE ROLE custody_backup LOGIN PASSWORD '{password}'")
+    sql("CREATE DATABASE custody")
+    sql("""
+        REVOKE USAGE ON SCHEMA public FROM PUBLIC;
+        CREATE SCHEMA connection_custody;
+        CREATE TABLE connection_custody.grants(reference text, ciphertext text);
+        GRANT USAGE ON SCHEMA connection_custody TO custody_backup;
+        GRANT SELECT ON connection_custody.grants TO custody_backup;
+    """, "custody")
+    service.write_text(service.read_text().replace("dbname=ledger", "dbname=custody").replace(
+        "user=postgres", "user=custody_backup"))
+    passfile.write_text(f"localhost:5432:custody:custody_backup:{password}\n")
+    config = json.loads(configfile.read_text())
+    config.update(environment="uat", source_kind="connection_custody",
+                  source_sha256=hashlib.sha256(b"localhost:5432/custody").hexdigest())
+    configfile.write_text(json.dumps(config))
+    preflight = ["python3", "/opt/tabula/nas_postgres_backup.py", "preflight", "--config", str(configfile)]
+    metadata = json.loads(execute(preflight, capture=True))
+    assert metadata["status"] == "compatible"
+    assert metadata["schema_version"] == "connection_custody" and metadata["tls"] is True
+
+    sql("CREATE TABLE public.alembic_version(version_num text)", "custody")
+    # Confirm the rejected source still permits the grants probe with the restricted login.
+    restricted_env = {key: value for key, value in os.environ.items() if not key.startswith("PG")}
+    restricted_env.update(PGSERVICEFILE=str(service), PGSERVICE="backup", PGPASSFILE=str(passfile))
+    assert execute(["psql", "-X", "-w", "-qAt", "-v", "ON_ERROR_STOP=1", "-c",
+                    "SELECT has_schema_privilege(current_user, 'public', 'USAGE'); "
+                    "SELECT reference, ciphertext FROM connection_custody.grants LIMIT 0"],
+                   env=restricted_env, capture=True) == b"f\n"
+    rejected = subprocess.run(preflight, stdin=subprocess.DEVNULL, capture_output=True, check=False, timeout=90)
+    assert rejected.returncode == 1 and json.loads(rejected.stdout)["code"] == "source"
+
+
 def main():
     spec = importlib.util.spec_from_file_location("nas", "/opt/tabula/nas_postgres_backup.py")
     nas = importlib.util.module_from_spec(spec)
@@ -145,8 +180,11 @@ connect_timeout=15
             pass
         else:
             raise AssertionError
+        stage = "custody_preflight"
+        check_custody_preflight(sql, service, passfile, configfile)
         print(json.dumps({"status": "passed", "scope": "synthetic_client_roundtrip", "tls": True,
-                          "restored_entities": 2, "overlapping_local_ids": True}))
+                          "restored_entities": 2, "overlapping_local_ids": True,
+                          "restricted_custody_preflight": True, "ledger_marker_rejected": True}))
         return 0
     except Exception as error:
         print(json.dumps({"status": "failed", "code": "synthetic_roundtrip", "stage": stage,

@@ -561,7 +561,7 @@ def test_twice_daily_capture_and_stale_running_point(configured, clients, monkey
 def test_custody_probe_checks_dedicated_schema(metadata_connection):
     _, connection = metadata_connection
     connection.execute.side_effect = [
-        MagicMock(), SimpleNamespace(fetchone=lambda: (None,)), MagicMock(),
+        MagicMock(), SimpleNamespace(fetchone=lambda: (False,)), MagicMock(),
     ]
     assert source.source_metadata("connection_custody")["schema_version"] == "connection_custody"
     assert "connection_custody.grants" in connection.execute.call_args.args[0]
@@ -569,6 +569,7 @@ def test_custody_probe_checks_dedicated_schema(metadata_connection):
 
 def test_custody_probe_refuses_ledger(metadata_connection):
     _, connection = metadata_connection
+    connection.execute.return_value.fetchone.return_value = (True,)
     with pytest.raises(ValueError, match="source"):
         source.source_metadata("connection_custody")
     assert connection.execute.call_count == 2
