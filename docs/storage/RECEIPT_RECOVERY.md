@@ -94,6 +94,16 @@ generation's parent directory must already exist and be private.
 python -m scripts.manage_document_storage backup --environment staging --input C:\private\drive-source.json --archive C:\private\receipt-generations\generation-001
 ```
 
+For scheduled-protection rehearsals, use a private selector with the exact
+environment, organization, entity, provider, profile and folder fields and
+empty JSON objects for both `google_drive_oauth` and `google_drive`. Inject the
+approved connection custody backend and key through the existing environment
+configuration. Backup resolves the ledger's current reference through custody,
+checks its scope before contacting Drive, and rechecks the connection and
+canonical point before publishing the archive manifest. Freeze writers for the
+coordinated point, including OAuth callbacks and direct Drive changes. Run
+backup and archive verification for each explicitly enrolled business.
+
 Dry-run verifies the source inventory and bytes and returns a safe plan hash and
 counts without creating a directory. Review the exact private targets/limits,
 then apply that plan with a retained operator decision hash:

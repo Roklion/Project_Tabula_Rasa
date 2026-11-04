@@ -49,7 +49,8 @@ def execute_drive(database, secrets, payload, *, operation, environment, revisio
         raise DocumentValidationError('Restore requires an isolated staging database and explicit source/target fingerprints.')
     if operation == 'restore' and payload['scope_key'] == archive.scope_key:
         raise DocumentValidationError('Restore requires separate source and destination database/Drive bindings.')
-    current = create_postgres_export_service(database, entity).export()
+    exporter = create_postgres_export_service(database, entity)
+    current = exporter.export()
     with database.transaction(read_only=True) as connection:
         row = connection.execute(text("""SELECT * FROM external_connections
             WHERE entity_id=:entity AND provider='google_drive'"""), {'entity': entity}).mappings().first()
@@ -66,6 +67,16 @@ def execute_drive(database, secrets, payload, *, operation, environment, revisio
         raise DocumentValidationError('The source Drive connection is unavailable or differently bound.')
     if archive is not None and not _same_recovery_point(archive.artifact, current, promoted=already_restored):
         raise DocumentValidationError('The database and receipt archive are different recovery points.')
+    use_current_grant = operation == 'backup' and payload['google_drive_oauth'] == payload['google_drive'] == {}
+    if use_current_grant:
+        if secrets is None:
+            raise DocumentValidationError('Current-grant backup requires protected connection custody.')
+        current_grant = secrets.get(row['secret_ref'], environment=environment,
+            organization_id=row['organization_id'], entity_id=entity, provider='google_drive')
+        if (current_grant.get('profile_key') != row['profile_key']
+                or current_grant.get('scope_key') != row['store_scope_key']):
+            raise DocumentValidationError('Current grant differs from the selected Drive binding.')
+        payload = current_grant
     plan = digest({'database_sha256': fingerprint, 'payload_sha256': digest(payload), 'operation': operation,
         'revision': revision, 'current_sha256': current['manifest']['content_sha256'],
         'archive_sha256': archive.artifact['manifest']['content_sha256'] if archive else None,
@@ -88,7 +99,15 @@ def execute_drive(database, secrets, payload, *, operation, environment, revisio
         return {'verified': verify_entity_documents(repo, target), 'applied': False,
                 'already_restored': already_restored, 'plan_sha256': plan}
     if operation == 'backup':
-        result = archive_documents(repo, target, archive_path, current, dry_run=not apply, progress=progress)
+        def verify_point():
+            with database.transaction(read_only=True) as connection:
+                latest = connection.execute(text("""SELECT * FROM external_connections
+                    WHERE entity_id=:entity AND provider='google_drive'"""), {'entity': entity}).mappings().first()
+            if latest != row or not _same_recovery_point(current, exporter.export(), promoted=False):
+                raise DocumentValidationError('The connection or canonical point changed during backup.')
+
+        result = archive_documents(repo, target, archive_path, current, dry_run=not apply, progress=progress,
+                                   before_publish=verify_point if use_current_grant else None)
         return {**result, 'plan_sha256': plan}
     if apply and secrets is None:
         raise DocumentValidationError('Configure protected connection secret custody before restored binding installation.')

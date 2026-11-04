@@ -55,14 +55,17 @@ def parse_time(value):
     return result.astimezone(UTC)
 
 
-def latest_slot(now):
-    """Local calendar arithmetic preserves 22:00 across both DST changes."""
+def latest_slot(now, *, twice_daily=False):
+    """Use unambiguous Eastern wall-clock hours across both DST changes."""
     local = now.astimezone(ZoneInfo("America/New_York"))
     for days in range(8):
         date = local.date() - timedelta(days=days)
-        candidate = datetime.combine(date, time(22), local.tzinfo)
-        if date.weekday() in (2, 6) and candidate <= local:
-            return candidate.astimezone(UTC)
+        if not twice_daily and date.weekday() not in (2, 6):
+            continue
+        for hour in ((22, 10) if twice_daily else (22,)):
+            candidate = datetime.combine(date, time(hour), local.tzinfo)
+            if candidate <= local:
+                return candidate.astimezone(UTC)
     raise BackupError("configuration")
 
 
@@ -112,7 +115,11 @@ def load_config(path):
     config = json.loads(protected(path).read_text(encoding="utf-8"))
     required = {"environment", "source_sha256", "storage", "storage_marker", "service_file",
                 "passfile", "recipients_file", "minimum_free_bytes"}
-    if set(config) != required or config["environment"] not in {"production", "uat"}:
+    if not required <= config.keys() <= required | {"schedule", "source_kind"} or config["environment"] not in {"production", "uat"}:
+        raise BackupError("configuration")
+    if "schedule" in config and (config["environment"] != "uat" or config["schedule"] != "twice_daily"):
+        raise BackupError("configuration")
+    if "source_kind" in config and (config["environment"] != "uat" or config["source_kind"] != "connection_custody"):
         raise BackupError("configuration")
     if not re.fullmatch("[a-f0-9]{64}", config["source_sha256"]):
         raise BackupError("configuration")
@@ -171,7 +178,7 @@ def command(args, env, code, *, capture=False, timeout=7200):
     raise BackupError(code)
 
 
-def source_info(env):
+def source_info(env, source_kind=None):
     versions = {}
     for tool in ("pg_dump", "pg_restore", "psql"):
         raw = command([tool, "--version"], env, "client", capture=True, timeout=30)
@@ -179,11 +186,14 @@ def source_info(env):
         if not match:
             raise BackupError("client")
         versions[tool] = match[1]
-    raw = command([sys.executable, str(Path(__file__).with_name("nas_postgres_source.py"))],
-                  env, "source", capture=True, timeout=60)
+    probe = [sys.executable, str(Path(__file__).with_name("nas_postgres_source.py"))]
+    if source_kind is not None:
+        probe.append(source_kind)
+    raw = command(probe, env, "source", capture=True, timeout=60)
     metadata = json.loads(raw)
     if (metadata.get("tls") is not True
-            or not re.fullmatch(r"[A-Za-z0-9_]+(?:,[A-Za-z0-9_]+)*", metadata.get("schema_version") or "")):
+            or not re.fullmatch(r"[A-Za-z0-9_]+(?:,[A-Za-z0-9_]+)*", metadata.get("schema_version") or "")
+            or (source_kind is not None and metadata["schema_version"] != source_kind)):
         raise BackupError("source")
     server_major = metadata["server_version_num"] // 10000
     if any(int(value.split(".")[0]) != server_major for value in versions.values()):
@@ -232,6 +242,7 @@ def verify_generation(config, generation):
     if (manifest.get("format") != 1 or manifest.get("status") != "complete"
             or manifest.get("source_sha256") != config["source_sha256"]
             or manifest.get("environment") != config["environment"]
+            or manifest.get("source_kind") != config.get("source_kind")
             or archive.stat().st_size != manifest["archive_bytes"]
             or digest(archive) != manifest["archive_sha256"]):
         raise BackupError("integrity")
@@ -242,19 +253,23 @@ def health(config, now):
     root = namespace(config)
     state = read_state(root)
     free = shutil.disk_usage(config["storage"]).free
+    twice_daily = config.get("schedule") == "twice_daily"
+    slot = latest_slot(now, twice_daily=twice_daily)
+    age_limit_exceeded = False
     result = {"status": "healthy", "free_bytes": free,
-              "latest_slot": stamp(latest_slot(now)), "last_success": None}
+              "latest_slot": stamp(slot), "last_success": None}
     if not state.get("last_success"):
         result["status"] = "missing"
     else:
         manifest = verify_generation(config, state["last_success"])
         captured = parse_time(manifest["capture_started_at"])
         result.update(last_success=manifest["completed_at"], backup_age_seconds=int((now-captured).total_seconds()))
-        if captured > now or (captured < latest_slot(now) and now-latest_slot(now) > GRACE):
+        age_limit_exceeded = twice_daily and now - captured >= timedelta(hours=20)
+        if captured > now or age_limit_exceeded or (captured < slot and now - slot > GRACE):
             result["status"] = "stale"
     if state.get("result") == "failed":
         result["status"] = "failed"
-    elif state.get("result") == "running":
+    elif state.get("result") == "running" and not age_limit_exceeded:
         # Give a normal in-flight backup the same bounded grace as the slot.
         result["status"] = "overdue" if now-parse_time(state["started_at"]) > GRACE else "running"
     if free < config["minimum_free_bytes"]:
@@ -270,7 +285,7 @@ def backup(config, *, scheduled=False):
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     with guard(root):
         now = instant()
-        slot = latest_slot(now)
+        slot = latest_slot(now, twice_daily=config.get("schedule") == "twice_daily")
         state = read_state(root)
         if scheduled:
             if (now-slot > CATCH_UP or state.get("attempted_slot") == stamp(slot)
@@ -288,10 +303,14 @@ def backup(config, *, scheduled=False):
         try:
             available_capacity(config)
             env = child_environment(config)
-            metadata = source_info(env)
+            source_kind = config.get("source_kind")
+            metadata = source_info(env, source_kind) if source_kind else source_info(env)
             partial.mkdir(parents=True, mode=0o700)
             plain = partial / "database.dump"
-            command(["pg_dump", "-w", "-Fc", "--file", str(plain)], env, "dump")
+            dump_args = ["pg_dump", "-w", "-Fc", "--file", str(plain)]
+            if source_kind == "connection_custody":
+                dump_args.extend(["--schema=connection_custody", "--strict-names"])
+            command(dump_args, env, "dump")
             if plain.stat().st_size == 0:
                 raise BackupError("integrity")
             # Traverse/decompress every archive item, not only its table of contents.
@@ -311,6 +330,8 @@ def backup(config, *, scheduled=False):
                         **metadata,
                         "archive_sha256": digest(archive), "archive_bytes": archive.stat().st_size,
                         "recipients_sha256": hashlib.sha256(recipients).hexdigest()}
+            if source_kind:
+                manifest["source_kind"] = source_kind
             recipient_copy.unlink()
             plain.unlink()  # Only this invocation's transient plaintext, never a retained generation.
             with archive.open("r+b") as stream:
@@ -345,7 +366,7 @@ def main(argv=None):
     try:
         config = load_config(args.config)
         if args.action == "preflight":
-            result = {"status": "compatible", **source_info(child_environment(config)),
+            result = {"status": "compatible", **source_info(child_environment(config), config.get("source_kind")),
                       "free_bytes": available_capacity(config)}
             command(["age", "--version"], child_environment(config), "encryption", timeout=30)
         elif args.action == "status":

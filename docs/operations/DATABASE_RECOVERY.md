@@ -375,6 +375,69 @@ recovery uses only the frozen format-13 contract and a new blank workbook, never
 older converter or live fallback. [Existing Sheets/document
 recovery](../BACKUP_RECOVERY.md).
 
+## Coordinated staging recovery point
+
+Use a private approval record before any rehearsal. Identify the exact staging
+image digest and schema from deployed read-only evidence, the ledger and
+custody endpoint fingerprints, each enrolled synthetic entity and current
+folder, and the isolated recovery databases, Drive folders and service origin.
+Check that no target matches any source. Approve the identity tenant, callback
+origins, named primary and alternate operators, read/copy and restore roles,
+separate archive and key custody, and the maintenance start and stop conditions.
+Unselected synthetic fixtures remain outside receipt-copy scope. If the ledger
+capture includes their rows, preserve their credential references as well.
+
+1. Preflight the [NAS runner](NAS_BACKUP.md#opt-in-staging-recovery-cadence),
+   encrypted private workspace, durable independent archive destination and
+   separate key access. Record measured disk, duration, memory, connection
+   and Drive request/byte budgets before enabling recurrence. Count the source
+   inventory and full byte read for both plan and apply, and allow capacity
+   for interrupted generations. Run each heavy client and each business in
+   sequence. Stop at a missed deadline or exceeded budget.
+2. Quiesce API, worker, operator and direct Drive writers, including connection
+   reconnects, OAuth attempts/callbacks and grant provisioning. Drain in-flight
+   work. Record the freeze start as the conservative recovery-point time.
+   Run `python -m scripts.verify_recovery_custody --ledger-sha256 … --custody-sha256 …`
+   using exact approved injected SQL and custody settings. These fingerprints
+   use the application database identity function. Retain the reference digest
+   privately. This checks current connections and all retained OAuth-attempt
+   references with the approved key and scoped decryption.
+3. Capture and verify the ledger/audit and dedicated ciphertext generations
+   serially. For every selected business use the
+   [current-grant backup and archive verifier](../storage/RECEIPT_RECOVERY.md#explicit-byte-backup).
+   Encrypt the entire receipt archive including its manifest and canonical
+   export with the approved archive recipients before transfer to durable
+   independent storage. Verify the durable ciphertext checksums. Keep the
+   decrypt identity and Fernet key separately recoverable. Repeat the reference
+   check before ending the freeze. If the digest changed, any writer resumed,
+   or any component failed, retain partial evidence and keep the previous
+   completed point. An individual archive's completion has component scope.
+4. Record the common recovery time, verified component generation identifiers,
+   hashes, schema, approved inventory coverage and custody references in the
+   private completed-point record only after every component passes. An
+   independently hosted monitor should check both source-scoped NAS statuses
+   and that composite record hourly, alert at 20 hours from the last verified
+   common point, and alert on failure, capacity, overlap or a missed heartbeat
+   within two expected polls. Before counting this as operating protection,
+   record exact monitor sources, deadlines, recipients and acknowledged
+   delivery for a controlled exercise. DSM task registration is scheduling
+   evidence. The 24-hour RPO depends on measured completed points.
+5. With separate restore authorization, use approved blank isolated targets and
+   the exact compatible image. Restore the matched ledger/audit and dedicated
+   ciphertext archives, reinstall the original key through approved custody,
+   and repeat the reference check against the isolated targets. Compare the
+   digest before promoting any restored Drive bindings. Verify archive points
+   against restored canonical data, then use the receipt restore owner to
+   promote to each isolated folder with its explicitly approved grant. Verify
+   IDs, links, exact bytes and tenant isolation, accounting and audit
+   privileges, and positive and negative named-user authorization.
+6. For full-service timing, include alternate retrieval and decryption,
+   permission/callback setup, isolated service startup and named-user smoke in
+   the elapsed recovery time. On failure stop isolated writers and traffic,
+   retain recovery evidence, and resume source operations only through the
+   approved source runbook. Keep source and recovery materials. Treat service
+   startup, provider writes and source resumption as explicit approval items.
+
 ## Evidence and authority cutover handoff
 
 Keep one private record with separate sections for the current drill scope,

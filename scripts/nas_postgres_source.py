@@ -1,9 +1,10 @@
 """Private metadata subprocess; launched only with the runner's sanitized PG environment."""
 
 import json
+import sys
 
 
-def source_metadata():
+def source_metadata(source_kind=None):
     # Keep the parent runner independent of application/Psycopg imports.
     import psycopg
 
@@ -15,16 +16,24 @@ def source_metadata():
         if not tls:
             raise ValueError("source")
         connection.execute("SET TRANSACTION READ ONLY")
-        schema = connection.execute(
-            "SELECT string_agg(version_num, ',' ORDER BY version_num) FROM public.alembic_version"
-        ).fetchone()[0]
+        if source_kind == "connection_custody":
+            if connection.execute("SELECT to_regclass('public.alembic_version')").fetchone()[0] is not None:
+                raise ValueError("source")
+            connection.execute("SELECT reference, ciphertext FROM connection_custody.grants LIMIT 0")
+            schema = "connection_custody"
+        else:
+            schema = connection.execute(
+                "SELECT string_agg(version_num, ',' ORDER BY version_num) FROM public.alembic_version"
+            ).fetchone()[0]
         return {"server_version_num": connection.info.server_version,
                 "schema_version": schema, "tls": bool(tls)}
 
 
-def main():
+def main(argv=()):
     try:
-        metadata = source_metadata()
+        if tuple(argv) not in {(), ("connection_custody",)}:
+            return 1
+        metadata = source_metadata(*argv)
     except Exception:
         # Provider exceptions can include endpoints, roles and passwords.
         return 1
@@ -33,4 +42,4 @@ def main():
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

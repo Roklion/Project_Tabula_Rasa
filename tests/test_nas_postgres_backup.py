@@ -65,10 +65,11 @@ def clients(monkeypatch):
         output = b""
         if "--version" in args:
             output = f"{args[0]} (PostgreSQL) 18.6\n".encode()
-        elif args[-1].endswith("nas_postgres_source.py"):
-            output = json.dumps({"server_version_num": 180006, "schema_version": "0005_bookkeeping_cutover", "tls": True}).encode()
+        elif len(args) > 1 and args[1].endswith("nas_postgres_source.py"):
+            schema = "connection_custody" if args[-1] == "connection_custody" else "0005_bookkeeping_cutover"
+            output = json.dumps({"server_version_num": 180006, "schema_version": schema, "tls": True}).encode()
         elif args[0] == "pg_dump":
-            Path(args[-1]).write_bytes(b"PGDMP" + SENTINEL.encode())
+            Path(args[args.index("--file") + 1]).write_bytes(b"PGDMP" + SENTINEL.encode())
         elif args[0] == "age" and "--output" in args:
             Path(args[-2]).write_bytes(b"age-encrypted-test-archive")
         return subprocess.CompletedProcess(args, 0, output)
@@ -517,3 +518,71 @@ def test_guard_persists_lock_removal_before_return(configured, monkeypatch):
     with nas.guard(root):
         assert (root / ".lock").exists()
     assert synced == [root]
+
+
+
+@pytest.mark.parametrize("date,expected", [
+    ("2026-03-08T13:59:00+00:00", "2026-03-08T03:00:00+00:00"),
+    ("2026-03-08T14:00:00+00:00", "2026-03-08T14:00:00+00:00"),
+    ("2026-11-01T14:59:00+00:00", "2026-11-01T02:00:00+00:00"),
+    ("2026-11-01T15:00:00+00:00", "2026-11-01T15:00:00+00:00"),
+])
+def test_twice_daily_slots_follow_eastern_dst(date, expected):
+    assert nas.stamp(nas.latest_slot(datetime.fromisoformat(date), twice_daily=True)) == expected
+
+
+def test_twice_daily_policy_is_uat_only(configured):
+    path, original = configured
+    path.write_text(json.dumps({**original, "schedule": "twice_daily"}))
+    with pytest.raises(nas.BackupError, match="configuration"):
+        load(configured)
+
+
+def test_twice_daily_capture_and_stale_running_point(configured, clients, monkeypatch):
+    path, original = configured
+    path.write_text(json.dumps({**original, "environment": "uat", "schedule": "twice_daily"}))
+    config = load(configured)
+    first = nas.backup(config, scheduled=True)
+    root = nas.namespace(config)
+    with nas.guard(root):
+        with pytest.raises(nas.BackupError, match="overlap"):
+            nas.backup(config, scheduled=True)
+    monkeypatch.setattr(nas, "instant", lambda: NOW + timedelta(hours=12))
+    assert nas.backup(config, scheduled=True)["generation"] != first["generation"]
+    assert nas.backup(config, scheduled=True)["status"] == "no_attempt"
+
+    now = NOW + timedelta(hours=32)
+    state = nas.read_state(root)
+    nas.write_json(root / "status.json", {**state, "result": "running", "started_at": nas.stamp(now)})
+    assert nas.health(config, now)["status"] == "stale"
+
+
+
+def test_custody_probe_checks_dedicated_schema(metadata_connection):
+    _, connection = metadata_connection
+    connection.execute.side_effect = [
+        MagicMock(), SimpleNamespace(fetchone=lambda: (None,)), MagicMock(),
+    ]
+    assert source.source_metadata("connection_custody")["schema_version"] == "connection_custody"
+    assert "connection_custody.grants" in connection.execute.call_args.args[0]
+
+
+def test_custody_probe_refuses_ledger(metadata_connection):
+    _, connection = metadata_connection
+    with pytest.raises(ValueError, match="source"):
+        source.source_metadata("connection_custody")
+    assert connection.execute.call_count == 2
+
+
+
+def test_custody_capture_has_restricted_dump_and_distinct_manifest(configured, clients):
+    path, original = configured
+    path.write_text(json.dumps({**original, "environment": "uat", "source_kind": "connection_custody"}))
+    config = load(configured)
+    generation = nas.backup(config, scheduled=True)["generation"]
+    dump = next(args for args, _ in clients if args[0] == "pg_dump" and "--file" in args)
+    assert "--schema=connection_custody" in dump and "--strict-names" in dump
+    assert nas.verify_generation(config, generation)["source_kind"] == "connection_custody"
+    config.pop("source_kind")
+    with pytest.raises(nas.BackupError, match="integrity"):
+        nas.verify_generation(config, generation)
