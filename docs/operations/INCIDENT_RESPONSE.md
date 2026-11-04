@@ -151,12 +151,15 @@ Confirm the prior image supports the current schema, access mode, identity epoch
 and configuration. Named mode must retain named-capable code and all authorization
 guards; do not revert to alpha or old session-generation material. Schema-changing
 releases require a reviewed compatibility bridge or maintenance/forward repair.
-For an approved staging operation, dispatch the existing workflow on main:
+For an approved staging rollback, pause automatic staging promotion by disabling
+`COMMERCIAL_AUTO_STAGING_ENABLED` and let active/queued promotions settle.
+Verify the live revision, then dispatch the existing workflow on main.
 
 ```powershell
 # $rollbackImage is the reviewed repository@sha256 digest, never a mutable tag.
+# $liveRelease is the full commit SHA confirmed live after pausing promotion.
 
-gh workflow run commercial-staging.yml --repo Roklion/Project_Tabula_Rasa --ref main -f "image=$rollbackImage"
+gh workflow run commercial-staging.yml --repo Roklion/Project_Tabula_Rasa --ref main -f "image=$rollbackImage" -f "rollback_from=$liveRelease"
 # Use the dispatch URL when supplied, or list candidate runs if it is absent.
 
 gh run list --repo Roklion/Project_Tabula_Rasa --workflow commercial-staging.yml --branch main --event workflow_dispatch --limit 5 --json databaseId,createdAt,status,url

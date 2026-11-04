@@ -208,7 +208,8 @@ Never restore an alpha image or synthetic resolver for owner/external users.
 
 Rehearse rollback in a controlled staging window: retain named fixture session,
 records, selected business and receipt byte digest; promote the compatible prior
-named image through the existing digest workflow; verify deployment smoke and
+named image through the [staging rollback procedure](../operations/INCIDENT_RESPONSE.md);
+verify deployment smoke and
 the applicable identity/record/byte checks; re-promote the candidate and repeat.
 Keep the forward schema and retained data. No schema downgrade, source reload,
 database restore or deletion is part of an application-image drill. If auth

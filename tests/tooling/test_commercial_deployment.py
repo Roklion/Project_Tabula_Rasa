@@ -21,6 +21,14 @@ ENV = {"TABULA_RASA_ENVIRONMENT": "staging", "GITHUB_REPOSITORY": "Roklion/Proje
        "RENDER_API_KEY": "synthetic-only", "TABULA_RASA_ALPHA_USERNAME": "stage", "TABULA_RASA_ALPHA_PASSWORD": "synthetic"}
 
 
+@pytest.fixture(autouse=True)
+def release_ancestry(monkeypatch):
+    # The synthetic provider's prior revision normally precedes the candidate.
+    run = Mock(return_value=SimpleNamespace(returncode=0))
+    monkeypatch.setattr(release, "subprocess", SimpleNamespace(run=run))
+    return run
+
+
 def metadata(image, repository):
     assert repository == REPOSITORY
     return {"release": ("c" if image == IMAGE else "d") * 40, "schema": "0001_initial",
@@ -46,8 +54,55 @@ def test_smoke_success_records_exact_release_without_extra_deploys(platform_sha)
     read, smoke = provider(platform_sha=platform_sha), Mock()
     result = release.promote(IMAGE, ENV, read=read, metadata=metadata, verify=Mock(), smoke_check=smoke)
     assert result["image"] == IMAGE and result["status"] == "smoke_passed"
+    assert result["environment"] == "staging" and result["deploy_id"] == "dep-new"
+    assert result["release"] == "c" * 40 and result["schema"] == "0001_initial"
+    assert result["deploy_started_at"] <= result["verified_at"]
     assert sum(call.kwargs.get("body") is not None for call in read.call_args_list) == 1
     smoke.assert_called_once_with(ENV["TABULA_RASA_PUBLIC_ORIGIN"], "stage", "synthetic", "c" * 40)
+
+
+def test_superseded_staging_release_stops_before_migration_or_render_mutation(monkeypatch, release_ancestry, capsys):
+    read, smoke = provider(), Mock()
+    release_ancestry.return_value.returncode = 1
+    for key, value in ENV.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setattr(release, "image_metadata", metadata)
+    monkeypatch.setattr(release, "validated_main", Mock())
+    monkeypatch.setattr(release, "api", read)
+    monkeypatch.setattr("sys.argv", ["release", "verify", "--image", IMAGE])
+
+    with pytest.raises(SystemExit, match="superseded release"):
+        release.main()
+    assert not capsys.readouterr().out
+    with pytest.raises(release.ReleaseError, match="superseded release"):
+        release.promote(IMAGE, ENV, read=read, metadata=metadata, verify=Mock(), smoke_check=smoke)
+    release_ancestry.assert_called_with(
+        ["git", "merge-base", "--is-ancestor", "d" * 40, "c" * 40], capture_output=True, check=False,
+    )
+    assert all(not call.kwargs.get("body") for call in read.call_args_list)
+    smoke.assert_not_called()
+
+
+def test_same_revision_staging_retry_is_allowed(release_ancestry):
+    candidate = metadata(IMAGE, REPOSITORY)
+    release.verify_prior_release(candidate, candidate, "staging")
+    release_ancestry.assert_not_called()
+
+
+def test_manual_staging_rollback_requires_the_expected_live_revision(release_ancestry):
+    read, smoke = provider(), Mock()
+    with pytest.raises(release.ReleaseError, match="expected live revision"):
+        release.promote(IMAGE, {**ENV, "STAGING_ROLLBACK_FROM": "e" * 40},
+                        read=read, metadata=metadata, verify=Mock(), smoke_check=smoke)
+    assert all(not call.kwargs.get("body") for call in read.call_args_list)
+    smoke.assert_not_called()
+
+    result = release.promote(IMAGE, {**ENV, "STAGING_ROLLBACK_FROM": "d" * 40},
+                             read=read, metadata=metadata, verify=Mock(), smoke_check=smoke)
+    release_ancestry.assert_called_once_with(
+        ["git", "merge-base", "--is-ancestor", "c" * 40, "d" * 40], capture_output=True, check=False,
+    )
+    assert result["rollback_from"] == "d" * 40
 
 
 @pytest.mark.parametrize("platform_sha", [False, True])
@@ -267,13 +322,29 @@ def test_workflow_credential_separation_serialization_and_main_only_image_build(
         return yaml.load((ROOT / ".github/workflows" / name).read_text(), Loader=yaml.BaseLoader)
     config = load("commercial-promote.yml")
     job = config["jobs"]["deploy"]
+    assert job["steps"][0]["with"] == {"ref": "${{ github.sha }}", "fetch-depth": "0"}
     assert any(step.get("uses") == "docker/setup-buildx-action@v3" for step in job["steps"])
-    assert job["concurrency"]["cancel-in-progress"] == "false"
+    assert job["concurrency"] == {"group": "commercial-deploy-${{ inputs.environment }}", "queue": "max"}
     assert job["environment"] == "${{ inputs.environment }}"
     migration = next(step for step in job["steps"] if "bound migration" in step.get("name", ""))
     assert migration["env"] == {"TABULA_RASA_DATABASE_URL": "${{ secrets.TABULA_RASA_MIGRATION_DATABASE_URL }}"}
     assert "--bootstrap" not in migration["run"] and "database migrate" in migration["run"]
     assert "TABULA_RASA_DATABASE_URL" not in job["env"]
-    build = load("commercial-image.yml")["jobs"]["build"]
+    image = load("commercial-image.yml")
+    assert image["on"]["workflow_run"]["branches"] == ["main"]
+    build = image["jobs"]["build"]
     assert "conclusion == 'success'" in build["if"] and "event == 'push'" in build["if"]
-    assert "github.ref == 'refs/heads/main'" in load("commercial-staging.yml")["jobs"]["staging"]["if"]
+    assert build["outputs"]["image"] == "${{ steps.release.outputs.repository }}@${{ steps.build.outputs.digest }}"
+    for environment in ("development", "staging"):
+        caller = image["jobs"][environment]
+        assert caller["needs"] == "build"
+        assert caller["uses"] == "./.github/workflows/commercial-promote.yml"
+        assert caller["with"] == {"environment": environment, "image": "${{ needs.build.outputs.image }}"}
+    assert image["jobs"]["development"]["if"] == "vars.COMMERCIAL_DEPLOY_ENABLED == 'true'"
+    assert "vars.COMMERCIAL_AUTO_STAGING_ENABLED == 'true'" in image["jobs"]["staging"]["if"]
+    manual = load("commercial-staging.yml")
+    assert "workflow_dispatch" in manual["on"]
+    assert "github.ref == 'refs/heads/main'" in manual["jobs"]["staging"]["if"]
+    assert manual["jobs"]["staging"]["uses"] == image["jobs"]["staging"]["uses"]
+    assert manual["jobs"]["staging"]["with"]["rollback_from"] == "${{ inputs.rollback_from }}"
+    assert "rollback_from" not in image["jobs"]["staging"]["with"]
