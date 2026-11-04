@@ -89,6 +89,23 @@ def test_same_revision_staging_retry_is_allowed(release_ancestry):
     release_ancestry.assert_not_called()
 
 
+def test_git_ancestry_error_is_distinct_from_a_superseded_release(release_ancestry):
+    release_ancestry.return_value.returncode = 128
+    release_ancestry.return_value.stderr = b"private diagnostic"
+    with pytest.raises(release.ReleaseError, match="inspect the workflow checkout") as failure:
+        release.verify_prior_release(metadata(IMAGE, REPOSITORY), metadata(PRIOR, REPOSITORY), "staging")
+    assert "private diagnostic" not in str(failure.value)
+
+
+@pytest.mark.parametrize("payload", [{}, [{"deploy": {}}], [{"deploy": {"status": None}}]])
+def test_invalid_render_deployment_list_stops_before_mutation(payload):
+    read, smoke = Mock(return_value=payload), Mock()
+    with pytest.raises(release.ReleaseError, match="Invalid Render deployment"):
+        release.promote(IMAGE, ENV, read=read, metadata=metadata, verify=Mock(), smoke_check=smoke)
+    read.assert_called_once_with("/services/srv-test/deploys?limit=100", "synthetic-only")
+    smoke.assert_not_called()
+
+
 def test_manual_staging_rollback_requires_the_expected_live_revision(release_ancestry):
     read, smoke = provider(), Mock()
     with pytest.raises(release.ReleaseError, match="expected live revision"):

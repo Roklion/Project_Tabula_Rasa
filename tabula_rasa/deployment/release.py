@@ -133,8 +133,16 @@ def render_target(environ):
 
 def live_image(service, token, repository, *, read, metadata):
     deployments = read(f"/services/{service}/deploys?limit=100", token)
-    active = [item["deploy"] for item in deployments]
-    if any(item.get("status") in {"created", "queued", "build_in_progress", "update_in_progress", "pre_deploy_in_progress"} for item in active):
+    if not isinstance(deployments, list):
+        raise ReleaseError("Invalid Render deployment list; inspect provider state.")
+    try:
+        active = [item["deploy"] for item in deployments]
+        statuses = {item["status"] for item in active}
+    except (KeyError, TypeError):
+        raise ReleaseError("Invalid Render deployment list; inspect provider state.") from None
+    if any(not isinstance(status, str) or not status for status in statuses):
+        raise ReleaseError("Invalid Render deployment status; inspect provider state.")
+    if statuses & {"created", "queued", "build_in_progress", "update_in_progress", "pre_deploy_in_progress"}:
         raise ReleaseError("Another deployment is in progress; inspect before proceeding.")
     prior = next((item for item in active if item.get("status") == "live"), None)
     if prior is None:
@@ -165,7 +173,9 @@ def verify_prior_release(candidate, previous, environment, rollback_from=""):
             ["git", "merge-base", "--is-ancestor", ancestor, descendant],
             capture_output=True, check=False,
         )
-        if result.returncode:
+        if result.returncode not in (0, 1):
+            raise ReleaseError("Cannot verify staging release ancestry; inspect the workflow checkout and retained revisions.")
+        if result.returncode == 1:
             if rollback_from:
                 raise ReleaseError("Staging rollback target must precede the expected live revision.")
             raise ReleaseError("Staging candidate does not advance the live revision; inspect for a superseded release.")
