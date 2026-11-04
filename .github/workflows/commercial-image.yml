@@ -71,3 +71,15 @@ jobs:
       environment: development
       image: ${{ needs.build.outputs.image }}
     secrets: inherit
+  staging:
+    needs: build
+    if: vars.COMMERCIAL_DEPLOY_ENABLED == 'true' && vars.COMMERCIAL_AUTO_STAGING_ENABLED == 'true'
+    permissions:
+      contents: read
+      actions: read
+      packages: read
+    uses: ./.github/workflows/commercial-promote.yml
+    with:
+      environment: staging
+      image: ${{ needs.build.outputs.image }}
+    secrets: inherit

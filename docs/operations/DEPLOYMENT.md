@@ -21,11 +21,22 @@ The browser uses relative API URLs and requires no per-environment build.
 builds/publishes a `linux/amd64` GHCR image tagged by SHA. Its summary records the
 immutable digest and expected schema head. Repository CI also builds/imports
 the container without credentials. `commercial-promote.yml` serializes the
-whole deployment per GitHub environment with cancellation disabled. Development
-follows the validated image; `commercial-staging.yml` accepts an explicit digest
-from main. Promotion checks the image's repository, OS/architecture, release
+whole deployment per GitHub environment and queues pending promotions. Development
+follows the validated image. When both deployment flags are enabled, staging
+automatically receives the exact digest from the successful image build.
+**Promote commercial staging** remains available from main for a controlled
+retry or rehearsal with an explicit digest. Promotion runs tooling from the
+workflow revision and checks the image's repository, OS/architecture, release
 metadata, main ancestry and latest matching main-push CI success. Keep SHA tags
 and associated digests needed for rollback; never prune active/rollback releases.
+
+Staging checks the live Render revision before migrating and again before
+deploying. A forward promotion must match or descend from that revision. A superseded
+candidate fails with a diagnostic and operators should inspect the live release
+before retrying. For an intentional rollback, follow the recovery procedure
+below. After Render confirms the digest and smoke verifies readiness and version,
+the Actions job summary records the staging commit, image digest, schema,
+environment, Render deployment ID, deployment start and verification time.
 
 Closed [deployment evidence](https://github.com/Roklion/Project_Tabula_Rasa/issues/279)
 records hosted development/staging acceptance on October 9, 2026, including retained
@@ -99,6 +110,12 @@ separate staging service nor the commercial activation policy.
    deployment branches to main, and use reviewer protection where available.
    Configure the following separately in each environment. The repository-wide
    `COMMERCIAL_DEPLOY_ENABLED` variable stays unset/false until both are ready.
+   Keep the repository-wide `COMMERCIAL_AUTO_STAGING_ENABLED` variable unset/false
+   until the operator has confirmed the staging Render, Neon UAT, and applicable
+   Zitadel bindings, the main **Full test suite** merge requirement, and staging
+   environment protections. Automatic promotion requires both variables set to
+   `true`. If the staging environment requires approval, retain that gate and
+   record the approval requirement when validating hosted automation.
 7. Record the selected plan/capacity, cold-start/idle-suspension behavior, monthly
    limits and billing headroom. Free tiers are permitted for this technical
    stage when the real persistent topology fits those limitations; they do not
@@ -116,7 +133,7 @@ separate staging service nor the commercial activation policy.
 | GitHub environment secret | Custody/use |
 | --- | --- |
 | `TABULA_RASA_MIGRATION_DATABASE_URL` | Migration container step only |
-| `RENDER_API_KEY` | Render deployment API step only; authorized workspace access |
+| `RENDER_API_KEY` | Render staging preflight and deployment steps only; authorized workspace access |
 | `TABULA_RASA_ALPHA_USERNAME` | This environment's temporary operator gate |
 | `TABULA_RASA_ALPHA_PASSWORD` | Smoke runner only; Render receives its scrypt hash |
 
@@ -321,7 +338,7 @@ the requested OCI index (or Docker manifest list) from its single `linux/amd64`
 runtime manifest. It pulls and inspects that immutable platform manifest for
 release/schema labels and OS/architecture; attestation and other-platform
 digests do not qualify. A direct image manifest is also supported. Promotion
-continues to submit the operator's original immutable digest to Render.
+submits the original build-output or operator-supplied immutable digest to Render.
 Both Render `image.ref` and `image.sha` must identify that digest or its verified
 runtime manifest in the configured repository. A SHA is accepted only as
 `sha256:` plus 64 lowercase hexadecimal characters or the same 64 characters
@@ -356,9 +373,13 @@ evidence](https://github.com/Roklion/Project_Tabula_Rasa/issues/279) records the
 original diagnosis and completed hosted promotion; old image IDs or a local readiness
 observation cannot validate a new release.
 
-For manual recovery of bad application code, inspect the exact service's current
-deploy/status, select its retained schema-compatible image and dispatch that digest
-through the staging workflow. Development automation deliberately refuses superseded
+For manual recovery of bad application code, pause automatic staging promotion
+and let in-flight promotions settle. Inspect the exact service's live revision,
+select its retained schema-compatible image and dispatch that digest through the
+staging workflow with the full live SHA in `rollback_from`. The workflow checks
+that staging is still on that SHA and that the selected target precedes it.
+Follow the [incident rollback procedure](INCIDENT_RESPONSE.md) for dispatch and
+verification. Development automation deliberately refuses superseded
 main images; a manual development rollback instead selects the exact retained compatible
 digest in the Render Dashboard, after pausing automatic development promotion. Verify
 readiness/release and run `python -m tabula_rasa.deployment.smoke --release

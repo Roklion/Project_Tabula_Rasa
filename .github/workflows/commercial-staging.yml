@@ -6,6 +6,10 @@ on:
         description: Tested GHCR commercial image with immutable sha256 digest
         required: true
         type: string
+      rollback_from:
+        description: For intentional rollback only, the full commit SHA currently live on staging
+        required: false
+        type: string
 permissions:
   contents: read
   actions: read
@@ -17,4 +21,5 @@ jobs:
     with:
       environment: staging
       image: ${{ inputs.image }}
+      rollback_from: ${{ inputs.rollback_from }}
     secrets: inherit

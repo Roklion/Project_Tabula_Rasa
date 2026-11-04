@@ -46,7 +46,9 @@ pending full named/data/byte coverage.
    signal/diagnosis and selected retained return image. This exercises deliberate
    operator rollback without corrupting data or disrupting credentials. Start
    observed response/recovery timing here, including dispatch/queue time.
-4. Dispatch the retained compatible return digest through the same workflow.
+4. Follow the [incident rollback procedure](INCIDENT_RESPONSE.md) to pause
+   automatic promotion and dispatch the retained compatible return digest
+   with the expected live SHA through the same workflow.
    Record dispatch/queue/start/completion times and run URL. Require bound schema,
    immutable registry/Render identity, readiness and mode-specific smoke success.
    Independent `/version` must match the return release and readiness must be 200.

@@ -14,7 +14,7 @@ from tabula_rasa.http.app import create_app
 from tabula_rasa.http.config import HttpSettings
 from tabula_rasa.http.identity import NamedIdentity
 from tests.http.test_transport import FakeRuntime
-from tests.tooling.test_commercial_deployment import ENV, IMAGE, metadata, provider
+from tests.tooling.test_commercial_deployment import ENV, IMAGE, metadata, provider, release_ancestry  # noqa: F401
 
 NAMED = {key: value for key, value in ENV.items() if 'ALPHA_' not in key}
 NAMED['TABULA_RASA_ACCESS_MODE'] = 'named_user'

@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import time
+from datetime import datetime, timezone
 from urllib.request import Request, build_opener, HTTPRedirectHandler
 from urllib.parse import urlsplit
 
@@ -123,6 +124,65 @@ def validated_main(release, environ):
         raise ReleaseError("Current main-revision Repository CI success is required.")
 
 
+def render_target(environ):
+    service, token = environ["RENDER_SERVICE_ID"], environ["RENDER_API_KEY"]
+    if not re.fullmatch("srv-[a-z0-9]+", service):
+        raise ReleaseError("Invalid Render service identity.")
+    return service, token
+
+
+def live_image(service, token, repository, *, read, metadata):
+    deployments = read(f"/services/{service}/deploys?limit=100", token)
+    if not isinstance(deployments, list):
+        raise ReleaseError("Invalid Render deployment list; inspect provider state.")
+    try:
+        active = [item["deploy"] for item in deployments]
+        statuses = {item["status"] for item in active}
+    except (KeyError, TypeError):
+        raise ReleaseError("Invalid Render deployment list; inspect provider state.") from None
+    if any(not isinstance(status, str) or not status for status in statuses):
+        raise ReleaseError("Invalid Render deployment status; inspect provider state.")
+    if statuses & {"created", "queued", "build_in_progress", "update_in_progress", "pre_deploy_in_progress"}:
+        raise ReleaseError("Another deployment is in progress; inspect before proceeding.")
+    prior = next((item for item in active if item.get("status") == "live"), None)
+    if prior is None:
+        return None, None
+    try:
+        image = prior["image"]["ref"]
+        immutable_digest(image, repository)
+    except (ValueError, KeyError, TypeError):
+        raise ReleaseError("Prior image needs a verified immutable reference; inspect provider state.") from None
+    previous = metadata(image, repository)
+    deployed_image(prior, image, previous, repository)
+    return image, previous
+
+
+def verify_prior_release(candidate, previous, environment, rollback_from=""):
+    if rollback_from and (
+        environment != "staging" or previous is None or rollback_from != previous["release"]
+        or candidate["release"] == rollback_from
+    ):
+        raise ReleaseError("Staging rollback requires the expected live revision and a different target revision.")
+    if previous is None:
+        return
+    if environment == "staging" and previous["release"] != candidate["release"]:
+        ancestor, descendant = previous["release"], candidate["release"]
+        if rollback_from:
+            ancestor, descendant = descendant, ancestor
+        result = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", ancestor, descendant],
+            capture_output=True, check=False,
+        )
+        if result.returncode not in (0, 1):
+            raise ReleaseError("Cannot verify staging release ancestry; inspect the workflow checkout and retained revisions.")
+        if result.returncode == 1:
+            if rollback_from:
+                raise ReleaseError("Staging rollback target must precede the expected live revision.")
+            raise ReleaseError("Staging candidate does not advance the live revision; inspect for a superseded release.")
+    if previous["schema"] != candidate["schema"]:
+        raise ReleaseError("Prior image is schema-incompatible; use reviewed maintenance/bridge procedure.")
+
+
 def wait_live(service, deploy, token, *, read=api, sleep=time.sleep):
     if not re.fullmatch("dep-[a-z0-9]+", deploy):
         raise ReleaseError("Invalid deployment identity; inspect provider state.")
@@ -157,26 +217,11 @@ def promote(image, environ, *, read=api, metadata=image_metadata, verify=validat
     parsed = urlsplit(origin)
     if parsed.scheme != "https" or not parsed.hostname or parsed.path or parsed.query or parsed.fragment or parsed.username or parsed.password:
         raise ReleaseError("An exact HTTPS origin is required.")
-    service, token = environ["RENDER_SERVICE_ID"], environ["RENDER_API_KEY"]
-    if not re.fullmatch("srv-[a-z0-9]+", service):
-        raise ReleaseError("Invalid Render service identity.")
-    deployments = read(f"/services/{service}/deploys?limit=100", token)
-    active = [item["deploy"] for item in deployments]
-    if any(item.get("status") in {"created", "queued", "build_in_progress", "update_in_progress", "pre_deploy_in_progress"} for item in active):
-        raise ReleaseError("Another deployment is in progress; inspect before proceeding.")
-    prior = next((item for item in active if item.get("status") == "live"), None)
-    previous_image = None
-    previous = None
-    if prior:
-        try:
-            previous_image = prior["image"]["ref"]
-            immutable_digest(previous_image, repository)
-        except (ValueError, KeyError, TypeError):
-            raise ReleaseError("Prior image needs a verified immutable reference; inspect provider state.") from None
-        previous = metadata(previous_image, repository)
-        deployed_image(prior, previous_image, previous, repository)
-        if previous["schema"] != candidate["schema"]:
-            raise ReleaseError("Prior image is schema-incompatible; use reviewed maintenance/bridge procedure.")
+    service, token = render_target(environ)
+    previous_image, previous = live_image(service, token, repository, read=read, metadata=metadata)
+    rollback_from = environ.get("STAGING_ROLLBACK_FROM", "")
+    verify_prior_release(candidate, previous, environ["TABULA_RASA_ENVIRONMENT"], rollback_from)
+    deploy_started_at = datetime.now(timezone.utc).isoformat()
     deployed = read(f"/services/{service}/deploys", token, body={"imageUrl": image})
     # No rollback after an uncertain create/wait: it could race a still-running deploy.
     confirmed = wait_live(service, deployed["id"], token, read=read)
@@ -195,7 +240,11 @@ def promote(image, environ, *, read=api, metadata=image_metadata, verify=validat
             check_release(previous['release'])
             raise ReleaseError("Smoke failed; prior compatible image restored and smoke verified.") from None
         raise ReleaseError("Initial smoke failed; no prior image exists. Restrict access and inspect.") from None
-    return {"image": image, **candidate, "access_mode": mode, "status": "smoke_passed"}
+    return {
+        "image": image, **candidate, "environment": environ["TABULA_RASA_ENVIRONMENT"],
+        "deploy_id": deployed["id"], "deploy_started_at": deploy_started_at, "rollback_from": rollback_from or None,
+        "verified_at": datetime.now(timezone.utc).isoformat(), "access_mode": mode, "status": "smoke_passed",
+    }
 
 
 def main():
@@ -208,8 +257,13 @@ def main():
         from .smoke import access_mode
         access_mode(environ, require_alpha_credentials=False)
         if args.command == "verify":
-            metadata = image_metadata(args.image, "ghcr.io/" + environ["GITHUB_REPOSITORY"].lower() + "/commercial")
+            repository = "ghcr.io/" + environ["GITHUB_REPOSITORY"].lower() + "/commercial"
+            metadata = image_metadata(args.image, repository)
             validated_main(metadata["release"], environ)
+            if environ.get("TABULA_RASA_ENVIRONMENT") == "staging":
+                service, token = render_target(environ)
+                _, previous = live_image(service, token, repository, read=api, metadata=image_metadata)
+                verify_prior_release(metadata, previous, "staging", environ.get("STAGING_ROLLBACK_FROM", ""))
             print(json.dumps(metadata, sort_keys=True))
         else:
             print(json.dumps(promote(args.image, environ), sort_keys=True))

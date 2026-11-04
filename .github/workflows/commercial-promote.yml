@@ -8,6 +8,9 @@ on:
       image:
         required: true
         type: string
+      rollback_from:
+        required: false
+        type: string
 permissions:
   contents: read
   actions: read
@@ -18,11 +21,12 @@ jobs:
     environment: ${{ inputs.environment }}
     concurrency:
       group: commercial-deploy-${{ inputs.environment }}
-      cancel-in-progress: false
+      queue: max
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       IMAGE: ${{ inputs.image }}
+      STAGING_ROLLBACK_FROM: ${{ inputs.rollback_from }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       TABULA_RASA_ENVIRONMENT: ${{ inputs.environment }}
       TABULA_RASA_PUBLIC_ORIGIN: ${{ vars.TABULA_RASA_PUBLIC_ORIGIN }}
@@ -30,7 +34,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.sha }}
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
@@ -44,6 +48,8 @@ jobs:
       - name: Verify tested main image and metadata
         env:
           TABULA_RASA_ACCESS_MODE: ${{ vars.TABULA_RASA_ACCESS_MODE }}
+          RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
+          RENDER_API_KEY: ${{ inputs.environment == 'staging' && secrets.RENDER_API_KEY || '' }}
         run: python -m tabula_rasa.deployment.release verify --image "$IMAGE"
       - name: Explicit bound migration (separate credential and process)
         env:
