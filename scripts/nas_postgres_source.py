@@ -17,7 +17,15 @@ def source_metadata(source_kind=None):
             raise ValueError("source")
         connection.execute("SET TRANSACTION READ ONLY")
         if source_kind == "connection_custody":
-            if connection.execute("SELECT to_regclass('public.alembic_version')").fetchone()[0] is not None:
+            # The backup role can inspect catalogs without USAGE on public.
+            if connection.execute("""
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM pg_catalog.pg_class AS relation
+                    JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+                    WHERE namespace.nspname = 'public' AND relation.relname = 'alembic_version'
+                )
+            """).fetchone()[0]:
                 raise ValueError("source")
             connection.execute("SELECT reference, ciphertext FROM connection_custody.grants LIMIT 0")
             schema = "connection_custody"
