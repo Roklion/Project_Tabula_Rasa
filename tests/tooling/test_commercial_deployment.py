@@ -491,6 +491,19 @@ def test_production_rejects_invalid_evidence_and_target_before_mutation(producti
     fixture.smoke.assert_not_called()
 
 
+@pytest.mark.parametrize(("section", "field", "diagnostic"), [
+    ("run", "head_repository", "completed main release workflow"),
+    ("proof", "database_sha256", "isolated staging target"),
+    ("proof", "deploy_id", "isolated staging target"),
+    ("proof", "public_origin", "HTTPS origin is missing or malformed"),
+])
+def test_null_staging_evidence_has_an_actionable_diagnostic(production_release, section, field, diagnostic):
+    getattr(production_release, section)[field] = None
+    with pytest.raises(release.ReleaseError, match=diagnostic):
+        production_release.promote()
+    assert not any(call.kwargs.get("body") for call in production_release.prod.call_args_list)
+
+
 def test_production_requires_successful_build_and_staging_jobs(production_release):
     fixture = production_release
     fixture.jobs[0]["conclusion"] = "failure"

@@ -22,9 +22,10 @@ def staging_evidence(image, candidate, environ, *, read, github=release.api):
     token = environ["GH_TOKEN"]
     run = github(path, token, github=True)
     attempt = run.get("run_attempt")
+    head_repository = run.get("head_repository")
     if (run.get("path") != ".github/workflows/commercial-image.yml"
             or run.get("event") != "workflow_run" or run.get("head_branch") != "main"
-            or run.get("head_repository", {}).get("full_name") != repo
+            or not isinstance(head_repository, dict) or head_repository.get("full_name") != repo
             or run.get("status") != "completed" or type(attempt) is not int or attempt < 1):
         raise release.ReleaseError("Staging evidence must come from the completed main release workflow.")
     jobs = github(f"{path}/attempts/{attempt}/jobs?per_page=100", token, github=True)["jobs"]
@@ -49,25 +50,25 @@ def staging_evidence(image, candidate, environ, *, read, github=release.api):
             raise release.ReleaseError("Staging evidence is missing, expired or malformed.") from None
 
     service = environ.get("STAGING_RENDER_SERVICE_ID", "")
-    staging_db = proof.get("database_sha256", "")
+    staging_db = proof.get("database_sha256")
     production_db = environ.get("TABULA_RASA_DEPLOY_DATABASE_SHA256", "")
-    deploy = proof.get("deploy_id", "")
+    deploy = proof.get("deploy_id")
     expected = {**candidate, "image": image, "environment": "staging",
                 "status": "smoke_passed", "access_mode": "named_user",
                 "render_service": service, "rollback_from": None}
     if (any(proof.get(key) != value for key, value in expected.items())
             or not timedelta(0) <= age <= timedelta(days=7)
-            or not re.fullmatch(r"[0-9a-f]{64}", staging_db)
+            or not isinstance(staging_db, str) or not re.fullmatch(r"[0-9a-f]{64}", staging_db)
             or not re.fullmatch(r"[0-9a-f]{64}", production_db) or staging_db == production_db
             or not re.fullmatch(r"srv-[a-z0-9]+", service) or service == environ.get("RENDER_SERVICE_ID")
-            or not re.fullmatch(r"dep-[a-z0-9]+", deploy)):
+            or not isinstance(deploy, str) or not re.fullmatch(r"dep-[a-z0-9]+", deploy)):
         raise release.ReleaseError("Staging evidence does not match the candidate or isolated staging target.")
 
     staging_token = environ.get("STAGING_RENDER_API_KEY", "")
     if not staging_token:
         raise release.ReleaseError("Staging Render read access is required to verify the current live deployment.")
     stage_target = read(f"/services/{service}", staging_token)
-    verify_render_origin(stage_target, service, proof.get("public_origin", ""), staging_token, read=read)
+    verify_render_origin(stage_target, service, proof.get("public_origin"), staging_token, read=read)
     verify_render_database(service, staging_token, staging_db, read=read)
     current = release.active_deployment(service, staging_token, read=read)
     if current is None or current.get("id") != deploy:
@@ -80,6 +81,8 @@ def staging_evidence(image, candidate, environ, *, read, github=release.api):
 
 
 def verify_render_origin(target, service, origin, token, *, read):
+    if not isinstance(origin, str):
+        raise release.ReleaseError("The verified HTTPS origin is missing or malformed.")
     hostname = urlsplit(origin).hostname
     if (target.get("id") != service or target.get("type") != "web_service" or not hostname
             or not re.fullmatch(r"[a-z0-9.-]+", hostname) or origin != f"https://{hostname}"):
