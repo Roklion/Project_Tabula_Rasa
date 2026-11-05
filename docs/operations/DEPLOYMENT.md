@@ -444,7 +444,11 @@ during the release window.
    authorize the promotion. Production runs serialize on the shared production
    environment lock. If staging advances or production's prior release changes
    while queued, select and review the new evidence before dispatching again.
-3. Inspect the run summary and Render deployment. Preflight checks CI, registry
+3. Inspect the run summary and Render deployment. The dispatch-time code first
+   verifies the candidate, then checks out its verified image commit and repeats
+   preflight with that release's code and dependencies before any mutation. A
+   release without production promotion support fails before migration or deploy.
+   Preflight checks CI, registry
    metadata, live staging evidence, the isolated staging and production runtime
    database bindings, the intended production service and identity settings, and the current application's readiness and
    named-user boundary. The tested image runs the explicit migration gate
