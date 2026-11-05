@@ -146,6 +146,21 @@ and one-request consent are required before execution. Its expected generic 403
 leaves `privileged_denied` correlation and notification **unverified**; collect
 those independently. Do not repeat it to reach the normal alert threshold.
 
+For a scoped Drive download drill, an operator can start the approved named-user
+staging image with `python -m tabula_rasa.http.drive_download_rehearsal`. Pass
+`--expected-origin`, `--expected-release`, `--download-path-sha256`,
+`--deadline-utc`, `--max-seconds` (at most 300), and
+`--acknowledge-staging-drive-download approved`. Compute the digest privately
+from the prepared Drive URL path `/drive/v3/files/<synthetic-file-id>`. Use only
+a uniquely bound synthetic receipt. Check that the normal path serves exact
+bytes before arming, then compare the target failure with an unaffected receipt
+download. This injects a transport error before Google receives the selected
+media GET. It leaves token exchange and file metadata requests outside the
+fault. The running process resumes the normal download path at expiry. Remove
+the command override and restore normal startup before ending the window. An
+expired override refuses a fresh process start. This drill provides evidence of
+application behavior during a download transport failure.
+
 After each drill, remove only its approved fault, verify release/topology and
 scope, inspect uncertain mutations before retry, and confirm original bytes and
 unaffected-business state remain intact. Check no fault control, competing job
