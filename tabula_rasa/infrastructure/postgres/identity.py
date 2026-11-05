@@ -5,5 +5,8 @@ from tabula_rasa.migration.model import digest
 
 def database_identity(database):
     """Passwords, users and query options never participate."""
-    url = database.engine.url
+    return database_url_identity(database.engine.url)
+
+
+def database_url_identity(url):
     return digest([url.host, url.port or 5432, url.database])

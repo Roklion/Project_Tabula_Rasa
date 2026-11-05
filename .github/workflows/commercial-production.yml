@@ -1,0 +1,35 @@
+name: Promote commercial production
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: Exact immutable GHCR image from the successful automatic staging run
+        required: true
+        type: string
+      staging_run:
+        description: Commercial release image workflow run ID that verified staging
+        required: true
+        type: string
+      previous_image:
+        description: Expected currently live production image (full immutable GHCR reference)
+        required: true
+        type: string
+      recovery_sha256:
+        description: SHA-256 of the reviewed production recovery and configuration record
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+  packages: read
+jobs:
+  production:
+    if: github.ref == 'refs/heads/main' && vars.COMMERCIAL_PRODUCTION_ENABLED == 'true'
+    uses: ./.github/workflows/commercial-promote.yml
+    with:
+      environment: production
+      image: ${{ inputs.image }}
+      staging_run: ${{ inputs.staging_run }}
+      previous_image: ${{ inputs.previous_image }}
+      recovery_sha256: ${{ inputs.recovery_sha256 }}
+    secrets: inherit

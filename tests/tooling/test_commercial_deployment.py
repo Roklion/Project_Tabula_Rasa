@@ -1,12 +1,14 @@
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import json
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 import yaml
 
-from tabula_rasa.deployment import database, release
+from tabula_rasa.deployment import database, production, release, smoke as smoke_module
+from tabula_rasa.migration.model import digest
 from tabula_rasa.infrastructure.postgres import hosted
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -286,7 +288,7 @@ def test_active_deploy_and_production_stop_without_provider_mutation():
         release.promote(IMAGE, ENV, read=read, metadata=metadata, verify=Mock(), smoke_check=Mock())
     assert not any(call.kwargs.get("body") for call in read.call_args_list)
     read.reset_mock()
-    with pytest.raises(release.ReleaseError, match="Only development/staging"):
+    with pytest.raises(release.ReleaseError, match="Production requires named-user"):
         release.promote(IMAGE, {**ENV, "TABULA_RASA_ENVIRONMENT": "production"}, read=read)
     read.assert_not_called()
 
@@ -365,3 +367,199 @@ def test_workflow_credential_separation_serialization_and_main_only_image_build(
     assert manual["jobs"]["staging"]["uses"] == image["jobs"]["staging"]["uses"]
     assert manual["jobs"]["staging"]["with"]["rollback_from"] == "${{ inputs.rollback_from }}"
     assert "rollback_from" not in image["jobs"]["staging"]["with"]
+
+
+PRODUCTION_ORIGIN = "https://production.example.test"
+STAGING_DATABASE = digest(["ep-staging.neon.tech", 5432, "ledger"])
+PRODUCTION_DATABASE = digest(["ep-production.neon.tech", 5432, "ledger"])
+PRODUCTION_ENV = {
+    **ENV, "TABULA_RASA_ENVIRONMENT": "production", "TABULA_RASA_ACCESS_MODE": "named_user",
+    "TABULA_RASA_PUBLIC_ORIGIN": PRODUCTION_ORIGIN, "TABULA_RASA_ALPHA_USERNAME": "",
+    "TABULA_RASA_ALPHA_PASSWORD": "", "TABULA_RASA_DEPLOY_DATABASE_SHA256": PRODUCTION_DATABASE,
+    "RENDER_SERVICE_ID": "srv-production", "GH_TOKEN": "github-fixture",
+    "PRODUCTION_PREVIOUS_IMAGE": PRIOR, "PRODUCTION_STAGING_RUN": "123",
+    "PRODUCTION_RECOVERY_SHA256": "f" * 64, "STAGING_RENDER_SERVICE_ID": "srv-staging",
+    "STAGING_RENDER_API_KEY": "staging-fixture", "PRODUCTION_OIDC_ISSUER": "https://identity.example.test",
+    "PRODUCTION_OIDC_CLIENT_ID": "production-client",
+}
+
+
+@pytest.fixture
+def production_release(monkeypatch, release_ancestry):
+    proof = {**metadata(IMAGE, REPOSITORY), "image": IMAGE, "environment": "staging", "status": "smoke_passed",
+             "access_mode": "named_user", "deploy_id": "dep-staging", "render_service": "srv-staging",
+             "database_sha256": STAGING_DATABASE, "verified_at": datetime.now(timezone.utc).isoformat(),
+             "rollback_from": None, "public_origin": ENV["TABULA_RASA_PUBLIC_ORIGIN"]}
+    environ = dict(PRODUCTION_ENV)
+    stage_live = {"id": "dep-staging", "status": "live", "image": {"ref": IMAGE, "sha": MANIFEST}}
+    prod = provider()
+    target = {"id": "srv-production", "type": "web_service", "suspended": "not_suspended",
+              "autoDeployTrigger": "off", "imagePath": PRIOR,
+              "serviceDetails": {"url": PRODUCTION_ORIGIN, "healthCheckPath": "/health/ready", "runtime": "image"}}
+    settings = {"ENVIRONMENT": "production", "ACCESS_MODE": "named_user", "PUBLIC_ORIGIN": PRODUCTION_ORIGIN,
+                "OIDC_ISSUER": PRODUCTION_ENV["PRODUCTION_OIDC_ISSUER"],
+                "OIDC_CLIENT_ID": PRODUCTION_ENV["PRODUCTION_OIDC_CLIENT_ID"],
+                "DATABASE_URL": "postgresql://runtime:fixture@ep-production.neon.tech/ledger?sslmode=require"}
+
+    stage_settings = {"DATABASE_URL": "postgresql://stage:fixture@ep-staging.neon.tech/ledger?sslmode=require"}
+
+    def render(path, token, *, body=None):
+        if token == "staging-fixture":
+            if path.endswith("/env-vars/TABULA_RASA_DATABASE_URL"):
+                return {"key": "TABULA_RASA_DATABASE_URL", "value": stage_settings["DATABASE_URL"]}
+            if path == "/services/srv-staging":
+                return {"id": "srv-staging", "type": "web_service",
+                        "serviceDetails": {"url": ENV["TABULA_RASA_PUBLIC_ORIGIN"]}}
+            assert path == "/services/srv-staging/deploys?limit=100" and body is None
+            return [{"deploy": stage_live}]
+        if path == "/services/srv-production":
+            return target
+        if "/env-vars/" in path:
+            key = path.rsplit("/", 1)[1]
+            return {"key": key, "value": settings[key.removeprefix("TABULA_RASA_")]}
+        return prod(path, token, body=body)
+
+    run = {"path": ".github/workflows/commercial-image.yml", "event": "workflow_run",
+           "head_branch": "main", "head_repository": {"full_name": ENV["GITHUB_REPOSITORY"]},
+           "status": "completed", "run_attempt": 1}
+    jobs = [{"name": name, "conclusion": "success"} for name in ("build", "staging / deploy")]
+
+    def github(path, token, *, github):
+        assert github and token == "github-fixture"
+        return {"jobs": jobs} if "/attempts/1/jobs?" in path else run
+
+    def command(args, **_):
+        if args[0] == "gh":
+            assert args[2:4] == ["download", "123"] and args[7] == "staging-release-1"
+            (Path(args[-1]) / "release.json").write_text(json.dumps(proof), encoding="utf-8")
+        return SimpleNamespace(returncode=0)
+
+    release_ancestry.side_effect = command
+    original = production.staging_evidence
+    monkeypatch.setattr(production, "staging_evidence",
+                        lambda *args, **kwargs: original(*args, **kwargs, github=github))
+    pre_smoke, smoke = Mock(), Mock()
+    monkeypatch.setattr(smoke_module, "named_smoke", pre_smoke)
+
+    def promote():
+        return release.promote(IMAGE, environ, read=render, metadata=metadata, verify=Mock(), smoke_check=smoke)
+
+    return SimpleNamespace(promote=promote, prod=prod, proof=proof, stage_live=stage_live,
+                           target=target, settings=settings, stage_settings=stage_settings, environ=environ, run=run, jobs=jobs,
+                           smoke=smoke, pre_smoke=pre_smoke)
+
+
+def test_production_submits_only_the_live_staging_digest_and_records_success(production_release):
+    fixture = production_release
+    result = fixture.promote()
+    assert result["image"] == IMAGE and result["previous_image"] == PRIOR
+    assert result["staging_run"] == "123" and result["staging_deploy_id"] == "dep-staging"
+    assert result["schema"] == "0001_initial" and result["status"] == "smoke_passed"
+    assert result["render_url"] == "https://dashboard.render.com/web/srv-production"
+    assert [call.kwargs["body"] for call in fixture.prod.call_args_list if call.kwargs.get("body")] == [
+        {"imageUrl": IMAGE},
+    ]
+    fixture.pre_smoke.assert_called_once_with(PRODUCTION_ORIGIN, "d" * 40)
+    fixture.smoke.assert_called_once_with(PRODUCTION_ORIGIN, "c" * 40)
+
+
+@pytest.mark.parametrize(("section", "key", "value"), [
+    ("proof", "image", PRIOR),
+    ("proof", "release", "d" * 40),
+    ("proof", "manifest_digest", PRIOR_MANIFEST),
+    ("proof", "access_mode", "restricted_alpha"),
+    ("proof", "verified_at", (datetime.now(timezone.utc) - timedelta(days=8)).isoformat()),
+    ("proof", "database_sha256", PRODUCTION_DATABASE),
+    ("proof", "public_origin", "http://stage.example.test"),
+    ("stage_live", "id", "dep-replaced"),
+    ("stage_live", "image", {"ref": PRIOR, "sha": PRIOR_MANIFEST}),
+    ("environ", "PRODUCTION_RECOVERY_SHA256", ""),
+    ("environ", "PRODUCTION_PREVIOUS_IMAGE", IMAGE),
+    ("target", "autoDeployTrigger", "commit"),
+    ("settings", "ACCESS_MODE", "restricted_alpha"),
+    ("settings", "OIDC_CLIENT_ID", "staging-client"),
+    ("settings", "DATABASE_URL", "postgresql://runtime:fixture@ep-staging.neon.tech/ledger?sslmode=require"),
+    ("stage_settings", "DATABASE_URL", "postgresql://runtime:fixture@ep-production.neon.tech/ledger?sslmode=require"),
+    ("run", "path", ".github/workflows/commercial-staging.yml"),
+])
+def test_production_rejects_invalid_evidence_and_target_before_mutation(production_release, section, key, value):
+    fixture = production_release
+    getattr(fixture, section)[key] = value
+    with pytest.raises(release.ReleaseError):
+        fixture.promote()
+    assert not any(call.kwargs.get("body") for call in fixture.prod.call_args_list)
+    fixture.smoke.assert_not_called()
+
+
+@pytest.mark.parametrize(("section", "field", "diagnostic"), [
+    ("run", "head_repository", "completed main release workflow"),
+    ("proof", "database_sha256", "isolated staging target"),
+    ("proof", "deploy_id", "isolated staging target"),
+    ("proof", "public_origin", "HTTPS origin is missing or malformed"),
+])
+def test_null_staging_evidence_has_an_actionable_diagnostic(production_release, section, field, diagnostic):
+    getattr(production_release, section)[field] = None
+    with pytest.raises(release.ReleaseError, match=diagnostic):
+        production_release.promote()
+    assert not any(call.kwargs.get("body") for call in production_release.prod.call_args_list)
+
+
+def test_production_requires_successful_build_and_staging_jobs(production_release):
+    fixture = production_release
+    fixture.jobs[0]["conclusion"] = "failure"
+    with pytest.raises(release.ReleaseError, match="Successful build and staging"):
+        fixture.promote()
+    assert not any(call.kwargs.get("body") for call in fixture.prod.call_args_list)
+
+
+def test_failed_production_smoke_keeps_failed_outcome_without_automatic_rollback(production_release, capsys):
+    fixture = production_release
+    fixture.smoke.side_effect = ValueError("synthetic smoke failure")
+    with pytest.raises(release.ReleaseError, match="Named smoke failed"):
+        fixture.promote()
+    assert [call.kwargs["body"] for call in fixture.prod.call_args_list if call.kwargs.get("body")] == [
+        {"imageUrl": IMAGE},
+    ]
+    assert json.loads(capsys.readouterr().err)["deploy_id"] == "dep-new"
+
+
+def test_production_database_gate_uses_bound_credential_and_locked_compatible_upgrade(monkeypatch):
+    target = MagicMock()
+    target.engine.connect.return_value.__enter__.return_value.scalar.return_value = True
+    target.health.return_value = {"connected": True, "revision": database.head_revision()}
+    binding, upgrade = Mock(return_value=target), Mock()
+    monkeypatch.setattr(database, "open_bound_neon_database", binding)
+    monkeypatch.setattr(database, "upgrade", upgrade)
+    database.migrate(PRODUCTION_ENV)
+    binding.assert_called_once_with(PRODUCTION_ENV)
+    upgrade.assert_called_once_with(target, require_current_head=True)
+    target.dispose.assert_called_once()
+    upgrade.reset_mock()
+    target.engine.connect.return_value.__enter__.return_value.scalar.return_value = False
+    with pytest.raises(ValueError, match="migration credential"):
+        database.migrate(PRODUCTION_ENV)
+    upgrade.assert_not_called()
+    with pytest.raises(ValueError, match="existing compatible schema"):
+        database.migrate(PRODUCTION_ENV, bootstrap=True)
+
+
+def test_production_dispatch_is_manual_main_only_and_reuses_staging_promotion_lock():
+    def load(name):
+        return yaml.load((ROOT / ".github/workflows" / name).read_text(), Loader=yaml.BaseLoader)
+
+    dispatch = load("commercial-production.yml")
+    assert set(dispatch["on"]) == {"workflow_dispatch"}
+    assert set(dispatch["on"]["workflow_dispatch"]["inputs"]) == {
+        "image", "staging_run", "previous_image", "recovery_sha256",
+    }
+    job = dispatch["jobs"]["production"]
+    assert "refs/heads/main" in job["if"] and "COMMERCIAL_PRODUCTION_ENABLED" in job["if"]
+    assert job["uses"] == "./.github/workflows/commercial-promote.yml"
+    shared = load("commercial-promote.yml")["jobs"]["deploy"]
+    assert "github.event_name == 'workflow_dispatch'" in shared["if"]
+    assert "commercial-production.yml@refs/heads/main" in shared["if"]
+    names = [step.get("name", "") for step in shared["steps"]]
+    assert names.index("Verify tested main image and metadata") < next(
+        index for index, name in enumerate(names) if "bound migration" in name
+    ) < next(index for index, name in enumerate(names) if "Deploy and verify named-user" in name)
+    assert "production" not in load("commercial-image.yml")["jobs"]

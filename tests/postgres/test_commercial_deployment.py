@@ -72,3 +72,21 @@ def test_operator_bootstrap_requires_blank_native_database(empty_database, monke
         connection.execute(text("DROP TABLE retained_record"))
     tooling.migrate(configured, bootstrap=True)
     assert empty_database.health()["revision"] == tooling.head_revision()
+
+
+def test_production_gate_runs_on_native_current_head_and_rejects_a_pending_revision(database, monkeypatch):
+    from sqlalchemy import text
+    from tabula_rasa.infrastructure.postgres.migrations import current_revision
+
+    monkeypatch.setattr(tooling, "open_bound_neon_database", lambda _: database)
+    configured = {"TABULA_RASA_ENVIRONMENT": "production"}
+    tooling.migrate(configured)
+    with database.engine.begin() as connection:
+        assert current_revision(connection) == tooling.head_revision()
+        # Change only the disposable fixture's marker. The deployment gate
+        # must refuse to run Alembic from this older head.
+        connection.execute(text("UPDATE public.alembic_version SET version_num = '0014_document_locations'"))
+    with pytest.raises(ValueError, match="current image schema head"):
+        tooling.migrate(configured)
+    with database.engine.connect() as connection:
+        assert current_revision(connection) == "0014_document_locations"

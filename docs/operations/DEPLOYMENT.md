@@ -392,6 +392,82 @@ traffic/drain writers and use PostgreSQL persistence's reviewed forward repair o
 [recovery guide](DATABASE_RECOVERY.md). Database restore/PITR and commercial recovery
 acceptance stay with platform operations and commercial recovery agreement.
 
+## Manual production promotion
+
+**Promote commercial production** is a manual workflow on protected `main`.
+It promotes application code to an existing named-user production service.
+The automatic commercial image workflow can publish images and deploy to
+development and staging. Production dispatch is reserved for release operators
+with repository write access. Keep write access limited to operators authorized
+to release, use the available main-branch protections, and restrict the GitHub
+`production` environment to `main` where supported. This workflow requires no
+paid environment reviewer. Coordinate ownership and credential custody with
+the [platform ownership handoff](https://github.com/Roklion/Project_Tabula_Rasa/issues/413).
+
+### Production setup and recovery evidence
+
+The checked-in Render Blueprint provisions development and staging. Before
+enabling production promotion, obtain explicit operator approval for the first
+live deployment or migration and any provider purchase. Provision and verify
+these bindings privately:
+
+| Location | Required setup |
+| --- | --- |
+| GitHub repository | Keep `COMMERCIAL_PRODUCTION_ENABLED` unset until approved and configured. Set it to `true` to enable production dispatch. |
+| GitHub `production` environment variables | `RENDER_SERVICE_ID`, `TABULA_RASA_PUBLIC_ORIGIN`, `TABULA_RASA_ACCESS_MODE=named_user`, `TABULA_RASA_DEPLOY_DATABASE_SHA256`, `STAGING_RENDER_SERVICE_ID`, `PRODUCTION_OIDC_ISSUER` and `PRODUCTION_OIDC_CLIENT_ID`. |
+| GitHub `production` environment secrets | `RENDER_API_KEY` with access to the production service, its required environment settings and deployments. `STAGING_RENDER_API_KEY` with read access to the staging service, domains, deploys and its direct TLS runtime database setting. `TABULA_RASA_MIGRATION_DATABASE_URL` for the distinct production migration role using the direct Neon endpoint with TLS. |
+| Render production | Separate active image-backed web service. Disable automatic deployment and configure `/health/ready`. Set `TABULA_RASA_ENVIRONMENT=production`, `TABULA_RASA_ACCESS_MODE=named_user`, the exact public origin, production Zitadel issuer and client ID, and the direct TLS runtime DB URL as service-level variables. Keep the OIDC secret and session generation in protected runtime configuration. The public origin must be Render's service URL or a verified non-redirecting custom domain on that service. |
+| Neon and Zitadel | Use a separate production Neon endpoint and a production Zitadel project/client. Verify runtime DML and migration ownership are separate, and verify the registered callback, named-user sign-in and session epoch under the [identity rollout procedure](../identity/HOSTED_ROLLOUT.md). |
+
+Before dispatch, privately review and hash a recovery record that names the
+production service and database fingerprint, candidate and currently live
+digests, effective runtime and migration grants, and identity bindings. Record
+the backup or PITR checkpoint, its age and retention, the verified restore path,
+and the retained named-mode application rollback image and epoch compatibility.
+The dispatch hash references the operator's evidence. The workflow checks the
+reference format and live bindings. Backup retention and restore readiness are
+verified by the operator under the [database recovery procedure](DATABASE_RECOVERY.md).
+Avoid concurrent Render configuration changes, manual deploys, or other migrators
+during the release window.
+
+### Select and promote a release
+
+1. In **Commercial release image**, select the completed automatic run whose
+   **build** and **staging / deploy** jobs succeeded in the same attempt. The
+   staging job summary lists the immutable image and its release/schema metadata.
+   Use the run ID from its URL. The named-user staging evidence expires after
+   seven days and must still name the live staging deployment. A staging
+   rollback or manual staging deploy does not supply production evidence.
+2. In **Promote commercial production**, select `main` and enter that immutable
+   image, its staging run ID, the full expected live production image reference,
+   and the SHA-256 of the reviewed recovery record. Choose **Run workflow** to
+   authorize the promotion. Production runs serialize on the shared production
+   environment lock. If staging advances or production's prior release changes
+   while queued, select and review the new evidence before dispatching again.
+3. Inspect the run summary and Render deployment. Preflight checks CI, registry
+   metadata, live staging evidence, the isolated staging and production runtime
+   database bindings, the intended production service and identity settings, and the current application's readiness and
+   named-user boundary. The tested image runs the explicit migration gate
+   against its bound database, with the Alembic lock. The current head-only
+   runtime requires the live image, candidate and database to agree on schema,
+   so the upgrade at head applies zero revisions. Schema transitions require a
+   separately reviewed forward maintenance or bridge procedure.
+4. Success requires the exact staged digest live in Render, expected version and
+   database readiness, and a named-user smoke that checks the sign-in shell and
+   denial of anonymous and forged legacy access. The summary records the staging
+   proof, prior and promoted images, schema, deployment identity, timestamps,
+   Render link, and outcome. The smoke does not sign in as a customer or access
+   ledger data.
+
+If the run fails, inspect the failed step and exact Render deployment before
+retrying. If the candidate went live but failed smoke, restrict ingress and use
+the [named-mode rollback checklist](../identity/HOSTED_ROLLOUT.md#compatible-application-rollback-and-incidents).
+After queued promotions settle, select the exact retained compatible digest
+in Render and verify provider digest, version, readiness and named-user access.
+Preserve the forward schema and retain the failed workflow record. If the prior
+image or identity epoch is incompatible, keep ingress restricted and use the
+reviewed forward repair procedure.
+
 ## Hosted evidence and technical-alpha handoff
 
 After operator setup and explicitly authorized publishing/deployment, record safe

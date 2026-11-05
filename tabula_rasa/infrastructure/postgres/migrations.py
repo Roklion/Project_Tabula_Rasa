@@ -35,12 +35,14 @@ def current_revision(connection: Connection) -> str | None:
     return heads[0] if heads else None
 
 
-def upgrade(database: Database) -> None:
+def upgrade(database: Database, *, require_current_head: bool = False) -> None:
     # Deployment calls this explicitly; neither app startup nor pool creation
     # changes the schema. Serializes concurrent migrators in this database.
     try:
         with database.engine.begin() as connection:
             connection.execute(text("SELECT pg_advisory_xact_lock(244, 1)"))
+            if require_current_head and current_revision(connection) != head_revision():
+                raise ValueError("Live promotion requires the current image schema head.")
             command.upgrade(migration_config(connection), "head")
     except (SQLAlchemyError, PsycopgError) as error:
         failure = safe_database_error(error)
