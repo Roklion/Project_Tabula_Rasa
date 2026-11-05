@@ -419,6 +419,13 @@ these bindings privately:
 | Render production | Separate active image-backed web service. Disable automatic deployment and configure `/health/ready`. Set `TABULA_RASA_ENVIRONMENT=production`, `TABULA_RASA_ACCESS_MODE=named_user`, the exact public origin, production Zitadel issuer and client ID, and the direct TLS runtime DB URL as service-level variables. Keep the OIDC secret and session generation in protected runtime configuration. The public origin must be Render's service URL or a verified non-redirecting custom domain on that service. |
 | Neon and Zitadel | Use a separate production Neon endpoint and a production Zitadel project/client. Verify runtime DML and migration ownership are separate, and verify the registered callback, named-user sign-in and session epoch under the [identity rollout procedure](../identity/HOSTED_ROLLOUT.md). |
 
+The head-only promotion gate can use a dedicated login with `public` schema
+`USAGE`/`CREATE` and ownership of only `alembic_version`. It needs no ledger DML,
+superuser, role/database creation, replication or RLS-bypass privileges. Preserve
+the maintenance owner's control of the version table and existing runtime ACLs
+when assigning that ownership. Forward schema maintenance uses its separately
+held migration owner; the promotion login is for the compatible-head gate.
+
 Before dispatch, privately review and hash a recovery record that names the
 production service and database fingerprint, candidate and currently live
 digests, effective runtime and migration grants, and identity bindings. Record
