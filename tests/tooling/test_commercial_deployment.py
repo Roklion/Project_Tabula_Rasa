@@ -563,3 +563,47 @@ def test_production_dispatch_is_manual_main_only_and_reuses_staging_promotion_lo
         index for index, name in enumerate(names) if "bound migration" in name
     ) < next(index for index, name in enumerate(names) if "Deploy and verify named-user" in name)
     assert "production" not in load("commercial-image.yml")["jobs"]
+
+
+def test_production_uses_verified_release_code_before_migration_and_deploy():
+    workflow = yaml.load((ROOT / ".github/workflows/commercial-promote.yml").read_text(), Loader=yaml.BaseLoader)
+    steps = workflow["jobs"]["deploy"]["steps"]
+    names = [step.get("name", "") for step in steps]
+    ordered = [
+        "Verify tested main image and metadata",
+        "Select verified production release code",
+        "Check out tested production release code",
+        "Recheck production with tested release code",
+        "Explicit bound migration (separate credential and process)",
+        "Deploy and verify named-user boundary (operator rollback on failure)",
+    ]
+    assert [names.index(name) for name in ordered] == sorted(names.index(name) for name in ordered)
+    select, checkout, recheck = [steps[names.index(name)] for name in ordered[1:4]]
+    for step in (select, checkout, recheck):
+        assert step["if"] == "inputs.environment == 'production'"
+        assert "continue-on-error" not in step
+    assert select["id"] == "tested-release"
+    assert checkout["uses"] == "actions/checkout@v4"
+    assert checkout["with"] == {"ref": "${{ steps.tested-release.outputs.revision }}", "fetch-depth": "0"}
+    assert recheck["run"].index("pip install -r requirements-postgres.txt") < recheck["run"].index(
+        "tabula_rasa.deployment.release verify"
+    )
+    assert '--image "$IMAGE"' in recheck["run"]
+
+
+@pytest.mark.parametrize("revision", ["a" * 40, None, "main", "a" * 40 + "\nother=main"])
+def test_workflow_selects_only_a_full_verified_commit(revision, tmp_path, monkeypatch):
+    workflow = yaml.load((ROOT / ".github/workflows/commercial-promote.yml").read_text(), Loader=yaml.BaseLoader)
+    select = next(step for step in workflow["jobs"]["deploy"]["steps"] if step.get("id") == "tested-release")
+    script = select["run"].split("python - <<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "preflight.json").write_text(json.dumps({"release": revision}), encoding="utf-8")
+    output = tmp_path / "output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    if revision == "a" * 40:
+        exec(compile(script, "production-release-selection", "exec"), {})
+        assert output.read_text(encoding="utf-8") == f"revision={revision}\n"
+    else:
+        with pytest.raises(SystemExit, match="verified release commit"):
+            exec(compile(script, "production-release-selection", "exec"), {})
+        assert not output.exists()

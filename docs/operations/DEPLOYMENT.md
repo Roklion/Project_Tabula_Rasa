@@ -419,6 +419,13 @@ these bindings privately:
 | Render production | Separate active image-backed web service. Disable automatic deployment and configure `/health/ready`. Set `TABULA_RASA_ENVIRONMENT=production`, `TABULA_RASA_ACCESS_MODE=named_user`, the exact public origin, production Zitadel issuer and client ID, and the direct TLS runtime DB URL as service-level variables. Keep the OIDC secret and session generation in protected runtime configuration. The public origin must be Render's service URL or a verified non-redirecting custom domain on that service. |
 | Neon and Zitadel | Use a separate production Neon endpoint and a production Zitadel project/client. Verify runtime DML and migration ownership are separate, and verify the registered callback, named-user sign-in and session epoch under the [identity rollout procedure](../identity/HOSTED_ROLLOUT.md). |
 
+The head-only promotion gate can use a dedicated login with `public` schema
+`USAGE`/`CREATE` and ownership of only `alembic_version`. It needs no ledger DML,
+superuser, role/database creation, replication or RLS-bypass privileges. Preserve
+the maintenance owner's control of the version table and existing runtime ACLs
+when assigning that ownership. Forward schema maintenance uses its separately
+held migration owner; the promotion login is for the compatible-head gate.
+
 Before dispatch, privately review and hash a recovery record that names the
 production service and database fingerprint, candidate and currently live
 digests, effective runtime and migration grants, and identity bindings. Record
@@ -444,7 +451,11 @@ during the release window.
    authorize the promotion. Production runs serialize on the shared production
    environment lock. If staging advances or production's prior release changes
    while queued, select and review the new evidence before dispatching again.
-3. Inspect the run summary and Render deployment. Preflight checks CI, registry
+3. Inspect the run summary and Render deployment. The dispatch-time code first
+   verifies the candidate, then checks out its verified image commit and repeats
+   preflight with that release's code and dependencies before any mutation. A
+   release without production promotion support fails before migration or deploy.
+   Preflight checks CI, registry
    metadata, live staging evidence, the isolated staging and production runtime
    database bindings, the intended production service and identity settings, and the current application's readiness and
    named-user boundary. The tested image runs the explicit migration gate
