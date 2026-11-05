@@ -5,6 +5,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 from datetime import datetime, timezone
 from urllib.request import Request, build_opener, HTTPRedirectHandler
@@ -125,13 +126,13 @@ def validated_main(release, environ):
 
 
 def render_target(environ):
-    service, token = environ["RENDER_SERVICE_ID"], environ["RENDER_API_KEY"]
-    if not re.fullmatch("srv-[a-z0-9]+", service):
-        raise ReleaseError("Invalid Render service identity.")
+    service, token = environ.get("RENDER_SERVICE_ID", ""), environ.get("RENDER_API_KEY", "")
+    if not re.fullmatch("srv-[a-z0-9]+", service) or not token:
+        raise ReleaseError("Render service identity and access are required.")
     return service, token
 
 
-def live_image(service, token, repository, *, read, metadata):
+def active_deployment(service, token, *, read):
     deployments = read(f"/services/{service}/deploys?limit=100", token)
     if not isinstance(deployments, list):
         raise ReleaseError("Invalid Render deployment list; inspect provider state.")
@@ -144,7 +145,14 @@ def live_image(service, token, repository, *, read, metadata):
         raise ReleaseError("Invalid Render deployment status; inspect provider state.")
     if statuses & {"created", "queued", "build_in_progress", "update_in_progress", "pre_deploy_in_progress"}:
         raise ReleaseError("Another deployment is in progress; inspect before proceeding.")
-    prior = next((item for item in active if item.get("status") == "live"), None)
+    live = [item for item in active if item["status"] == "live"]
+    if len(live) > 1:
+        raise ReleaseError("Ambiguous live deployment; inspect provider state.")
+    return live[0] if live else None
+
+
+def live_image(service, token, repository, *, read, metadata):
+    prior = active_deployment(service, token, read=read)
     if prior is None:
         return None, None
     try:
@@ -165,7 +173,7 @@ def verify_prior_release(candidate, previous, environment, rollback_from=""):
         raise ReleaseError("Staging rollback requires the expected live revision and a different target revision.")
     if previous is None:
         return
-    if environment == "staging" and previous["release"] != candidate["release"]:
+    if environment in {"staging", "production"} and previous["release"] != candidate["release"]:
         ancestor, descendant = previous["release"], candidate["release"]
         if rollback_from:
             ancestor, descendant = descendant, ancestor
@@ -174,11 +182,11 @@ def verify_prior_release(candidate, previous, environment, rollback_from=""):
             capture_output=True, check=False,
         )
         if result.returncode not in (0, 1):
-            raise ReleaseError("Cannot verify staging release ancestry; inspect the workflow checkout and retained revisions.")
+            raise ReleaseError("Cannot verify release ancestry; inspect the workflow checkout and retained revisions.")
         if result.returncode == 1:
             if rollback_from:
                 raise ReleaseError("Staging rollback target must precede the expected live revision.")
-            raise ReleaseError("Staging candidate does not advance the live revision; inspect for a superseded release.")
+            raise ReleaseError("Candidate does not advance the live revision; inspect for a superseded release.")
     if previous["schema"] != candidate["schema"]:
         raise ReleaseError("Prior image is schema-incompatible; use reviewed maintenance/bridge procedure.")
 
@@ -197,10 +205,9 @@ def wait_live(service, deploy, token, *, read=api, sleep=time.sleep):
 
 
 def promote(image, environ, *, read=api, metadata=image_metadata, verify=validated_main, smoke_check=None):
-    from .smoke import access_mode, named_smoke, smoke
-    if environ.get("TABULA_RASA_ENVIRONMENT") not in {"development", "staging"}:
-        raise ReleaseError("Only development/staging promotion is supported.")
-    mode = access_mode(environ)
+    from .smoke import named_smoke, smoke
+    environment = environ.get("TABULA_RASA_ENVIRONMENT")
+    mode = promotion_mode(environ, require_alpha_credentials=True)
     if mode == 'named_user':
         check = smoke_check or named_smoke
         def check_release(revision):
@@ -220,10 +227,20 @@ def promote(image, environ, *, read=api, metadata=image_metadata, verify=validat
     service, token = render_target(environ)
     previous_image, previous = live_image(service, token, repository, read=read, metadata=metadata)
     rollback_from = environ.get("STAGING_ROLLBACK_FROM", "")
-    verify_prior_release(candidate, previous, environ["TABULA_RASA_ENVIRONMENT"], rollback_from)
+    evidence = {}
+    if environment == "production":
+        evidence = production_preflight(image, candidate, previous_image, previous, environ, read=read)
+    else:
+        verify_prior_release(candidate, previous, environment, rollback_from)
     deploy_started_at = datetime.now(timezone.utc).isoformat()
     deployed = read(f"/services/{service}/deploys", token, body={"imageUrl": image})
     # No rollback after an uncertain create/wait: it could race a still-running deploy.
+    if environment == "production":
+        deploy_id = deployed.get("id", "")
+        if not re.fullmatch("dep-[a-z0-9]+", deploy_id):
+            raise ReleaseError("Invalid production deployment identity; inspect Render before retrying.")
+        print(json.dumps({"deploy_id": deploy_id, "deploy_started_at": deploy_started_at,
+                          "status": "render_deploy_requested"}), file=sys.stderr, flush=True)
     confirmed = wait_live(service, deployed["id"], token, read=read)
     deployed_image(confirmed, image, candidate, repository)
     try:
@@ -244,7 +261,36 @@ def promote(image, environ, *, read=api, metadata=image_metadata, verify=validat
         "image": image, **candidate, "environment": environ["TABULA_RASA_ENVIRONMENT"],
         "deploy_id": deployed["id"], "deploy_started_at": deploy_started_at, "rollback_from": rollback_from or None,
         "verified_at": datetime.now(timezone.utc).isoformat(), "access_mode": mode, "status": "smoke_passed",
+        "render_service": service, "public_origin": origin, "database_sha256": environ.get("TABULA_RASA_DEPLOY_DATABASE_SHA256"),
+        **evidence,
     }
+
+
+def promotion_mode(environ, *, require_alpha_credentials=False):
+    from .smoke import access_mode
+
+    environment = environ.get("TABULA_RASA_ENVIRONMENT")
+    mode = access_mode(environ, require_alpha_credentials=require_alpha_credentials and environment != "production")
+    if environment not in {"development", "staging", "production"}:
+        raise ReleaseError("Invalid promotion environment configuration.")
+    if environment == "production" and (mode != "named_user" or environ.get("STAGING_ROLLBACK_FROM")):
+        raise ReleaseError("Production requires named-user forward promotion.")
+    return mode
+
+
+def production_preflight(image, candidate, previous_image, previous, environ, *, read):
+    from .production import check_production_prior, production_target, staging_evidence
+    from .smoke import named_smoke
+
+    recovery = check_production_prior(image, previous_image, previous, candidate, environ)
+    proof = staging_evidence(image, candidate, environ, read=read)
+    render_url = production_target(environ, read=read)
+    try:
+        named_smoke(environ["TABULA_RASA_PUBLIC_ORIGIN"], previous["release"])
+    except Exception:
+        raise ReleaseError("Current production release failed readiness, version or named-user smoke.") from None
+    return {**proof, "previous_image": previous_image, "previous_release": previous["release"],
+            "recovery_sha256": recovery, "render_url": render_url}
 
 
 def main():
@@ -254,16 +300,21 @@ def main():
     args = parser.parse_args()
     try:
         environ = dict(os.environ)
-        from .smoke import access_mode
-        access_mode(environ, require_alpha_credentials=False)
+        promotion_mode(environ)
         if args.command == "verify":
             repository = "ghcr.io/" + environ["GITHUB_REPOSITORY"].lower() + "/commercial"
             metadata = image_metadata(args.image, repository)
             validated_main(metadata["release"], environ)
-            if environ.get("TABULA_RASA_ENVIRONMENT") == "staging":
+            environment = environ["TABULA_RASA_ENVIRONMENT"]
+            if environment in {"staging", "production"}:
                 service, token = render_target(environ)
-                _, previous = live_image(service, token, repository, read=api, metadata=image_metadata)
-                verify_prior_release(metadata, previous, "staging", environ.get("STAGING_ROLLBACK_FROM", ""))
+                previous_image, previous = live_image(service, token, repository, read=api, metadata=image_metadata)
+                if environment == "production":
+                    metadata.update(production_preflight(
+                        args.image, metadata, previous_image, previous, environ, read=api,
+                    ), image=args.image, status="preflight_passed")
+                else:
+                    verify_prior_release(metadata, previous, "staging", environ.get("STAGING_ROLLBACK_FROM", ""))
             print(json.dumps(metadata, sort_keys=True))
         else:
             print(json.dumps(promote(args.image, environ), sort_keys=True))

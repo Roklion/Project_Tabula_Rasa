@@ -1,17 +1,23 @@
-"""Bound non-production migration/fixture tooling; reuse PostgreSQL owners."""
+"""Bound migration and synthetic fixture tooling; reuse PostgreSQL owners."""
 
 import argparse
 import os
 import subprocess
 import sys
 
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 
 from tabula_rasa.infrastructure.postgres.hosted import open_alpha_database as bound_database
-from tabula_rasa.infrastructure.postgres.migrations import head_revision
+from tabula_rasa.infrastructure.postgres.hosted import open_bound_neon_database
+from tabula_rasa.infrastructure.postgres.migrations import head_revision, upgrade
 
 
 def migrate(environ, *, bootstrap=False):
+    if environ.get("TABULA_RASA_ENVIRONMENT") == "production":
+        if bootstrap:
+            raise ValueError("Production promotion requires an existing compatible schema.")
+        migrate_production(environ)
+        return
     database = bound_database(environ)
     try:
         health = database.health()
@@ -29,6 +35,28 @@ def migrate(environ, *, bootstrap=False):
         if result.returncode:
             raise ValueError("Migration/health step failed; application deployment stopped.")
     print("Database migration and health checks passed.")
+
+
+def migrate_production(environ):
+    database = open_bound_neon_database(environ)
+    try:
+        with database.engine.connect() as connection:
+            permitted = connection.scalar(text("""
+                SELECT has_schema_privilege(current_user, 'public', 'USAGE')
+                    AND has_schema_privilege(current_user, 'public', 'CREATE')
+                    AND pg_has_role(current_user, relowner, 'USAGE')
+                FROM pg_class
+                WHERE oid = to_regclass('public.alembic_version')
+            """))
+        if permitted is not True:
+            raise ValueError("Production migration credential needs schema creation and version-table ownership.")
+        upgrade(database, require_current_head=True)
+        health = database.health()
+        if not health.get("connected") or health.get("revision") != head_revision():
+            raise ValueError("Production schema confirmation failed.")
+    finally:
+        database.dispose()
+    print("Production migration gate passed at the compatible schema head.")
 
 
 def seed(environ):

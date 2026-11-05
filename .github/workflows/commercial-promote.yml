@@ -11,13 +11,24 @@ on:
       rollback_from:
         required: false
         type: string
+      staging_run:
+        type: string
+      previous_image:
+        type: string
+      recovery_sha256:
+        type: string
 permissions:
   contents: read
   actions: read
   packages: read
 jobs:
   deploy:
-    if: inputs.environment == 'development' || inputs.environment == 'staging'
+    if: >-
+      inputs.environment == 'development' || inputs.environment == 'staging' ||
+      (inputs.environment == 'production' && github.event_name == 'workflow_dispatch' &&
+       github.ref == 'refs/heads/main' && github.workflow_ref ==
+       format('{0}/.github/workflows/commercial-production.yml@refs/heads/main', github.repository) &&
+       vars.COMMERCIAL_PRODUCTION_ENABLED == 'true')
     environment: ${{ inputs.environment }}
     concurrency:
       group: commercial-deploy-${{ inputs.environment }}
@@ -27,6 +38,12 @@ jobs:
     env:
       IMAGE: ${{ inputs.image }}
       STAGING_ROLLBACK_FROM: ${{ inputs.rollback_from }}
+      PRODUCTION_STAGING_RUN: ${{ inputs.staging_run }}
+      PRODUCTION_PREVIOUS_IMAGE: ${{ inputs.previous_image }}
+      PRODUCTION_RECOVERY_SHA256: ${{ inputs.recovery_sha256 }}
+      STAGING_RENDER_SERVICE_ID: ${{ vars.STAGING_RENDER_SERVICE_ID }}
+      PRODUCTION_OIDC_ISSUER: ${{ vars.PRODUCTION_OIDC_ISSUER }}
+      PRODUCTION_OIDC_CLIENT_ID: ${{ vars.PRODUCTION_OIDC_CLIENT_ID }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       TABULA_RASA_ENVIRONMENT: ${{ inputs.environment }}
       TABULA_RASA_PUBLIC_ORIGIN: ${{ vars.TABULA_RASA_PUBLIC_ORIGIN }}
@@ -45,12 +62,22 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install smoke browser
+        run: |
+          python -m pip install playwright==1.62.0
+          python -m playwright install --with-deps chromium
+      - name: Install production preflight database parser
+        if: inputs.environment == 'production'
+        run: python -m pip install -r requirements-postgres.txt
       - name: Verify tested main image and metadata
         env:
           TABULA_RASA_ACCESS_MODE: ${{ vars.TABULA_RASA_ACCESS_MODE }}
           RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
-          RENDER_API_KEY: ${{ inputs.environment == 'staging' && secrets.RENDER_API_KEY || '' }}
-        run: python -m tabula_rasa.deployment.release verify --image "$IMAGE"
+          RENDER_API_KEY: ${{ (inputs.environment == 'staging' || inputs.environment == 'production') && secrets.RENDER_API_KEY || '' }}
+          STAGING_RENDER_API_KEY: ${{ inputs.environment == 'production' && secrets.STAGING_RENDER_API_KEY || '' }}
+        run: |
+          python -m tabula_rasa.deployment.release verify --image "$IMAGE" > preflight.json
+          cat preflight.json >> "$GITHUB_STEP_SUMMARY"
       - name: Explicit bound migration (separate credential and process)
         env:
           TABULA_RASA_DATABASE_URL: ${{ secrets.TABULA_RASA_MIGRATION_DATABASE_URL }}
@@ -59,10 +86,6 @@ jobs:
             -e TABULA_RASA_DATABASE_URL -e TABULA_RASA_ENVIRONMENT \
             -e TABULA_RASA_DEPLOY_DATABASE_SHA256 \
             "$IMAGE" python -m tabula_rasa.deployment.database migrate
-      - name: Install smoke browser
-        run: |
-          python -m pip install playwright==1.62.0
-          python -m playwright install --with-deps chromium
       - name: Deploy, verify and recover prior compatible image on smoke failure
         if: vars.TABULA_RASA_ACCESS_MODE == 'restricted_alpha'
         env:
@@ -71,11 +94,29 @@ jobs:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
           TABULA_RASA_ALPHA_USERNAME: ${{ secrets.TABULA_RASA_ALPHA_USERNAME }}
           TABULA_RASA_ALPHA_PASSWORD: ${{ secrets.TABULA_RASA_ALPHA_PASSWORD }}
-        run: python -m tabula_rasa.deployment.release promote --image "$IMAGE" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          python -m tabula_rasa.deployment.release promote --image "$IMAGE" > release.json
+          cat release.json >> "$GITHUB_STEP_SUMMARY"
       - name: Deploy and verify named-user boundary (operator rollback on failure)
         if: vars.TABULA_RASA_ACCESS_MODE == 'named_user'
         env:
           TABULA_RASA_ACCESS_MODE: ${{ vars.TABULA_RASA_ACCESS_MODE }}
           RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-        run: python -m tabula_rasa.deployment.release promote --image "$IMAGE" >> "$GITHUB_STEP_SUMMARY"
+          STAGING_RENDER_API_KEY: ${{ inputs.environment == 'production' && secrets.STAGING_RENDER_API_KEY || '' }}
+        run: |
+          python -m tabula_rasa.deployment.release promote --image "$IMAGE" > release.json
+          cat release.json >> "$GITHUB_STEP_SUMMARY"
+      - name: Retain automatic staging evidence
+        if: inputs.environment == 'staging' && github.event_name == 'workflow_run'
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-release-${{ github.run_attempt }}
+          path: release.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Record production failure
+        if: failure() && inputs.environment == 'production'
+        run: |
+          echo 'Production promotion failed. Inspect the failed step, release preflight and Render before retrying.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'For a live but unhealthy candidate, restrict ingress and use the reviewed compatible application rollback procedure.' >> "$GITHUB_STEP_SUMMARY"
