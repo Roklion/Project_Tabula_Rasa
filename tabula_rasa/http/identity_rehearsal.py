@@ -29,16 +29,8 @@ def _hostname(value):
     return value.rstrip('.').lower()
 
 
-class ResolverGate:
-    def __init__(self, issuer, deadline, maximum_seconds):
-        # Prepare without sending, using the transport's own IDNA handling.
-        # Python's built-in IDNA codec can select a different DNS hostname.
-        prepared = requests.Request('GET', issuer + '/.well-known/openid-configuration').prepare()
-        parsed = urlsplit(prepared.url)
-        self.host = _hostname(parsed.hostname)
-        self.port = parsed.port if parsed.port is not None else 443
-        if not 1 <= self.port <= 65535 or any(character.isspace() for character in self.host):
-            raise ValueError('Invalid rehearsal target.')
+class RehearsalWindow:
+    def __init__(self, deadline, maximum_seconds):
         now = datetime.now(timezone.utc)
         remaining = (deadline - now).total_seconds()
         if (not math.isfinite(maximum_seconds) or not 0 < maximum_seconds <= 300
@@ -48,12 +40,27 @@ class ResolverGate:
         self.monotonic_end = time.monotonic() + maximum_seconds
         self.expired = False
 
-    def __call__(self, event, args):
-        if event != 'socket.getaddrinfo' or self.expired:
-            return
+    def active(self):
         if (time.monotonic() >= self.monotonic_end
                 or datetime.now(timezone.utc) >= self.deadline):
             self.expired = True
+        return not self.expired
+
+
+class ResolverGate(RehearsalWindow):
+    def __init__(self, issuer, deadline, maximum_seconds):
+        # Prepare without sending, using the transport's own IDNA handling.
+        # Python's built-in IDNA codec can select a different DNS hostname.
+        prepared = requests.Request('GET', issuer + '/.well-known/openid-configuration').prepare()
+        parsed = urlsplit(prepared.url)
+        self.host = _hostname(parsed.hostname)
+        self.port = parsed.port if parsed.port is not None else 443
+        if not 1 <= self.port <= 65535 or any(character.isspace() for character in self.host):
+            raise ValueError('Invalid rehearsal target.')
+        super().__init__(deadline, maximum_seconds)
+
+    def __call__(self, event, args):
+        if event != 'socket.getaddrinfo' or not self.active():
             return
         host, port = args[:2]
         try:
