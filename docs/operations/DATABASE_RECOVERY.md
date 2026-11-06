@@ -416,9 +416,15 @@ capture includes their rows, preserve their credential references as well.
    hashes, schema, approved inventory coverage and custody references in the
    private completed-point record only after every component passes. An
    independently hosted monitor should check both source-scoped NAS statuses
-   and that composite record hourly, alert at 20 hours from the last verified
-   common point, and alert on failure, capacity, overlap or a missed heartbeat
-   within two expected polls. Before counting this as operating protection,
+   and that composite record. The [offline point publisher/status command](NAS_BACKUP.md#coordinated-point-publication-and-health)
+   checks artifacts while explicitly retaining the operator-attested quiescence
+   boundary; it does not itself prove writer isolation or ciphertext/plaintext
+   correspondence. Use the approved cadence's slot/grace rules for freshness.
+   For the optional 24-hour protection policy, poll hourly and alert at 20 hours
+   from the last verified common point. Do not apply that daily threshold to
+   Wednesday/Sunday operation or claim that cadence meets a 24-hour RPO. Alert
+   on failure, capacity, overlap or missed check-in within the approved deadline.
+   Before counting this as operating protection,
    record exact monitor sources, deadlines, recipients and acknowledged
    delivery for a controlled exercise. DSM task registration is scheduling
    evidence. The 24-hour RPO depends on measured completed points.

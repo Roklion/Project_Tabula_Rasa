@@ -16,9 +16,14 @@ DEFINITION = {'job_type': 'recurring.dispatch', 'paused': False, 'interval_secon
 
 
 @pytest.mark.parametrize('mounted', [False, True])
-def test_script_reaches_cli_from_repository_or_root_mount(monkeypatch, capsys, mounted):
+def test_script_reaches_cli_from_repository_or_root_mount(monkeypatch, capsys, tmp_path, mounted):
     source_path = Path(monitor.__file__)
-    script_path = Path(source_path.anchor) / 'monitor.py' if mounted else source_path
+    script_path = tmp_path / 'monitor.py' if mounted else source_path
+    if mounted:
+        helper = source_path.with_name('operational_heartbeat.py')
+        helper_target = tmp_path / 'operational_heartbeat.py'
+        helper_target.write_text(helper.read_text(encoding='utf-8'), encoding='utf-8')
+    monkeypatch.delitem(sys.modules, 'operational_heartbeat', raising=False)
     monkeypatch.setattr(sys, 'argv', [str(script_path), '--help'])
     monkeypatch.setattr(sys, 'path', sys.path.copy())
     namespace = {'__file__': str(script_path), '__name__': '__main__'}
