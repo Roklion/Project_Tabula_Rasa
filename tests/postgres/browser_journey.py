@@ -145,6 +145,8 @@ def delete_journal(page, *, origin, prefix, label):
     with operation('journal_delete'):
         page.goto('/journals')
         page.get_by_role('button', name=label, exact=True).click()
+        # Reference choices expand the editor and move its actions when ready.
+        expect(page.get_by_label('Description / memo', exact=True)).to_be_visible()
         page.get_by_role('button', name='Delete', exact=True).click()
         with page.expect_response(lambda response: response.request.method == 'DELETE' and response.url.startswith(origin + prefix + 'journals/')) as deleted:
             page.get_by_role('button', name='Confirm delete', exact=True).click()

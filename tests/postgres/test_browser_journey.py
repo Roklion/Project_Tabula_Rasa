@@ -2,6 +2,7 @@
 
 from uuid import uuid4
 from time import sleep
+import re
 
 import pytest
 from playwright.sync_api import expect
@@ -39,6 +40,63 @@ def test_staging_journey_and_preserved_other_entity(commercial, commercial_serve
     assert (beta.accounts.list(), beta.categories.list(), beta.payees.list(), beta.tags.list(), beta.transactions.list(fresh=True)) == before_beta
     assert document_store.upload_calls == 1 and document_store.delete_calls == 0
     assert all(profile == 'alpha' for profile, _ in document_store.files)
+
+
+@pytest.mark.parametrize('references', ['delayed', 'unavailable'])
+def test_journal_delete_waits_for_reference_fields(commercial, commercial_server, references, native_browser):
+    alpha, beta, _, _ = commercial
+    identity = uuid4().hex
+    description = 'Synthetic delayed-reference journal'
+    alpha.journals.create(entry_id=identity, txn_date='2026-10-01', description=description,
+                          postings=journal_lines(prefix=uuid4().hex))
+    before_beta = beta.journals.list(fresh=True)
+    with native_browser('firefox') as browser:
+        with browser.new_context(base_url=commercial_server, viewport={'width': 1440, 'height': 1000}) as context:
+            # Reference fields replace a short placeholder. Detect a pointer press
+            # on Delete before that layout transition has completed.
+            context.add_init_script('''(() => {
+                window.__earlyJournalDeletes = 0;
+                document.addEventListener('mousedown', event => {
+                    if (event.target.closest('button')?.textContent === 'Delete'
+                        && document.body.textContent.includes('Loading choices…')) {
+                        window.__earlyJournalDeletes++;
+                    }
+                }, true);
+                const original = window.fetch.bind(window);
+                window.fetch = async (...args) => {
+                    const response = await original(...args);
+                    const input = args[0] instanceof Request ? args[0].url : args[0];
+                    if (new URL(input, location.href).pathname === '/api/v1/entities/alpha/accounts') {
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
+                    return response;
+                };
+            })();''')
+            failed_references = []
+            if references == 'unavailable':
+                def unavailable(route):
+                    failed_references.append(True)
+                    route.fulfill(status=503, json={'error': {'code': 'unavailable'}})
+                context.route(re.compile(r'/api/v1/entities/alpha/accounts(?:\?.*)?$'), unavailable)
+            deletes = []
+            context.on('request', lambda request: deletes.append(request)
+                       if request.method == 'DELETE' and '/journals/' in request.url else None)
+            page = context.new_page()
+            if references == 'unavailable':
+                with pytest.raises(journey_support.JourneyError) as failure:
+                    journey_support.delete_journal(page, origin=commercial_server,
+                        prefix='/api/v1/entities/alpha/', label='Edit 2026-10-01 · ' + description)
+                assert failure.value.operation == 'journal_delete'
+                assert failed_references
+                assert deletes == []
+                assert any(row['id'] == identity for row in alpha.journals.list(fresh=True))
+            else:
+                journey_support.delete_journal(page, origin=commercial_server,
+                    prefix='/api/v1/entities/alpha/', label='Edit 2026-10-01 · ' + description)
+                assert len(deletes) == 1
+                assert not any(row['id'] == identity for row in alpha.journals.list(fresh=True))
+            assert page.evaluate('window.__earlyJournalDeletes') == 0
+    assert beta.journals.list(fresh=True) == before_beta
 
 
 @pytest.mark.parametrize('slow_operation', ['upload', 'unlink', 'relink', 'journal_delete'])
