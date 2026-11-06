@@ -91,6 +91,33 @@ revocation, document-byte recovery and an alternate operator remain independentl
 verified requirements wherever the selected stage needs them. This exercise does not
 close those tickets or authorize their execution.
 
+## Release failure validation
+
+Use the [release matrix](DEPLOYMENT.md#release-matrix-and-operator-handoff) and
+existing promotion tools. Run isolated synthetic tests first. Hosted fault
+injection, staging deployment/rollback and configuration changes each require
+approval for the exact target, images, permitted fault and restoration window.
+Never change production to demonstrate a failed path. Do not bypass CI,
+supersession, schema, digest or staging-proof gates to make a drill execute.
+
+| Case | Required observation | Safe recovery / evidence limit |
+| --- | --- | --- |
+| Failed CI or image build | No eligible published/deployed candidate; failed job and diagnostic are visible | Correct the cause and obtain fresh successful CI/build. Local workflow tests prove routing logic only. |
+| Invalid or unverified digest | Verification fails before migration or Render mutation | Select a verified immutable reference; preserve the rejection run. |
+| Wrong database target or incompatible schema | Bound preflight fails before upgrade/deploy | Inspect the approved fingerprint and schema privately; never print URLs or use a wildcard bypass. |
+| Failed deploy, readiness or smoke | Candidate remains failed; inspect provider status, expected version and mode-specific smoke independently | An uncertain create/poll must stop without a competing deploy. Alpha automatic recovery and named operator rollback have different contracts. |
+| Missing or invalid staging proof | Production preflight rejects absent, expired, mismatched, failed or superseded staging evidence before mutation | Exercise with synthetic provider/registry fixtures; live production dispatch is separately authorized. |
+| Two close automatic releases | Record both main SHAs, CI/build/staging runs, queue times and final live digest; older candidate cannot replace a later successful release | Serialized manual dispatch evidence exercises the shared guard but does not prove two automatic main-triggered releases. Do not create empty main commits solely for this drill. |
+| Compatible application rollback | Observe different compatible immutable releases, diagnosis, explicit rollback decision, provider identity, readiness/version and smoke, then the agreed final state | Follow the controlled staging exercise above and named auth/epoch checks. Same-image redeploy is not rollback; schema repair/restore remains separate. |
+| Failure notification and stalled workflow | Correlate failed run/provider incident with recipient receipt and acknowledgment; inspect queued/running age and the operator's escalation | Enabled email, a red workflow or a synthetic event alone does not prove delivered notification. Use [release alert triage](OBSERVABILITY.md#release-workflow-triage). |
+
+For every case record pass, fail or unperformed, selected release/schema,
+safe diagnostic, workflow/provider link, UTC times, expected mutation boundary,
+observed final state and follow-up owner. Reuse historical evidence only within
+its recorded scope. Keep private settings, raw provider logs and fixture data
+out of the public record. Keep unresolved hosted and human checkpoints visibly
+open; implementation acceptance cannot substitute for them.
+
 ## Dependency and job drill preflight
 
 Use the existing identity, job, document, support and recovery tools; this
