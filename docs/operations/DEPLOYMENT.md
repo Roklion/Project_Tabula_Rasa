@@ -1,4 +1,4 @@
-# Development and staging deployment
+# Release deployment and promotion
 
 The same-origin React/FastAPI image deploys to Render with a scoped Neon database.
 This guide owns environment bindings, ordered schema migration, immutable-image
@@ -55,8 +55,33 @@ read-only check of the locally configured direct Neon target on that date confir
 unsupported `channel_binding`; remove that option when copying the URL into deployment
 secrets, as documented in PostgreSQL operations. The check normalized the URL in memory
 and changed no files or database records. Enable `COMMERCIAL_DEPLOY_ENABLED=true` only
-after the checkpoint below. There is no production deployment or entity-authority
-activation in these workflows.
+after the checkpoint below. Automatic workflows never deploy production or change
+entity authority. Production uses the separately authorized manual path below.
+
+## Release matrix and operator handoff
+
+Use this matrix for each selected release. Record actual outcomes in the owning
+release discussion, with UTC timestamps and sanitized run links. A successful
+local test, configured notification or earlier release does not prove a new
+hosted execution. Keep credentials and recovery contents in private custody.
+
+| Stage | Required result and evidence | Stop condition / next action |
+| --- | --- | --- |
+| Pull request | Current-head **Full test suite** succeeds and review findings are dispositioned under [Development](../DEVELOPMENT.md#authoritative-ci-and-required-check) | Missing, pending, skipped or failed required checks prevent merge readiness. |
+| Main CI and image publication | Successful main-push Repository CI; image build publishes an immutable GHCR digest with release SHA, schema and verified linux/amd64 runtime digest | Failed CI/build supplies no eligible release. Inspect the failed job; do not deploy a moving tag. |
+| Automatic staging | Enabled staging job verifies the candidate and prior live image, checks supersession, runs the bound compatible-head migration gate, deploys and passes mode-specific smoke | Inspect the exact failed step and live provider state. A successful build or healthy prior image does not prove candidate success. |
+| Staging handoff | Record release SHA, requested/runtime digests, schema, run ID/attempt, Render deployment, origin, verification time and successful staging artifact | Production requires successful build and staging jobs in the same automatic attempt, evidence no older than seven days, and that the deployment is still live. Manual staging or rollback is insufficient. |
+| Production authorization | Owner approves the specific release/window and privately reviewed recovery record; production bindings, permissions, schema and retained named-image compatibility are verified | Keep production disabled until authorized. Schema mismatch requires separate reviewed maintenance and approval, not an ordinary retry. |
+| Manual production promotion | Dispatch on protected main with the exact staged digest, automatic staging run, expected live production image and recovery-record hash | Preflight must pass again with the candidate's verified code before migration/deploy. Changed staging or production state requires fresh review. |
+| Production verification | Provider requested/runtime digest relationship, expected version, readiness and named-user smoke all pass; retain summary and timestamps | A live but unhealthy named candidate requires operator containment and the reviewed compatible rollback/forward-repair decision. No automatic schema downgrade. |
+
+Before the release window, name a primary operator, alternate or explicitly
+uncovered interval, alert recipient and recovery-evidence custodian. Have the
+operator follow the release and [compatible rollback procedure](#promotion-failure-and-rollback)
+from approved access; assistant execution alone does not demonstrate operator
+readiness. Record acknowledgment, any unclear step and the final observed state.
+Application promotion does not grant customer admission, broader recovery
+acceptance or commercial activation.
 
 ## Manual operator checkpoint
 

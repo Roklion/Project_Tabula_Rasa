@@ -187,6 +187,32 @@ whole JSON or backup config to the HTTP collector. Keep its stdlib-only image
 independent of the web runtime. A future central adapter must use the shared allowlist
 and a separate source, without changing backup results.
 
+## Release workflow triage
+
+During an approved release window the primary release operator watches the
+selected Actions run and Render deployment until a terminal result; arrange an
+alternate or record the uncovered interval before starting. Existing Render
+failure notifications and GitHub Actions notifications remain the release
+signal path. Better Stack readiness and application alerts supply service
+context; they do not prove image-build, migration or queued-workflow success.
+
+The image-build job has a 20-minute timeout and promotion a 30-minute timeout.
+Those timeouts apply to executing jobs, not time spent queued or awaiting environment
+approval. If a release has not started after the operator's agreed queue
+deadline, inspect the environment concurrency holder, GitHub runner/approval
+state and provider activity, and notify the named release owner. An older
+healthy service can leave readiness green while a release is stalled. Do not
+claim automatic stuck-workflow notification from an execution timeout or uptime
+monitor alone; record any unverified delivery/coverage as an open handoff gap.
+
+For a failure, inspect the first failed step and the exact run attempt, then
+follow the [deployment stop/retry rules](DEPLOYMENT.md#promotion-failure-and-rollback).
+Do not rerun an uncertain provider request while a deployment may still be
+active. Record only safe release/digest/schema, run/deployment links, UTC signal
+and acknowledgment times, recipient acknowledgment and final disposition.
+Actual notification delivery needs recipient evidence, including recovery
+where applicable; a configured destination or failed check alone is insufficient.
+
 ## Local and staging exercise
 
 Local regression coverage uses synthetic services and a fake exporter:
