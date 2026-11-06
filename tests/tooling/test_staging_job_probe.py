@@ -6,7 +6,7 @@ from tabula_rasa.deployment import staging_job_probe as probe
 
 
 def environment(operation='probe'):
-    return {'GITHUB_REPOSITORY': 'Roklion/Project_Tabula_Rasa', 'GITHUB_REF': 'refs/heads/main',
+    return {'GITHUB_REPOSITORY': 'heathcote-advisory/Project_Tabula_Rasa', 'GITHUB_REF': 'refs/heads/main',
             'GITHUB_SHA': 'a' * 40, 'TABULA_RASA_RELEASE_ID': 'a' * 40, 'GITHUB_RUN_ID': '123',
             'TABULA_RASA_ENVIRONMENT': 'staging', 'TABULA_RASA_ACCESS_MODE': 'named_user',
             'RENDER_SERVICE_ID': probe.SERVICES['staging'][0],
@@ -20,7 +20,8 @@ def environment(operation='probe'):
 
 
 @pytest.mark.parametrize('change', [
-    {'GITHUB_REPOSITORY': 'other/repo'}, {'GITHUB_REF': 'refs/heads/other'},
+    {'GITHUB_REPOSITORY': 'other/repo'}, {'GITHUB_REPOSITORY': 'Roklion/Project_Tabula_Rasa'},
+    {'GITHUB_REF': 'refs/heads/other'},
     {'GITHUB_SHA': ''}, {'TABULA_RASA_RELEASE_ID': 'c' * 40}, {'GITHUB_RUN_ID': '../bad'},
     {'TABULA_RASA_ENVIRONMENT': 'production'}, {'TABULA_RASA_ACCESS_MODE': 'restricted_alpha'},
     {'RENDER_SERVICE_ID': probe.SERVICES['development'][0]},
@@ -55,6 +56,38 @@ def test_exact_tested_image_required_before_public_probe(monkeypatch):
         probe.preflight(environment())
     public.assert_not_called()
     verified.assert_not_called()
+
+
+@pytest.mark.parametrize('image_repository,accepted', [
+    ('ghcr.io/heathcote-advisory/project_tabula_rasa/commercial', True),
+    ('ghcr.io/roklion/project_tabula_rasa/commercial', False),
+    ('ghcr.io/other/project_tabula_rasa/commercial', False),
+])
+def test_organization_image_preflight_preserves_repository_boundary(image_repository, accepted, monkeypatch):
+    env = {**environment('inspect'), 'IMAGE': image_repository + '@sha256:' + 'd' * 64}
+    public, verified = Mock(), Mock()
+
+    def inspect(image, repository):
+        # Substitute registry I/O, retaining the real immutable-reference guard.
+        probe.release.immutable_digest(image, repository)
+        return {'release': env['GITHUB_SHA'], 'schema': probe.head_revision()}
+
+    metadata = Mock(side_effect=inspect)
+    monkeypatch.setattr(probe.release, 'image_metadata', metadata)
+    monkeypatch.setattr(probe.release, 'validated_main', verified)
+    monkeypatch.setattr(probe, 'deployed_release', public)
+    if accepted:
+        assert probe.preflight(env) == {
+            'status': 'tested_deployed_revision_verified', 'release': env['GITHUB_SHA'],
+        }
+        verified.assert_called_once_with(env['GITHUB_SHA'], env)
+        public.assert_called_once_with(env)
+    else:
+        with pytest.raises(probe.release.ReleaseError, match='immutable digest'):
+            probe.preflight(env)
+        verified.assert_not_called()
+        public.assert_not_called()
+    metadata.assert_called_once_with(env['IMAGE'], 'ghcr.io/heathcote-advisory/project_tabula_rasa/commercial')
 
 
 def test_public_release_mismatch_does_not_open_database(monkeypatch):
