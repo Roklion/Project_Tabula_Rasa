@@ -111,7 +111,7 @@ supersession, schema, digest or staging-proof gates to make a drill execute.
 | Compatible application rollback | Observe different compatible immutable releases, diagnosis, explicit rollback decision, provider identity, readiness/version and smoke, then the agreed final state | Follow the controlled staging exercise above and named auth/epoch checks. Same-image redeploy is not rollback; schema repair/restore remains separate. |
 | Failure notification and stalled workflow | Correlate failed run/provider incident with recipient receipt and acknowledgment; inspect queued/running age and the operator's escalation | Enabled email, a red workflow or a synthetic event alone does not prove delivered notification. Use [release alert triage](OBSERVABILITY.md#release-workflow-triage). |
 
-For every case record pass, fail or unperformed, selected release/schema,
+For every case, record pass, fail or unperformed, selected release/schema,
 safe diagnostic, workflow/provider link, UTC times, expected mutation boundary,
 observed final state and follow-up owner. Reuse historical evidence only within
 its recorded scope. Keep private settings, raw provider logs and fixture data

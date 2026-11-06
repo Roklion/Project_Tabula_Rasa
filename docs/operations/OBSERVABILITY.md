@@ -197,7 +197,7 @@ signal path. Better Stack readiness and application alerts supply service
 context; they do not prove image-build, migration or queued-workflow success.
 
 The image-build job has a 20-minute timeout and promotion a 30-minute timeout.
-Those bound executing jobs, not time spent queued or awaiting environment
+Those timeouts apply to executing jobs, not time spent queued or awaiting environment
 approval. If a release has not started after the operator's agreed queue
 deadline, inspect the environment concurrency holder, GitHub runner/approval
 state and provider activity, and notify the named release owner. An older
