@@ -397,8 +397,11 @@ The new tool never relabels an existing one-time archive as recurring protection
 
 Status checks the pinned SQL generations and receipt ciphertexts, component
 failure/capacity state, exact enrollment and point chronology. Later individual
-component successes cannot silently advance the coordinated point. It reuses
-the NAS slot/grace rules: a Sunday point is not stale merely because Monday has
+component successes cannot silently advance the coordinated point. A running
+publication with its lock may keep reporting a verified, fresh prior point
+within the existing two-hour grace. A missing or stale point, failed or overdue
+attempt, unmatched lock/running marker or integrity failure is still unhealthy.
+Status reuses the NAS slot/grace rules: a Sunday point is not stale merely because Monday has
 arrived. Only explicit twice-daily mode also applies the 20-hour point-age
 threshold. Status needs no plaintext receipt directory, grant, decrypt identity
 or application credentials after publication. It reports sanitized status/codes;

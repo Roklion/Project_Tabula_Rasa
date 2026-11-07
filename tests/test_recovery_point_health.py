@@ -278,3 +278,62 @@ def test_overlap_is_unhealthy_without_overwriting_completed_point(point):
     with pytest.raises(nas.BackupError):
         health.publish(config, spec, attested=True, now=NOW)
     assert (config['root'] / 'status.json').read_bytes() == previous
+
+
+@pytest.mark.parametrize('elapsed,locked,expected', [
+    (timedelta(minutes=1), True, None),
+    (nas.GRACE + timedelta(seconds=1), True, 'point_attempt_overdue'),
+    (timedelta(minutes=1), False, 'point_attempt_unconfirmed'),
+])
+def test_active_publication_can_retain_a_healthy_prior_point_within_grace(point, elapsed, locked, expected):
+    config, spec, _, _ = point
+    health.publish(config, spec, attested=True, now=NOW)
+    state = nas.read_state(config['root'])
+    started = NOW + timedelta(minutes=1)
+    nas.write_json(config['root'] / 'status.json', {
+        **state, 'result': 'running', 'started_at': nas.stamp(started),
+    })
+    if locked:
+        (config['root'] / '.lock').mkdir()
+    result = health.inspect(config, now=started + elapsed)
+    assert result['status'] == ('healthy' if expected is None else 'unhealthy')
+    assert result['codes'] == ([] if expected is None else [expected])
+    assert result['captured_at'] == nas.stamp(START)
+
+
+def test_active_publication_does_not_hide_an_overdue_prior_point(point):
+    config, spec, _, _ = point
+    health.publish(config, spec, attested=True, now=NOW)
+    state = nas.read_state(config['root'])
+    polled = START + timedelta(days=3, hours=3)
+    nas.write_json(config['root'] / 'status.json', {
+        **state, 'result': 'running', 'started_at': nas.stamp(polled - timedelta(minutes=1)),
+    })
+    (config['root'] / '.lock').mkdir()
+    result = health.inspect(config, now=polled)
+    assert result['status'] == 'unhealthy'
+    assert 'complete_point_stale' in result['codes']
+
+
+def test_first_publication_has_no_prior_point_during_grace(point):
+    config, _, _, _ = point
+    nas.write_json(config['root'] / 'status.json', {'result': 'running', 'started_at': nas.stamp(NOW)})
+    (config['root'] / '.lock').mkdir()
+    assert health.inspect(config, now=NOW)['status'] == 'missing'
+
+
+def test_state_readback_handles_publication_start_crossing_poll(point, monkeypatch):
+    config, spec, _, _ = point
+    health.publish(config, spec, attested=True, now=NOW)
+    real_read = nas.read_state
+    started = NOW + timedelta(minutes=1)
+
+    def read_state(root):
+        state = real_read(root)
+        if root == config['root'] and not (root / '.lock').exists():
+            (root / '.lock').mkdir()
+            nas.write_json(root / 'status.json', {**state, 'result': 'running', 'started_at': nas.stamp(started)})
+        return state
+
+    monkeypatch.setattr(nas, 'read_state', read_state)
+    assert health.inspect(config, now=started)['status'] == 'healthy'

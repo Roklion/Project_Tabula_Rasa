@@ -168,13 +168,20 @@ def publish(config, spec, *, attested=False, now=None):
 
 def inspect(config, *, now=None):
     now = now or datetime.now(UTC)
-    state = nas.read_state(config['root'])
+    root = config['root']
+    state = nas.read_state(root)
+    locked = (root / '.lock').exists()
+    if locked != (state.get('result') == 'running'):
+        # Publication may have crossed its atomic state update during this poll.
+        # One readback avoids treating an old marker as a new failure.
+        state = nas.read_state(root)
+        locked = (root / '.lock').exists()
     if not state.get('last_success'):
         return {'status': 'missing', 'codes': ['complete_point_missing']}
     name = state['last_success']
     if not isinstance(name, str) or not re.fullmatch('[a-f0-9]{32}', name):
         raise ValueError('Invalid point identity.')
-    point = json.loads(nas.protected(config['root'] / 'points' / (name + '.json')).read_text('utf-8'))
+    point = json.loads(nas.protected(root / 'points' / (name + '.json')).read_text('utf-8'))
     if (point['format'] != 1 or point['binding_sha256'] != config['binding_sha256']
             or point['consistency'] != 'operator_attested_quiescence'):
         raise ValueError('Point binding differs.')
@@ -185,8 +192,13 @@ def inspect(config, *, now=None):
     if state.get('result') == 'failed':
         codes.append('point_attempt_failed')
     elif state.get('result') == 'running':
-        codes.append('point_attempt_running')
-    if (config['root'] / '.lock').exists():
+        started = nas.parse_time(state['started_at'])
+        if not locked or started > now:
+            codes.append('point_attempt_unconfirmed')
+        elif now - started > nas.GRACE:
+            codes.append('point_attempt_overdue')
+        # During grace, only the still-valid prior completed point can pass.
+    elif locked:
         codes.append('point_overlap')
     for key in ('ledger', 'custody'):
         source = config[key]
