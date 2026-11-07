@@ -23,7 +23,7 @@ INDEX_TYPES = {"application/vnd.oci.image.index.v1+json",
 
 
 def commercial_image_repository(github_repository):
-    return "ghcr.io/" + github_repository.lower() + "/commercial-private"
+    return "ghcr.io/" + github_repository.lower() + "/commercial-release"
 
 
 def immutable_digest(image, repository):

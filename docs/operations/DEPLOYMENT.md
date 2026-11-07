@@ -420,7 +420,7 @@ acceptance stay with platform operations and commercial recovery agreement.
 ## Registry ownership changes
 
 The image workflow, promotion checks and staging job probe use the same GHCR
-repository derived from `GITHUB_REPOSITORY` with the `/commercial-private` suffix.
+repository derived from `GITHUB_REPOSITORY` with the `/commercial-release` suffix.
 Verify that the destination package is private and that GitHub Actions can publish
 to it before merging a registry change. Image publication can run while
 promotions are paused. Configure Render with a credential that can read the

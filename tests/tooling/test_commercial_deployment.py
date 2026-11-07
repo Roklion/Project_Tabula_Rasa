@@ -12,7 +12,7 @@ from tabula_rasa.migration.model import digest
 from tabula_rasa.infrastructure.postgres import hosted
 
 ROOT = Path(__file__).resolve().parents[2]
-REPOSITORY = "ghcr.io/heathcote-advisory/project_tabula_rasa/commercial-private"
+REPOSITORY = "ghcr.io/heathcote-advisory/project_tabula_rasa/commercial-release"
 IMAGE = REPOSITORY + "@sha256:" + "a" * 64
 PRIOR = REPOSITORY + "@sha256:" + "b" * 64
 MANIFEST = "sha256:" + "e" * 64
