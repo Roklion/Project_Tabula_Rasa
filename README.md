@@ -16,6 +16,11 @@ application, follow [Deployment](docs/operations/DEPLOYMENT.md), [business
 access](docs/identity/BUSINESS_TENANCY.md) and [Using Tabula Rasa](docs/USING_TABULA_RASA.md).
 New PostgreSQL businesses are created in the application.
 
+On deployments with Google Drive self-service enabled, a business Owner can connect
+receipt storage from **Data & backup > Google Drive connection**. See
+[Customer Google Drive connections](docs/identity/GOOGLE_DRIVE.md) for consent,
+reconnection and deployment setup.
+
 For protected local Google consent, grant replacement, folder administration and
 format-13 recovery setup, follow [Setup](docs/SETUP.md) and launch:
 
@@ -25,9 +30,9 @@ powershell -ExecutionPolicy Bypass -File scripts/run_local_profile_admin.ps1
 
 The administrator requires the application password, explicit local-admin flag,
 loopback binding and password reauthentication. It does not initialize a ledger or
-generate recurring occurrences on startup. Google self-service connectivity remains
-separate from native business creation; [connections](docs/identity/CONNECTIONS_AND_CLAIMS.md)
-defines the operator-assisted grant handoff.
+generate recurring occurrences on startup. See
+[Connections and claims](docs/identity/CONNECTIONS_AND_CLAIMS.md) for operator-assisted
+activation, encrypted grant custody and legacy claims.
 
 ## Documentation
 
