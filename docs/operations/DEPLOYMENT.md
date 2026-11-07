@@ -417,6 +417,37 @@ traffic/drain writers and use PostgreSQL persistence's reviewed forward repair o
 [recovery guide](DATABASE_RECOVERY.md). Database restore/PITR and commercial recovery
 acceptance stay with platform operations and commercial recovery agreement.
 
+## Registry ownership changes
+
+The image workflow and ordinary promotion derive the GHCR repository from
+`GITHUB_REPOSITORY`. Transferring the source repository can therefore change the
+expected image location while retained images and Render services still use the
+previous location. Repository redirects do not migrate container packages or
+prove that Actions and Render retain registry access.
+
+Treat a registry change as a separately approved operating procedure. Inventory
+live and rollback index/runtime digests, schemas, registry visibility and read/write
+identities. Copy the complete selected image objects without rebuilding, preserve
+their digests and verify destination pullability and metadata independently. Keep
+the original images and references through sign-off. Missing permissions, conflicting
+destination tags or changed digests stop the procedure.
+
+Render deployment requests require the image repository to match the service's
+configured image. In an approved window, coordinate automatic promotion, update only
+the selected service's registry binding and deliberately redeploy the copied same
+image bytes. Verify provider identity, readiness, release and mode-specific smoke
+before resuming automation. Preserve a reviewed return procedure for uncertain or
+failed provider operations. A same-release registry rebind is distinct from the
+normal different-release application rollback; keep its guards intact.
+
+Review operator templates and current repository-pinned tooling before the first
+new-namespace release. The Blueprint is a setup template, not an instruction to sync
+live services. Historical schema-maintenance tooling retains its original transition
+boundary. Registry relocation does not authorize schema changes, credential rotation,
+production promotion or deletion. Production needs its own exact window and approval.
+After setup, capture fresh CI, publication and automatic staging evidence in the new
+namespace; an old-namespace staging artifact is not new-namespace promotion proof.
+
 ## Manual production promotion
 
 **Promote commercial production** is a manual workflow on protected `main`.

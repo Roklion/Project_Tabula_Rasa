@@ -25,7 +25,7 @@ PROBE_DUE_AT = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 def validate(environ, *, runtime=True):
     service, origin = SERVICES['staging']
-    if (environ.get('GITHUB_REPOSITORY') != 'Roklion/Project_Tabula_Rasa'
+    if (environ.get('GITHUB_REPOSITORY') != 'heathcote-advisory/Project_Tabula_Rasa'
             or environ.get('GITHUB_REF') != 'refs/heads/main'
             or environ.get('TABULA_RASA_ENVIRONMENT') != 'staging'
             or environ.get('RENDER_SERVICE_ID') != service
@@ -49,7 +49,7 @@ def validate(environ, *, runtime=True):
 
 def preflight(environ):
     validate(environ, runtime=False)
-    repository = 'ghcr.io/roklion/project_tabula_rasa/commercial'
+    repository = 'ghcr.io/' + environ['GITHUB_REPOSITORY'].lower() + '/commercial'
     candidate = release.image_metadata(environ.get('IMAGE', ''), repository)
     if candidate['release'] != environ['GITHUB_SHA'] or candidate['schema'] != head_revision():
         raise ValueError('Use this exact workflow revision image.')
