@@ -73,7 +73,7 @@ jobs:
         env:
           TABULA_RASA_ACCESS_MODE: ${{ vars.TABULA_RASA_ACCESS_MODE }}
           RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
-          RENDER_API_KEY: ${{ (inputs.environment == 'staging' || inputs.environment == 'production') && secrets.RENDER_API_KEY || '' }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
           STAGING_RENDER_API_KEY: ${{ inputs.environment == 'production' && secrets.STAGING_RENDER_API_KEY || '' }}
         run: |
           python -m tabula_rasa.deployment.release verify --image "$IMAGE" > preflight.json
