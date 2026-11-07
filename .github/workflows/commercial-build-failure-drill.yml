@@ -1,0 +1,58 @@
+name: Commercial build failure drill
+on:
+  push:
+    branches: [codex/455-build-failure-drill]
+permissions: {}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      image_step_outcome: ${{ steps.image.outcome }}
+    steps:
+      - name: Prepare a deliberately invalid synthetic Dockerfile
+        run: |
+          mkdir -p "$RUNNER_TEMP/build-failure-fixture"
+          printf 'FROM scratch\nTABULA_FAILURE_DRILL\n' > "$RUNNER_TEMP/build-failure-fixture/Dockerfile"
+      - uses: docker/setup-buildx-action@v3
+      - id: image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ runner.temp }}/build-failure-fixture
+          platforms: linux/amd64
+          push: false
+  development:
+    needs: build
+    if: vars.COMMERCIAL_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject unexpected continuation
+        run: exit 1
+  staging:
+    needs: build
+    if: vars.COMMERCIAL_DEPLOY_ENABLED == 'true' && vars.COMMERCIAL_AUTO_STAGING_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject unexpected continuation
+        run: exit 1
+  verify:
+    if: always()
+    needs: [build, development, staging]
+    runs-on: ubuntu-latest
+    env:
+      BUILD_JOB: ${{ needs.build.result }}
+      IMAGE_STEP: ${{ needs.build.outputs.image_step_outcome }}
+      DEVELOPMENT_JOB: ${{ needs.development.result }}
+      STAGING_JOB: ${{ needs.staging.result }}
+      DEPLOY_ENABLED: ${{ vars.COMMERCIAL_DEPLOY_ENABLED }}
+      AUTO_STAGING_ENABLED: ${{ vars.COMMERCIAL_AUTO_STAGING_ENABLED }}
+    steps:
+      - name: Verify build failure contained both eligible downstream jobs
+        run: |
+          printf 'build=%s image_step=%s development=%s staging=%s\n' "$BUILD_JOB" "$IMAGE_STEP" "$DEVELOPMENT_JOB" "$STAGING_JOB"
+          test "$DEPLOY_ENABLED" = true
+          test "$AUTO_STAGING_ENABLED" = true
+          test "$BUILD_JOB" = failure
+          test "$IMAGE_STEP" = failure
+          test "$DEVELOPMENT_JOB" = skipped
+          test "$STAGING_JOB" = skipped
