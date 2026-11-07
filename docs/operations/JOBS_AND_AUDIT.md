@@ -152,6 +152,13 @@ the inspection in the same verified immutable worker image. The example refuses
 an unconfigured image or missing mounted files before calling the runner. Keep
 the task disabled until the exact installation and notification tests are accepted.
 
+Install `scripts/operational_heartbeat.py` beside `nas_recurring_monitor.py` in
+the protected `config/bin` directory. The wrapper mounts both files read-only
+as siblings, including when the pinned worker image predates the shared helper.
+Deploy the scripts and wrapper together; replacing the monitor alone is not a
+compatible installation. The same payload-free sender is reused by
+[coordinated backup health](NAS_BACKUP.md#coordinated-point-publication-and-health).
+
 Supply a protected, metadata-only `recurring-monitor.json` with these fields:
 
 ```json

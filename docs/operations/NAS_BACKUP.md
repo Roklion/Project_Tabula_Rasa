@@ -330,6 +330,97 @@ lock cannot serialize distinct databases. Use the
 [coordinated recovery procedure](DATABASE_RECOVERY.md#coordinated-staging-recovery-point)
 for composite generation status and rehearsal.
 
+
+### Coordinated point publication and health
+
+`python -m scripts.recovery_point_health` adds **offline, operator-attested**
+complete-point health to the component runners. It does not capture data,
+suspend services, restore, install tasks or contact SQL/Drive. Keep the approved
+Wednesday/Sunday cadence unless a separate operator decision changes it.
+Functional readiness is not an operating schedule or a 24-hour RPO guarantee.
+
+The authorized operator first follows the
+[coordinated capture procedure](DATABASE_RECOVERY.md#coordinated-staging-recovery-point),
+including writer quiescence, reference verification and durable encrypted
+readback. Component timestamps/checksums cannot independently prove that a writer
+was stopped, that references were checked at the chosen point, or that encrypted
+receipt bytes correspond to a plaintext archive. Publication explicitly records
+`operator_attested_quiescence`: those facts remain an operator attestation.
+SQL ciphertext/manifests and every canonical receipt byte are machine-verified.
+An age header establishes a file type, not encryption provenance or key custody.
+
+Prepare a protected JSON configuration, outside Git and readable only by its
+operator, with these fields:
+
+| Field | Contract |
+| --- | --- |
+| `ledger_config`, `custody_config` | Absolute paths to existing NAS runner configs. Distinct UAT sources; custody requires `source_kind: connection_custody`. Existing TLS/source/storage checks apply. |
+| `state_directory` | Existing private directory outside Git, used only for this selected enrollment's points and status. |
+| `entities` | Nonempty list of `{"entity_id": "<canonical UUID>", "scope_key": "<Drive receipt folder>"}`; distinct business IDs and folders. No implicit enrollment or fallback grant. |
+| `schedule` | Optional `wednesday_sunday` default or explicit future `twice_daily`. Both component configs must use the same policy. Merely choosing this value installs no schedule. |
+
+Use NAS source fingerprints from the protected NAS configs, not application
+database-identity digests: the encodings differ. Publication pins the source
+identities, enrollment and cadence; changes require a newly verified point.
+
+The private point specification has exactly these fields:
+
+- `quiesced_from`, `quiesced_until`: timezone-aware ISO instants of the
+  attested writer-free window; use its start as the conservative point time.
+  Both SQL generations must have started and completed inside it.
+- `approval_sha256`: digest of the retained operator decision.
+- `references_sha256`, `verified_references`: the attested unchanged successful
+  reference-check digest/count. Supplied values are not independent proof that
+  the check ran; retain the original private execution evidence.
+- `ledger_generation`, `custody_generation`: exact existing completed NAS
+  generation IDs, never “latest”.
+- `receipts`: exactly one `{"entity_id": "...", "archive": "<private canonical
+  archive directory>", "ciphertext": "<durable age file>"}` per enrolled business.
+  Publication opens each `DocumentArchive`, checks the selected folder and
+  every retained byte's size/hash, then pins the durable ciphertext size/hash.
+  One encrypted bundle may contain multiple enrolled archives; the operator
+  explicitly attests that correspondence after verified durable readback.
+
+With existing private files prepared, run from the reviewed checkout/environment:
+
+```sh
+python -m scripts.recovery_point_health publish --config /private/coordinated.json --point /private/point.json --attest-quiesced-point
+python -m scripts.recovery_point_health status --config /private/coordinated.json
+```
+
+Publication uses the existing local lock and atomic JSON publication. A failed
+component verification records a failed attempt and preserves the previous
+complete point and all partial artifacts. Setup/argument failures and concurrent
+lock rejection stop before starting an attempt. An abandoned lock/running state
+requires operator inspection; there is no automatic lock removal or retry.
+The new tool never relabels an existing one-time archive as recurring protection.
+
+Status checks the pinned SQL generations and receipt ciphertexts, component
+failure/capacity state, exact enrollment and point chronology. Later individual
+component successes cannot silently advance the coordinated point. A running
+publication with its lock may keep reporting a verified, fresh prior point
+within the existing two-hour grace. A missing or stale point, failed or overdue
+attempt, unmatched lock/running marker or integrity failure is still unhealthy.
+Status reuses the NAS slot/grace rules: a Sunday point is not stale merely because Monday has
+arrived. Only explicit twice-daily mode also applies the 20-hour point-age
+threshold. Status needs no plaintext receipt directory, grant, decrypt identity
+or application credentials after publication. It reports sanitized status/codes;
+the private point files contain the component paths and digests.
+
+Only after approving an independent Better Stack check-in/recipient and poll
+schedule, inject its dedicated URL as `TABULA_RASA_BACKUP_HEARTBEAT_URL` and run:
+
+```sh
+python -m scripts.recovery_point_health status --config /private/coordinated.json --notify
+```
+
+Healthy point inspection sends the payload-free check-in; unhealthy/unconfirmed
+inspection sends failure. A failed signal exits nonzero. Configure the external
+missing-check-in deadline to detect NAS/reporter loss; reporter liveness alone
+must not imply backup success. Retain actual failure/absence delivery evidence
+before claiming operating monitoring. Notification is off by default; no live
+check-in is part of installation or local tests.
+
 ## Archive and health contract
 
 The runner executes `pg_dump -Fc`, traverses/decompresses the entire archive

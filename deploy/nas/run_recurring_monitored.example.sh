@@ -12,7 +12,8 @@ case "$image" in
   *) printf '%s\n' 'Approved worker image is not configured.' >&2; exit 2 ;;
 esac
 for required in "$config/production/recurring.env" \
-  "$config/bin/nas_recurring_monitor.py" "$config/production/recurring-monitor.json"
+  "$config/bin/nas_recurring_monitor.py" "$config/bin/operational_heartbeat.py" \
+  "$config/production/recurring-monitor.json"
 do
   if [ ! -r "$required" ]; then
     printf '%s\n' 'Protected worker configuration is unavailable.' >&2
@@ -38,6 +39,7 @@ set -- --rm --pull=never --network bridge --cap-drop ALL \
   --security-opt no-new-privileges=true --read-only --memory 192m \
   --env-file "$config/production/recurring.env" \
   --mount "type=bind,src=$config/bin/nas_recurring_monitor.py,dst=/monitor.py,readonly" \
+  --mount "type=bind,src=$config/bin/operational_heartbeat.py,dst=/operational_heartbeat.py,readonly" \
   --mount "type=bind,src=$config/production/recurring-monitor.json,dst=/monitor.json,readonly"
 if [ "$mode" = tick ]; then
   set -- "$@" --env-file "$config/production/recurring-heartbeat.env"
