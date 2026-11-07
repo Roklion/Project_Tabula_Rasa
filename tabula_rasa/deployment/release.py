@@ -306,15 +306,14 @@ def main():
             metadata = image_metadata(args.image, repository)
             validated_main(metadata["release"], environ)
             environment = environ["TABULA_RASA_ENVIRONMENT"]
-            if environment in {"staging", "production"}:
-                service, token = render_target(environ)
-                previous_image, previous = live_image(service, token, repository, read=api, metadata=image_metadata)
-                if environment == "production":
-                    metadata.update(production_preflight(
-                        args.image, metadata, previous_image, previous, environ, read=api,
-                    ), image=args.image, status="preflight_passed")
-                else:
-                    verify_prior_release(metadata, previous, "staging", environ.get("STAGING_ROLLBACK_FROM", ""))
+            service, token = render_target(environ)
+            previous_image, previous = live_image(service, token, repository, read=api, metadata=image_metadata)
+            if environment == "production":
+                metadata.update(production_preflight(
+                    args.image, metadata, previous_image, previous, environ, read=api,
+                ), image=args.image, status="preflight_passed")
+            else:
+                verify_prior_release(metadata, previous, environment, environ.get("STAGING_ROLLBACK_FROM", ""))
             print(json.dumps(metadata, sort_keys=True))
         else:
             print(json.dumps(promote(args.image, environ), sort_keys=True))

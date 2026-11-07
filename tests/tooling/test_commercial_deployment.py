@@ -37,11 +37,11 @@ def metadata(image, repository):
             "manifest_digest": MANIFEST if image == IMAGE else PRIOR_MANIFEST}
 
 
-def provider(*, existing=True, platform_sha=False):
+def provider(*, existing=True, platform_sha=False, prior_ref=PRIOR):
     def read(path, token, *, body=None):
         assert token == "synthetic-only"
         if path.endswith("?limit=100"):
-            return [{"deploy": {"status": "live", "image": {"ref": PRIOR,
+            return [{"deploy": {"status": "live", "image": {"ref": prior_ref,
                      "sha": PRIOR_MANIFEST[7:] if platform_sha else "sha256:" + "b" * 64}}}] if existing else []
         if body:
             return {"id": "dep-new" if body["imageUrl"] == IMAGE else "dep-old"}
@@ -83,6 +83,27 @@ def test_superseded_staging_release_stops_before_migration_or_render_mutation(mo
     )
     assert all(not call.kwargs.get("body") for call in read.call_args_list)
     smoke.assert_not_called()
+
+
+@pytest.mark.parametrize("prior_repository_matches", [True, False])
+def test_development_preflight_checks_live_image_before_migration(monkeypatch, capsys, prior_repository_matches):
+    for key, value in {**ENV, "TABULA_RASA_ENVIRONMENT": "development"}.items():
+        monkeypatch.setenv(key, value)
+    prior_ref = PRIOR if prior_repository_matches else PRIOR.replace(REPOSITORY, "ghcr.io/previous-owner/repo/commercial")
+    read = provider(prior_ref=prior_ref)
+    monkeypatch.setattr(release, "image_metadata", metadata)
+    monkeypatch.setattr(release, "validated_main", Mock())
+    monkeypatch.setattr(release, "api", read)
+    monkeypatch.setattr("sys.argv", ["release", "verify", "--image", IMAGE])
+
+    if prior_repository_matches:
+        release.main()
+        assert json.loads(capsys.readouterr().out)["release"] == "c" * 40
+    else:
+        with pytest.raises(SystemExit, match="Prior image needs a verified immutable reference"):
+            release.main()
+        assert not capsys.readouterr().out
+    read.assert_called_once_with("/services/srv-test/deploys?limit=100", "synthetic-only")
 
 
 def test_same_revision_staging_retry_is_allowed(release_ancestry):

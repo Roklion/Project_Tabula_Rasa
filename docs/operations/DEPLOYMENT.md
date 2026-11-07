@@ -158,7 +158,7 @@ separate staging service nor the commercial activation policy.
 | GitHub environment secret | Custody/use |
 | --- | --- |
 | `TABULA_RASA_MIGRATION_DATABASE_URL` | Migration container step only |
-| `RENDER_API_KEY` | Render staging preflight and deployment steps only; authorized workspace access |
+| `RENDER_API_KEY` | Render preflight and deployment steps only; authorized workspace access |
 | `TABULA_RASA_ALPHA_USERNAME` | This environment's temporary operator gate |
 | `TABULA_RASA_ALPHA_PASSWORD` | Smoke runner only; Render receives its scrypt hash |
 
